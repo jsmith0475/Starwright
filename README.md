@@ -9,7 +9,7 @@ A full 3D rocket-building and orbital-flight game that runs in your browser.<br>
 Real orbital mechanics. A solar system of nineteen bodies. No account, no download store, no cost.
 </p>
 
-<p align="center"><b>Built with AI, and said plainly:</b> directed by one person, written in extensive collaboration with teams of Claude and Grok AI agents. <a href="#how-it-was-built">How it was built</a>.</p>
+<p align="center"><b>Built with AI, and said plainly:</b> directed by one person, written by teams of Claude AI agents and independently reviewed by Grok AI agents. <a href="#how-it-was-built">How it was built</a>.</p>
 
 <p align="center"><sub>An independent, original game. Not affiliated with or endorsed by the makers of Kerbal Space Program or by SpaceX.</sub></p>
 
@@ -70,8 +70,9 @@ Starwright was not written by hand, and it would be wrong to let anyone think so
 It is the result of an extensive collaboration between one person and teams of AI agents. Jerry
 Smith directed the project: what to build, what it should feel like, what was not good enough,
 and when it was ready. Teams of Claude agents, working in parallel, wrote most of the code, the
-tests, the physics checks and these documents. Grok was used alongside them along the way. Every
-build was played and judged by a human, and sent back when it fell short.
+tests, the physics checks and these documents. A separate team of Grok agents, run by Jerry
+independently of the Claude agents, reviewed the work. Every build was played and judged by a
+human, and sent back when it fell short.
 
 If you are curious what a person and a group of AI agents can build together, this repository is
 one honest answer, and the full source is here to read.
@@ -359,7 +360,8 @@ and by the games and real space programs that made people love it. Its worlds, c
 and code are its own: it uses no characters, art, music or code from any other game, and it is
 not affiliated with or endorsed by the makers of Kerbal Space Program or by SpaceX.
 
-It was built by Jerry Smith in collaboration with teams of Claude and Grok AI agents; see
+It was directed by Jerry Smith, written by teams of Claude AI agents and independently reviewed
+by Grok AI agents; see
 [How it was built](#how-it-was-built). It is not affiliated with or endorsed by Anthropic or xAI.
 
 Starwright's code is released under the [MIT License](LICENSE). Rendering uses
