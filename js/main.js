@@ -494,6 +494,8 @@ async function boot() {
   try { (await import('./ui/scenarios.js')).installScenarios(app); } catch (err) { console.warn('Scenarios not available:', err && err.message); }
   // Science reference (js/ui/science.js): optional, adds app.science (the title menu's Science entry).
   try { (await import('./ui/science.js')).installScience(app); } catch (err) { console.warn('Science reference not available:', err && err.message); }
+  // About screen (js/ui/about.js): optional, adds app.about (the title menu's About entry).
+  try { (await import('./ui/about.js')).installAbout(app); } catch (err) { console.warn('About screen not available:', err && err.message); }
   // Demo tour (js/ui/demo.js): optional, adds app.demo; ?demo=1 in the address starts it once the title is up.
   try { (await import('./ui/demo.js')).installDemo(app); } catch (err) { console.warn('Demo tour not available:', err && err.message); }
   await app.goto('title');
