@@ -1,0 +1,90 @@
+/* Starwright — demo tour overlay (js/ui/demo.js). Loaded only when the tour is installed.
+   Everything lives under .swd, a fixed layer above the game; body.sw-demo is set while the tour runs. */
+
+.swd { position: fixed; inset: 0; z-index: 9000; pointer-events: none; font-family: var(--sw-font, ui-rounded, system-ui, sans-serif); color: var(--sw-text, #e8eef4); }
+.swd-shield { position: absolute; inset: 0; pointer-events: auto; cursor: default; }      /* the player's mouse does not reach the game */
+.swd.clean, .swd.clean .swd-shield { cursor: none; }
+body.sw-demo .sw-toasts, body.sw-demo .sw-toast { display: none !important; }
+
+/* ---- fade and chapter card */
+.swd-fade { position: absolute; inset: 0; background: #05070b; opacity: 0; }
+.swd-card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.5s ease; padding: 0 8vw; }
+.swd-card.show { opacity: 1; transform: none; }
+.swd-card .n { font-size: 14px; font-weight: 700; letter-spacing: 0.34em; color: var(--sw-teal, #39d0c0); margin-bottom: 14px; padding-left: 0.34em; }
+.swd-card .t { font-size: clamp(30px, 4.2vw, 62px); font-weight: 800; letter-spacing: 0.01em; line-height: 1.08; }
+.swd-card i { display: block; width: 64px; height: 3px; border-radius: 2px; background: var(--sw-amber, #ffb347); margin: 20px 0 16px; }
+.swd-card .s { font-size: clamp(15px, 1.5vw, 22px); color: #b9c6d6; max-width: 34em; }
+
+/* ---- lower-third caption */
+.swd-caption { position: absolute; left: 4vw; bottom: 58px; width: min(560px, 46vw); padding: 14px 20px 16px 22px;
+  background: linear-gradient(90deg, rgba(20, 26, 34, 0.94), rgba(29, 38, 49, 0.9)); border: 1px solid rgba(255, 255, 255, 0.07); border-left: 4px solid var(--sw-teal, #39d0c0);
+  border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3); backdrop-filter: blur(8px);
+  opacity: 0; transform: translateY(14px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.swd-caption.show { opacity: 1; transform: none; transition: opacity 0.45s ease 0.05s, transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.05s; }
+.swd-caption .k { display: flex; align-items: center; gap: 10px; min-height: 18px; margin-bottom: 4px; }
+.swd-caption .n { font-size: 11px; font-weight: 700; letter-spacing: 0.22em; color: var(--sw-teal, #39d0c0); }
+.swd-caption .badge { display: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1a1206; background: var(--sw-amber, #ffb347); border-radius: 3px; padding: 2px 7px; }
+.swd-caption .badge.on { display: inline-block; }
+.swd-caption h2 { margin: 0 0 5px; font-size: clamp(19px, 1.65vw, 27px); font-weight: 800; letter-spacing: 0.005em; line-height: 1.15; }
+.swd-caption p { margin: 0; font-size: clamp(13.5px, 1.05vw, 17px); line-height: 1.42; color: #c4d0dc; }
+
+/* where the caption sits on each kind of screen (kept clear of that screen's own panels) */
+.swd-caption[data-pos="title"] { left: auto; right: 5vw; bottom: 9vh; }
+.swd-caption[data-pos="closing"] { left: 50%; right: auto; bottom: 12vh; width: min(720px, 80vw); transform: translate(-50%, 14px); text-align: center; border-left-width: 1px; border-top: 3px solid var(--sw-teal, #39d0c0); }
+.swd-caption[data-pos="closing"].show { transform: translate(-50%, 0); }
+.swd-caption[data-pos="closing"] .k { justify-content: center; }
+.swd-caption[data-pos="hub"] { left: auto; right: 3vw; bottom: 112px; width: min(520px, 40vw); }
+.swd-caption[data-pos="builder"] { left: 384px; bottom: auto; top: 62px; width: min(430px, 24vw); }
+.swd-caption[data-pos="flight"] { left: auto; right: 20px; bottom: auto; top: 372px; width: min(430px, 30vw); }
+.swd-caption[data-pos="map"] { left: 14px; bottom: 26px; width: min(430px, 30vw); }
+.swd-caption[data-pos="tracking"] { left: 50%; bottom: 56px; width: min(600px, 44vw); transform: translate(-50%, 14px); }
+.swd-caption[data-pos="tracking"].show { transform: translate(-50%, 0); }
+.swd-caption[data-pos="page"] { left: 30px; bottom: 30px; width: min(520px, 38vw); }
+
+/* ---- chapter progress */
+.swd-progress { position: absolute; left: 4vw; right: 4vw; bottom: 5px; display: flex; gap: 5px; height: 3px; }
+.swd-progress span { flex: 1; border-radius: 2px; background: rgba(232, 238, 244, 0.16); overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.swd-progress span i { display: block; height: 100%; width: 0; background: var(--sw-teal, #39d0c0); }
+.swd-progress span.done i { width: 100%; opacity: 0.75; }
+.swd-progress span.on i { width: 100%; background: var(--sw-amber, #ffb347); }
+.swd-progress span.bad i { width: 100%; background: rgba(255, 107, 107, 0.6); }
+
+/* ---- scripted pointer */
+.swd-cursor { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -4px 0 0 -5px; opacity: 0; transition: opacity 0.25s ease; will-change: transform;
+  background: no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M5 3l15 9.500-6.500 1.300 3.800 7-2.700 1.400-3.700-7.100L5 19.500z' fill='%23e8eef4' stroke='%230b0f14' stroke-width='1.600' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.swd-cursor.on { opacity: 1; }
+.swd-cursor::after { content: ""; position: absolute; left: -9px; top: -10px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--sw-teal, #39d0c0); opacity: 0; transform: scale(0.4); }
+.swd-cursor.down::after { opacity: 0.9; transform: scale(1); transition: transform 0.12s ease-out, opacity 0.12s ease-out; }
+.swd.no-pointer .swd-cursor { display: none; }
+
+/* ---- paused tag and control strip */
+.swd-paused { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: none; padding: 5px 14px; border-radius: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #1a1206; background: var(--sw-amber, #ffb347); }
+.swd.paused .swd-paused { display: block; }
+.swd.clean .swd-paused { display: none; }
+.swd-strip { position: absolute; top: 14px; right: 16px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; pointer-events: auto;
+  background: rgba(20, 26, 34, 0.92); border: 1px solid var(--sw-line, #2b3644); border-radius: 6px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  opacity: 0; transform: translateY(-8px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.swd.awake .swd-strip, .swd.paused .swd-strip, .swd-strip:hover, .swd-strip:focus-within { opacity: 1; transform: none; }
+.swd.clean .swd-strip { display: none; }
+.swd-btn { font: inherit; font-size: 12.5px; font-weight: 700; color: var(--sw-text, #e8eef4); background: var(--sw-panel-2, #1d2631); border: 1px solid var(--sw-line, #2b3644); border-radius: 4px; height: 28px; padding: 0 10px; cursor: pointer; }
+.swd-btn:hover { background: var(--sw-panel-3, #263241); border-color: var(--sw-teal, #39d0c0); }
+.swd-btn:focus-visible { outline: 2px solid var(--sw-teal, #39d0c0); outline-offset: 1px; }
+.swd-strip .name { font-size: 12px; font-weight: 700; color: var(--sw-dim, #93a3b3); padding: 0 8px; white-space: pre; }
+.swd-strip .keys { font-size: 11px; color: var(--sw-faint, #5d6b7a); padding-right: 6px; white-space: nowrap; }
+
+/* ---- the closing shot: the title art without its menu */
+body.sw-demo-closing .sw-menu, body.sw-demo-closing .sw-title-foot { visibility: hidden; }
+body.sw-demo-closing .sw-title-wrap { margin: 0 auto; padding: 0 0 20vh; align-items: center; }
+body.sw-demo-closing .sw-title-screen.live .sw-title-shade, body.sw-demo-closing .sw-title-shade { background: radial-gradient(ellipse at 50% 42%, rgba(6, 9, 16, 0.55), rgba(6, 9, 16, 0.15) 60%, rgba(6, 9, 16, 0.5)); }
+
+@media (max-width: 1100px) {
+  .swd-strip .keys { display: none; }
+  .swd-caption { width: min(520px, 62vw); }
+  .swd-caption[data-pos="flight"] { width: min(330px, 33vw); top: 360px; }
+  .swd-caption[data-pos="map"] { width: min(262px, 27vw); padding: 10px 12px 12px 14px; }
+  .swd-caption[data-pos="builder"] { left: 372px; width: min(300px, 26vw); }
+  .swd-caption[data-pos="tracking"] { width: min(420px, 42vw); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swd-caption, .swd-caption.show, .swd-card { transition: opacity 0.2s linear; }
+}

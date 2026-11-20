@@ -1,0 +1,211 @@
+# Starwright roadmap
+
+The next ten upgrades, in the order we plan to take them. There are no dates. Each one ships
+when it is good, and the order will move as people play and tell us what matters most.
+
+Each item says what it is, why it matters when you are flying, what the game does today, and
+what building it involves, so you can see where to start. Every one of them is open for a
+volunteer to pick up, whole or in part. [Say hello](../../../issues/new/choose) and tell us
+which one you want, and read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
+
+1. [Landing legs that work like legs](#1-landing-legs-that-work-like-legs)
+2. [Structural dynamics](#2-structural-dynamics)
+3. [Higher-fidelity worlds](#3-higher-fidelity-worlds)
+4. [Reusable boosters](#4-reusable-boosters)
+5. [Deeper aerodynamics and re-entry](#5-deeper-aerodynamics-and-re-entry)
+6. [Optional n-body gravity](#6-optional-n-body-gravity)
+7. [Stations and surface bases](#7-stations-and-surface-bases)
+8. [A deeper career](#8-a-deeper-career)
+9. [Sharing](#9-sharing)
+10. [A desktop app and a seat in the cockpit](#10-a-desktop-app-and-a-seat-in-the-cockpit)
+
+---
+
+## 1. Landing legs that work like legs
+
+**What it is.** Each leg becomes its own spring and damper with real travel. A lander compresses
+its legs on touchdown, rebounds a little, rocks, and settles. Come in too fast and a leg
+bottoms out and breaks. Come in sideways or on a slope and the lander can tip over.
+
+**Why it matters.** The last two metres of a landing are the most tense part of the whole
+flight, and right now they end with a click. With real legs, a wide stance and a slow, level
+descent are things you design and fly for, and a landing you walk away from feels earned.
+
+**Today.** A vessel is one rigid body. Ground contact is a single set of stiff, heavily damped
+contact springs for the whole vessel (`GROUND_W` and `GROUND_ZETA` in `js/core/vessel.js`), so
+there is no visible flex and no bounce. Legs deploy and have their own friction, and every part
+has an impact speed it survives. Rover wheels already have per-wheel suspension, which is the
+pattern to follow.
+
+**Building it.** Give each leg a contact point with its own stroke, spring rate, damping and
+bottoming-out limit, sized from the mass it carries. Animate the strut in `js/render/` from the
+compression the physics reports. Tune it on low-gravity moons, where bounce lasts longest. Add
+tests that drop landers at known speeds and angles and check sag, rebound and the tipping point.
+
+## 2. Structural dynamics
+
+**What it is.** The joints between parts become real. They flex under load, carry stress you
+can see, and fail when you ask too much: a tall thin rocket wobbles, a heavy payload on a small
+separator sags, and a hard turn at maximum dynamic pressure snaps the stack in two.
+
+**Why it matters.** Structure is half of rocket design. Struts, wide stages and gentle steering
+through max Q only mean something if a rocket can fail without them. It also makes failures
+readable: you watch the joint give way, and you know what to fix.
+
+**Today.** Parts are welded into one rigid body. Things break from impact speed and from heat,
+not from bending or tension. Staging and docking already split and join vessels, so the code
+for a vessel coming apart exists.
+
+**Building it.** Compute the force and bending moment across each joint from thrust, drag,
+gravity and rotation. Give every joint a strength from the size of the parts it connects. Show
+load in the assembly building and in flight, break joints that exceed their limit, and later
+add visible flex. The hard part is doing it cheaply and stably at 60 frames a second and under
+physics warp.
+
+## 3. Higher-fidelity worlds
+
+**What it is.** Sharper terrain and textures, better atmospheres, clouds and lighting, and more
+on the ground: rocks and craters at walking scale, weather and haze, surfaces that look
+different on every world all the way from orbit down to the dust under a rover's wheels.
+
+**Why it matters.** Arriving somewhere is the reward for every transfer burn. The closer the
+ground looks to a real place, the more it feels like you went there.
+
+**Today.** All nineteen bodies have procedural terrain with level of detail that refines as you
+approach, generated in the browser with no image files. Worlds with air have atmospheric
+scattering, and the home world has vegetation. Detail runs out at close range, and the far
+worlds have had less attention than Verda and Pell.
+
+**Building it.** Add finer terrain levels and detail textures near the camera, per-world
+surface features (dunes, ice fractures, lava fields, canyons), cloud layers, and better
+lighting at dawn and dusk. All of it has to stay procedural and stay inside the frame budget
+on a laptop graphics card. This is a good place for artists who can write shaders.
+
+## 4. Reusable boosters
+
+**What it is.** Fly the first stage back. After separation the booster flips, makes a boostback
+burn, steers through the air on its grid fins, relights and lands on its legs, on the pad or
+downrange. You fly it yourself or hand it to a guidance program, while the upper stage carries
+on to orbit.
+
+**Why it matters.** It is the defining spaceflight achievement of the last decade and the
+reason many people watch launches at all. In career mode it changes the economics: a recovered
+booster is money back.
+
+**Today.** The pieces are close. There are grid fins (the Lattice Vane), air brakes, throttle
+control, landing legs, and a guidance program that already performs a powered landing on
+airless moons. What is missing is following two vessels at once: a stage you leave behind
+in the atmosphere is removed once the ship you are flying is out of range of it.
+
+**Building it.** Keep a dropped stage under full physics while the other one flies, with a quick
+switch between them. Write boostback, entry and landing guidance that works in air. Add
+recovery credit in career mode for stages landed intact. Item 1 makes the touchdown worth
+watching.
+
+## 5. Deeper aerodynamics and re-entry
+
+**What it is.** Lift on capsules and bodies, so you can steer a re-entry by rolling. A speed of
+sound that changes with altitude. Winds. Heating that depends on the shape and attitude of the
+vessel, and parts that shield the parts behind them.
+
+**Why it matters.** Ascent and re-entry are where a design meets the air. Better aerodynamics
+means spaceplanes that fly like aircraft, capsules that can aim for a landing site, and
+re-entries where your attitude decides whether you live.
+
+**Today.** Drag is computed per part with a transonic rise. Wings and control surfaces have
+real lift, stall and induced drag, and spaceplanes fly. Atmospheres are exponential with one
+scale height, a hard top and a constant speed of sound. Capsules have no lift. Heating follows
+the Sutton-Graves law, and heat shields ablate.
+[docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
+
+**Building it.** Add body lift, a temperature profile per atmosphere, occlusion so shielded
+parts stay cool, and optional winds. Every change needs a matching check in the verification
+suite, so the numbers stay honest. This is the item for people who know aerodynamics.
+
+## 6. Optional n-body gravity
+
+**What it is.** A switch that lets every body pull on your ship at once. That brings Lagrange
+points, halo orbits, low-energy transfers and orbits that slowly drift. It starts as an overlay
+in the map, showing where the true path leaves the simple one, and grows into a flight mode.
+
+**Why it matters.** It is the difference between the textbook and the real solar system, and
+it is the feature players of this genre have asked for longest. Parking a telescope at L2 is a
+mission you cannot fly today.
+
+**Today.** The game uses patched conics: one body pulls on you at a time, and bodies run on
+fixed rails. That is why orbits are exact at any time warp. The verification suite already
+contains an independent n-body integrator and measures how far the two models differ, so the
+reference to test against exists.
+
+**Building it.** An integrator that stays accurate and fast under high time warp, a map that
+can draw paths that are not conic sections, and a planner that still helps you. It must stay
+optional, because the simple model is easier to learn and is what the tutorials teach.
+
+## 7. Stations and surface bases
+
+**What it is.** Somewhere to go and stay. Mine a resource on a moon, refine it into propellant,
+store it, and refuel ships in orbit or on the ground. Stations and bases that grow one launch
+at a time.
+
+**Why it matters.** It turns single flights into a program. A fuel depot at Pell changes every
+mission beyond it, and a base gives you a reason to return to a world you have already landed
+on.
+
+**Today.** Docking, undocking and fuel transfer between docked vessels work, vessels persist
+between flights, and the tracking station follows all of them. There are no resources to
+gather and no drills or refineries.
+
+**Building it.** New parts (drill, refinery, storage, a surface docking connector), resource
+maps for each world, processing that keeps running while you are away, and career missions
+that ask for it.
+
+## 8. A deeper career
+
+**What it is.** More to do and more reasons to do it: new mission types, experiments particular
+to each world, crew who train into specialists, and a program whose story builds from the first
+hop to the outer planets.
+
+**Why it matters.** Sandbox is for building. Career is what keeps you playing for months,
+because every flight pays for the next.
+
+**Today.** Career mode has funds, science and reputation, a 27-node tech tree, a board with
+thirteen kinds of contract, a 71-mission flight program, twelve experiments, and crew who earn
+experience. It is complete, and it is still a first pass at balance.
+
+**Building it.** Mission design and balancing more than code. Write contracts, tune costs and
+rewards, add experiments and the reasons to carry them, and play it through again and again.
+This is one of the best items for someone who does not program.
+
+## 9. Sharing
+
+**What it is.** Export a craft to a file or a link and hand it to someone else. Later, add
+community-made parts and scenarios without editing the game's own files.
+
+**Why it matters.** This genre lives on what its players make. A rocket somebody else designed
+is a lesson, and a parts pack can make the game new again.
+
+**Today.** Craft are stored as plain JSON in the browser, and a whole saved game can be
+exported and imported. Parts are plain data in `js/core/parts.js` with procedural models.
+There is no way to share one craft, and adding a part means editing the source.
+
+**Building it.** Craft export and import first, which is small and a good first contribution.
+Then a format for part and scenario packs that the game loads at start, with checks so a bad
+pack cannot break a save.
+
+## 10. A desktop app and a seat in the cockpit
+
+**What it is.** Three things that make it feel like a finished game: an app for Mac and Windows
+that you double-click, with no terminal window and no browser tab; a view from inside the
+capsule, with the instruments in front of you and the world through the window; and fuller
+sound, with engines you feel, the quiet of vacuum, and music.
+
+**Why it matters.** A game is easier to love when it starts like one. And riding a launch from
+the seat is a different experience from watching it from outside.
+
+**Today.** The game runs in a browser tab from a small local server, started by a launcher
+script. The camera has four outside views and none inside. Sound is synthesised in the browser:
+engine rumble, wind and effects, with a simple ambient pad on the menus.
+
+**Building it.** Wrap the existing game in a desktop shell, with signed installers so the
+operating system does not warn about it. Model capsule interiors and working instruments.
+Extend the sound engine. Three separate jobs, for three different kinds of volunteer.

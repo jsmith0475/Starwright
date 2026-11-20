@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Starwright — map view preview</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <canvas id="gl" tabindex="-1"></canvas>
+  <div id="ui"></div>
+  <script type="module">
+    // Stand-alone harness for js/ui/mapview.js and js/ui/tracking.js: a renderer (same settings as js/main.js), a
+    // minimal app stub and a FAKE world on rails — or, with ?real=1, a real World with stock craft.
+    // URL options: ?rate=1 (time rate), ?focus=pell, ?tracking=1 (no active vessel, node editing off)
+    //              ?target=1 (adds 'Harbor Station' near the ship's orbit), ?active=runner
+    //              ?scene=fleet | transfer | plan | suborbital     extra set pieces (see below)
+    //              ?screen=tracking[&flights=1][&real=1]           the tracking station screen
+    import * as THREE from '../js/lib/three.module.min.js';
+    import { Orbit } from '../js/core/orbit.js';
+    import { SYSTEM } from '../js/core/bodies.js';
+    import { predictPatches, applyManeuver } from '../js/core/trajectory.js';
+    import { createInput } from '../js/ui/input.js';
+    import { createMapView } from '../js/ui/mapview.js';
+    import { transferWindow } from '../js/ui/map/planning.js';
+
+    const q = new URLSearchParams(location.search);
+    const scene = q.get('scene') || '';
+    const canvas = document.getElementById('gl');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(innerWidth, innerHeight, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const input = createInput(canvas);
+    input.captureKeys = true;
+    const toasts = [];
+    const app = {
+      renderer, canvas, uiRoot: document.getElementById('ui'), input, size: { w: innerWidth, h: innerHeight },
+      audio: { play() {} }, toast(text) { toasts.push(text); console.log('[toast]', text); },
+    };
+
+    const { verda, pell, helion, rusk } = SYSTEM.byId;
+    const Y = new THREE.Vector3(0, 1, 0);
+
+    class FakeVessel {
+      constructor(id, name, type, body, orbit, role) {
+        Object.assign(this, { id, name, type, body, orbit, landed: false, nodes: [], mass: 4200, maxThrust: 60000, situation: 'orbit' });
+        if (role) this.role = role;
+        this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.patches = null;
+      }
+      getOrbit() { return this.orbit; }
+      addNode(t, dv) { const node = { t, dv: { prograde: dv.prograde || 0, normal: dv.normal || 0, radial: dv.radial || 0 } }; this.nodes.push(node); this.nodes.sort((x, y) => x.t - y.t); return node; }   // as js/core/vessel.js
+      sync(ut) {
+        if (this.landed) { this.situation = 'landed'; this.body.surfaceDirToInertial(this.surfaceDir, ut, this.pos).multiplyScalar(this.body.radius); this.vel.set(0, 0, 0); return; }
+        if (!this.patches) this.patches = predictPatches(this.orbit, this.body, ut, 2);
+        const p = this.patches[0];
+        if (ut > p.tEnd) {
+          if ((p.endType === 'enter' || p.endType === 'exit') && this.patches[1]) { this.body = this.patches[1].body; this.orbit = this.patches[1].orbit; this.patches = null; return this.sync(ut); }
+          ut = p.tEnd;                              // impact / atmosphere: park it there
+        }
+        this.orbit.posAt(ut, this.pos); this.orbit.velAt(ut, this.vel);
+        this.situation = this.orbit.hyper ? 'escape' : this.orbit.periapsis < this.body.radius + (this.body.atmo ? this.body.atmo.height : 0) ? 'suborbital' : 'orbit';
+      }
+    }
+    const lowOrbit = (body, alt, e = 0, i = 0, lan = 0, argp = 0, M0 = 0, t0 = 0) =>
+      Orbit.fromElements({ a: (body.radius + alt) / (1 - e), e, i, lan, argp, M0 }, body.gm, t0);
+
+    let UT0 = 600;
+    let vessels = [], activeV = null;
+
+    if (scene === 'transfer') {
+      // A ship on its way from Verda to Rusk. Built backwards from the encounter: at arrival it sits just ahead of
+      // Rusk with the speed of a Hohmann transfer ellipse, so the map shows escape-less solar orbit → Rusk fly-by → exit.
+      const w = transferWindow(verda.orbit, rusk.orbit, 0);
+      const tArr = w.timeToWindow + w.transferTime;
+      const rp = rusk.orbit.posAt(tArr), rv = rusk.orbit.velAt(tArr);
+      const rmag = rp.length(), at = (w.r1 + rmag) / 2;
+      const speed = Math.sqrt(helion.gm * (2 / rmag - 1 / at));
+      const tang = rusk.orbit.H.clone().cross(rp).normalize();
+      const pos = rp.clone().addScaledVector(rp.clone().normalize(), -rusk.soi * 0.25);
+      const vel = tang.multiplyScalar(speed);
+      void rv;
+      const o = Orbit.fromState(pos, vel, helion.gm, tArr);
+      UT0 = tArr - w.transferTime * 0.7;
+      const ship = new FakeVessel(1, 'Rusk Venture', 'ship', helion, o);
+      ship.crew = ['Wren', 'Odo', 'Mabel'];
+      vessels = [ship,
+        new FakeVessel(2, 'Verda Relay', 'ship', verda, lowOrbit(verda, 2.6e6, 0, 0, 0, 0, 1, UT0), 'relay'),
+        new FakeVessel(3, 'Rusk Scout', 'ship', rusk, lowOrbit(rusk, 90e3, 0.02, 30, 0, 0, 2, UT0), 'probe')];
+      activeV = ship;
+    } else if (scene === 'plan') {
+      // Three chained burns: trans-Pell injection from low orbit, capture at Pell periapsis, then lower the orbit.
+      const r0 = verda.radius + 90e3, ra = pell.orbit.a * 0.985, a = (r0 + ra) / 2, half = Math.PI * Math.sqrt(a ** 3 / verda.gm);
+      const ship = new FakeVessel(1, 'Pell Express', 'ship', verda, Orbit.fromElements({ a: r0, e: 0, i: 0, lan: 0, argp: 0, M0: 0.4 }, verda.gm, UT0));
+      ship.crew = ['Wren', 'Odo'];
+      const P0 = ship.orbit.period;
+      let best = null;
+      for (let i = 0; i < 720; i++) {                 // where on the parking orbit to burn so Pell is there on arrival
+        const t = UT0 + 240 + P0 * i / 720;
+        const want = pell.posAt(t + half).normalize().negate();
+        const d = ship.orbit.posAt(t).normalize().dot(want);
+        if (!best || d > best.d) best = { t, d };
+      }
+      const dv1 = Math.sqrt(verda.gm * (2 / r0 - 1 / a)) - Math.sqrt(verda.gm / r0);
+      let n1 = { t: best.t, dv: { prograde: dv1, normal: 0, radial: 0 } }, enc = null;
+      for (const tweak of [0, -40, 40, -80, 80, -120, 120, -180, 180]) {   // nudge the burn time until the path meets Pell
+        const cand = { t: best.t + tweak, dv: { ...n1.dv } };
+        const ps = predictPatches(applyManeuver(ship.orbit, cand.t, cand.dv), verda, cand.t, 3);
+        if (ps[0].endType === 'enter' && ps[0].nextBody === pell && ps[1]) { n1 = cand; enc = ps; if (ps[1].orbit.periapsis > pell.radius + 15e3) break; }
+      }
+      ship.nodes = [n1];
+      if (enc) {
+        const po = enc[1].orbit, tPe = po.timeAtTrueAnomaly(0, enc[1].tStart);
+        const vPe = po.velAt(tPe).length(), rPe = po.periapsis;
+        const aCap = (rPe + pell.radius + 420e3) / 2;
+        ship.nodes.push({ t: tPe, dv: { prograde: Math.sqrt(pell.gm * (2 / rPe - 1 / aCap)) - vPe, normal: 0, radial: 0 } });
+        const o2 = applyManeuver(po, tPe, ship.nodes[1].dv);
+        const tAp = o2.timeAtTrueAnomaly(Math.PI, tPe);
+        ship.nodes.push({ t: tAp, dv: { prograde: 22, normal: 14, radial: 0 } });
+      }
+      vessels = [ship, new FakeVessel(2, 'Pell Outpost', 'ship', pell, null, 'base'),
+        new FakeVessel(3, 'Skylark II booster', 'debris', verda, lowOrbit(verda, 85e3, 0.1, 21, 200, 40, 4, UT0))];
+      vessels[1].landed = true; vessels[1].surfaceDir = new THREE.Vector3(0.6, 0.5, 0.62).normalize();
+      activeV = ship;
+    } else if (scene === 'suborbital') {
+      // one craft falling back into Verda's atmosphere, one about to hit airless Pell
+      const hop = new FakeVessel(1, 'Mote Sounder', 'ship', verda, Orbit.fromElements({ a: verda.radius + 60e3, e: 0.16, i: 12, lan: 40, argp: 250, M0: 2.2 }, verda.gm, UT0), 'probe');
+      const fall = new FakeVessel(2, 'Pell Hopper', 'ship', pell, Orbit.fromElements({ a: pell.radius + 6e3, e: 0.2, i: 20, lan: 10, argp: 100, M0: 2.6 }, pell.gm, UT0), 'lander');
+      fall.crew = ['Mabel'];
+      vessels = [hop, fall];
+      activeV = q.get('active') === 'pell' ? fall : hop;
+    } else {
+      const ship = new FakeVessel(1, 'Skylark II', 'ship', verda,
+        Orbit.fromElements({ a: verda.radius + 100e3, e: 20e3 / (verda.radius + 100e3), i: 6, lan: 30, argp: 200, M0: 1.2 }, verda.gm, UT0));
+      // Pell transfer: periapsis opposite to where Pell will be half a transfer orbit (+ a lead) later
+      const rp = verda.radius + 80e3, ra = pell.orbit.a, a = (rp + ra) / 2, half = Math.PI * Math.sqrt(a ** 3 / verda.gm);
+      const dir = pell.posAt(half + 5000).normalize().negate();
+      const runner = new FakeVessel(2, 'Pell Runner', 'ship', verda,
+        Orbit.fromState(dir.clone().multiplyScalar(rp), Y.clone().cross(dir).multiplyScalar(Math.sqrt(verda.gm * (2 / rp - 1 / a))), verda.gm, 0));
+      const debris = new FakeVessel(3, 'Skylark II booster', 'debris', verda,
+        Orbit.fromElements({ a: verda.radius + 240e3, e: 155e3 / (verda.radius + 240e3), i: 21, lan: 200, argp: 40, M0: 4 }, verda.gm, UT0));
+      const base = new FakeVessel(4, 'Pell Outpost', 'ship', pell, null, 'base');
+      base.landed = true; base.surfaceDir = new THREE.Vector3(0.6, 0.5, 0.62).normalize();
+      const relay = new FakeVessel(5, 'Ost Relay', 'ship', SYSTEM.byId.ost,
+        Orbit.fromElements({ a: SYSTEM.byId.ost.radius + 60e3, e: 0.05, i: 70, lan: 10, argp: 0, M0: 0 }, SYSTEM.byId.ost.gm, UT0), 'relay');
+      vessels = [ship, runner, debris, base, relay];
+      // ?target=1 adds a station nearly co-planar with the ship (rendezvous / closest-approach tests)
+      if (q.get('target')) vessels.push(new FakeVessel(6, 'Harbor Station', 'ship', verda,
+        Orbit.fromElements({ a: verda.radius + 112e3, e: 0.001, i: 6.4, lan: 30, argp: 10, M0: 4.62 }, verda.gm, UT0), 'station'));
+      activeV = q.get('active') === 'runner' ? runner : ship;
+      if (scene === 'fleet') {
+        // dozens of objects of every type spread over the system (declutter check)
+        let id = 20, seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+        const roles = ['ship', 'probe', 'station', 'relay', 'lander', 'plane', 'rover', 'base'];
+        for (const b of SYSTEM.bodies) {
+          if (b.type === 'star') continue;
+          const n = b === verda ? 14 : b.type === 'planet' ? 2 : 1;
+          for (let k = 0; k < n; k++) {
+            const role = roles[Math.floor(rnd() * roles.length)];
+            const debrisish = rnd() < 0.3;
+            const surface = !debrisish && (role === 'rover' || role === 'base' || role === 'lander') && !b.gas;
+            const alt = (b.atmo ? b.atmo.height * 1.3 : b.radius * 0.1) + b.radius * (0.1 + rnd() * 2.5);
+            const v = new FakeVessel(id++, debrisish ? 'Spent stage ' + (id - 20) : b.name + ' ' + role[0].toUpperCase() + role.slice(1) + ' ' + (k + 1), debrisish ? 'debris' : 'ship', b,
+              surface ? null : lowOrbit(b, Math.min(alt, b.soi * 0.5 - b.radius), rnd() * 0.15, rnd() * 60, rnd() * 360, rnd() * 360, rnd() * 6, UT0), debrisish ? undefined : role);
+            if (surface) { v.landed = true; v.surfaceDir = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); }
+            vessels.push(v);
+          }
+        }
+        const flag = new FakeVessel(id++, 'First Steps', 'flag', pell, null); flag.landed = true; flag.surfaceDir = new THREE.Vector3(0.5, 0.6, 0.6).normalize();
+        const pip = new FakeVessel(id++, 'Wren', 'eva', pell, lowOrbit(pell, 14e3, 0, 20, 0, 0, 1, UT0));
+        vessels.push(flag, pip);
+      }
+    }
+
+    const world = {
+      ut: UT0, rate: Number(q.get('rate') || 1), vessels,
+      active: q.get('tracking') ? null : activeV, warpTarget: null, log: [],
+      warpTo(t) { this.warpTarget = t; this.log.push(['warpTo', t]); },
+      switchTo(v) { this.active = v; },
+      // same contract as World.setTarget / getTarget (js/core/world.js)
+      setTarget(v, t) {
+        if (!v) return false;
+        const obj = t == null ? null : typeof t === 'number' ? this.vessels.find(x => x.id === t) : typeof t === 'string' ? SYSTEM.byId[t] : t;
+        if (t != null && (!obj || obj === v)) return false;
+        v.targetId = obj ? obj.id : null; this.log.push(['setTarget', v.targetId]);
+        return true;
+      },
+      getTarget(v) {
+        const id = v ? v.targetId : null;
+        if (id == null) return null;
+        return typeof id === 'number' ? this.vessels.find(x => x.id === id) || null : SYSTEM.byId[id] || null;
+      },
+      step(dt) {
+        if (this.warpTarget != null) {
+          const left = this.warpTarget - this.ut;
+          this.ut += Math.min(left, Math.max(dt, left * Math.min(1, dt * 4)));
+          if (this.warpTarget - this.ut < 1e-6) { this.ut = this.warpTarget; this.warpTarget = null; }
+        } else this.ut += dt * this.rate;
+        for (const v of this.vessels) v.sync(this.ut);
+      },
+    };
+    world.step(0);
+
+    // ?screen=tracking[&flights=1] exercises js/ui/tracking.js with a stub career (flights=1 → the fake world);
+    // &real=1 uses a real World with stock craft and the real Career, so warp, alarms, recovery and saving all run.
+    let map, screen = null, shown = world;
+    if (q.get('screen') === 'tracking') {
+      const { createTrackingScreen } = await import('../js/ui/tracking.js');
+      const { showModal } = await import('../js/ui/dom.js');
+      const calls = []; window.__calls = calls;
+      app.save = () => calls.push(['save']);
+      app.goto = (name, params) => { calls.push(['goto', name, params]); };
+      app.confirm = (title, body, o = {}) => showModal({ title, body, cancelValue: false,
+        buttons: [{ label: 'Cancel', value: false }, { label: o.okLabel || 'OK', value: true, kind: o.danger ? 'danger' : 'primary' }] }).then(v => v === true);
+      let loader;
+      if (q.get('real')) {
+        const { World } = await import('../js/core/world.js');
+        const { stockCrafts } = await import('../js/core/craft.js');
+        const careerMod = await import('../js/core/career.js');
+        const crafts = stockCrafts(); const craft = n => crafts.find(c => c.name === n) || crafts[1];
+        const w = new World({ ut: 86400 });
+        const put = (name, label, body, o, crew = [], role) => {
+          const s = o.stateAt(w.ut);
+          const v = w.spawn(craft(name), { crew, body, pos: s.r, vel: s.v, makeActive: false });
+          v.name = label; if (role) v.role = role;
+          return v;
+        };
+        const sky = put('Skylark', 'Skylark II', verda, lowOrbit(verda, 110e3, 0.01, 4, 20, 0, 1, w.ut), ['Wren']);
+        // on its way to Pell: reaches the moon's sphere of influence within the day (SOI alarm)
+        const rp = verda.radius + 90e3, a = (rp + pell.orbit.a) / 2, half = Math.PI * Math.sqrt(a ** 3 / verda.gm);
+        const dir = pell.posAt(w.ut + half).normalize().negate();
+        const run = put('Pell Runner', 'Pell Runner', verda, Orbit.fromState(dir.clone().multiplyScalar(rp), Y.clone().cross(dir).multiplyScalar(Math.sqrt(verda.gm * (2 / rp - 1 / a))), verda.gm, w.ut), ['Mabel', 'Odo']);
+        put('Latch Target', 'Harbor Station', verda, lowOrbit(verda, 240e3, 0, 4.5, 20, 0, 3, w.ut), [], 'station');
+        put('Mote Sounder', 'Pell Surveyor', pell, lowOrbit(pell, 30e3, 0.02, 80, 0, 0, 2, w.ut), [], 'probe');
+        put('Mote Sounder', 'Rusk Relay', rusk, lowOrbit(rusk, 400e3, 0, 20, 0, 0, 2, w.ut), [], 'relay');
+        const junk = put('Mote Sounder', 'Skylark II booster', verda, lowOrbit(verda, 180e3, 0.03, 9, 100, 0, 5, w.ut)); junk.type = 'debris';
+        sky.nodes.push({ t: w.ut + 1500, dv: { prograde: 40, normal: 0, radial: 0 } });
+        // a capsule that came down in the sea east of the pad: recoverable
+        const down = w.launch(craft('Mote Sounder'), { crew: [] });
+        down.name = 'Mote Sounder'; down.launched = true; down.situation = 'landed';
+        w.active = sky;
+        void run;
+        const career = new careerMod.Career('career');
+        career.flightState = w.toJSON(); career.ut = w.ut;
+        career.scienceLog['crew_report@verda:spaceLow'] = 4; career.scienceLog['crew_report@pell:spaceHigh'] = 6;
+        career.flightLog[String(run.id)] = { reachedSpace: true, landedOn: [], visited: ['pell'], orbited: ['verda'] };
+        app.career = career; app.careerModule = careerMod;
+        window.__real = w;
+        loader = async () => w;
+        shown = w;
+      } else {
+        vessels[0].crew = ['Wren', 'Odo']; if (vessels[1]) vessels[1].crew = ['Mabel'];
+        world.toJSON = () => ({ ut: world.ut, vessels: world.vessels.map(v => v.id) });
+        app.career = { ut: UT0, flightState: q.get('flights') ? { saved: true } : null, releaseCrew(n) { calls.push(['releaseCrew', n]); } };
+        loader = async () => (q.get('flights') ? world : null);
+      }
+      screen = createTrackingScreen(app, { loadWorld: loader });
+      await screen.enter();
+      map = screen.map;
+      window.__screen = screen;
+    } else {
+      map = createMapView(app, { getWorld: () => world, allowNodes: !q.get('tracking') });
+      map.enter();
+    }
+    if (q.get('focus')) map.focus(q.get('focus'), { instant: true });
+
+    addEventListener('resize', () => {
+      app.size.w = innerWidth; app.size.h = innerHeight;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(innerWidth, innerHeight, false);
+      (screen || map).resize(innerWidth, innerHeight);
+    });
+
+    let last = performance.now(), frames = 0, worst = 0, acc = 0, accN = 0;
+    function frame(now) {
+      requestAnimationFrame(frame);
+      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now;
+      const t0 = performance.now();
+      if (screen) { screen.update(dt); screen.render(); }
+      else { world.step(dt); map.update(dt); map.render(); }
+      const ms = performance.now() - t0;
+      acc += ms; accN++; worst = Math.max(worst, ms);
+      if (accN >= 60) { window.__frameMs = { avg: acc / accN, worst }; acc = 0; accN = 0; worst = 0; }
+      input.endFrame();
+      if (++frames === 3) document.body.dataset.ready = '1';
+    }
+    requestAnimationFrame(frame);
+    window.__map = map; window.__world = shown; window.__app = app; window.__toasts = toasts; window.__SYSTEM = SYSTEM;
+  </script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Starwright flora preview</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+<canvas id="gl"></canvas>
+<script type="module">
+// Close-up preview of the vegetation under the hub's own sky and ground (renderer contract as in js/main.js).
+//   ?view=row|grove|far|top  &tod=0.4  &detail=high  &species=oak,maple,...
+import * as THREE from '../js/lib/three.module.min.js';
+import { createTreeSystem, createGrass } from '../js/render/flora.js';
+import { SPECIES_IDS } from '../js/render/treegen.js';
+import { createLocalGround, createSkyRig, skyAt } from '../js/render/baseenv.js';
+const q = new URLSearchParams(location.search), view = q.get('view') || 'row', tod = +(q.get('tod') || 0.4), detail = q.get('detail') || 'high';
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0xa9c8e2, 0.00015);
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 1, 90000);
+const ground = createLocalGround({ quality: 'high' }), rig = createSkyRig({ quality: 'high' });
+scene.add(ground.group, rig.group);
+const ids = (q.get('species') || SPECIES_IDS.join(',')).split(','), trees = [];
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const OX = -600, OZ = -300;      // open ground north-west of the base
+if (view === 'row' || view === 'close' || view === 'conifer') ids.forEach((species, i) => { for (let j = 0; j < 3; j++) trees.push({ x: OX + (i - (ids.length - 1) / 2) * 15, y: 0, z: OZ - j * 22, species, scale: 0.9 + 0.2 * j, yaw: rnd() * 6.28, tint: [1, 1, 1] }); });
+else for (let i = 0; i < 700; i++) { const a = rnd() * 6.28, d = 20 + 900 * Math.sqrt(rnd()), v = 0.82 + rnd() * 0.3, h = (rnd() - 0.5) * 0.16; trees.push({ x: OX + Math.cos(a) * d, y: 0, z: OZ + Math.sin(a) * d, species: ids[Math.floor(rnd() * ids.length)], scale: 0.62 + 0.6 * rnd(), yaw: rnd() * 6.28, leanX: (rnd() - 0.5) * 0.09, leanZ: (rnd() - 0.5) * 0.09, tint: [v * (1 + h), v, v * (1 - h) * 0.95] }); }
+const flora = createTreeSystem({ trees, detail }); scene.add(flora.group);
+const grass = createGrass({ detail }); scene.add(grass.group);
+const POSES = { row: [[OX, 5, OZ + 30], [OX, 7.5, OZ - 10]], close: [[OX - 26, 3, OZ + 13], [OX - 34, 7, OZ - 4]], conifer: [[OX + 14, 3, OZ + 16], [OX + 16, 8, OZ - 4]], grove: [[OX + 6, 2.2, OZ + 4], [OX - 40, 6, OZ - 60]], far: [[OX + 300, 120, OZ + 600], [OX, 0, OZ]], top: [[OX + 40, 420, OZ + 80], [OX, 0, OZ]] };
+const P = POSES[view] || POSES.row;
+camera.position.set(...P[0]); camera.lookAt(...P[1]); camera.updateMatrixWorld();
+const sky = skyAt((tod - 0.5) * 21600);
+let t = 0;
+function frame(dt = 0.016) {
+  t += dt;
+  rig.update(camera, dt, sky, new THREE.Vector3(...P[1]), view === 'far' || view === 'top' ? 900 : 120);
+  scene.fog.color.copy(rig.state.fog);
+  flora.update(dt, { camera, sunDir: sky.sunDir, pixelHeight: renderer.getDrawingBufferSize(new THREE.Vector2()).y });
+  grass.update(dt, camera.position.y); ground.update(dt);
+  renderer.render(scene, camera);
+  if (q.get('atlas') && flora.impostorAtlas) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { t: { value: q.get('atlas') === 'n' ? flora.impostorNormals : flora.impostorAtlas } }, vertexShader: 'varying vec2 v; void main(){ v = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: 'uniform sampler2D t; varying vec2 v; void main(){ vec4 c = texture2D(t, v); gl_FragColor = vec4(mix(vec3(1.0, 0.0, 1.0), c.rgb, c.a), 1.0); }', depthTest: false })); m.frustumCulled = false; const s2 = new THREE.Scene(); s2.add(m); renderer.autoClear = false; renderer.render(s2, camera); renderer.autoClear = true; }
+}
+window.__flora = { flora, grass, frame, renderer, camera, scene, sky, rig };
+for (let i = 0; i < 3; i++) frame();
+document.body.dataset.ready = '1';
+if (q.get('live')) (function loop() { frame(); requestAnimationFrame(loop); })();
+</script>

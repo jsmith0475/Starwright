@@ -1,0 +1,33 @@
+name: Bug report
+description: Something broke, looked wrong or behaved in a way you did not expect
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What were you doing, what did you expect, and what happened instead? Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it ourselves?
+      description: Steps from the title screen if you can. Name the scenario or stock craft if you used one.
+  - type: input
+    id: system
+    attributes:
+      label: System and browser
+      placeholder: "Windows 11, Chrome 131"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run Starwright?
+      options:
+        - Played in the browser from the project page
+        - One-line installer
+        - Downloaded the ZIP and used the launcher
+        - Cloned the repository
+        - Other

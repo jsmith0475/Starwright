@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Starwright worlds preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: ui-rounded, system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #note { position: fixed; left: 10px; bottom: 8px; font-size: 12px; color: #dfe7ee; text-shadow: 0 1px 2px #000; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="note"></div>
+<script>addEventListener('error', () => { window.__previewReady = true; }); addEventListener('unhandledrejection', () => { window.__previewReady = true; });</script>
+<script type="module">
+// Worlds preview harness. Query: body=verda view=orbit|low|air|ground|base|coast|sky|system sun=<elevation deg> alt=<m> az=<deg> pitch=<deg>
+import * as THREE from '../js/lib/three.module.min.js';
+import { SYSTEM } from '../js/core/bodies.js';
+import { createWorldRenderer, getBodyMaps } from '../js/render/planetgfx.js';
+
+const qs = new URLSearchParams(location.search);
+const body = SYSTEM.byId[qs.get('body') || 'verda'];
+const view = qs.get('view') || 'orbit';
+const sunEl = (parseFloat(qs.get('sun') ?? '50') * Math.PI) / 180;
+const canvas = document.getElementById('gl');
+// the renderer contract of docs/SECOND_PASS.md
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2e9);
+const worlds = createWorldRenderer({ renderer, scene, camera, system: SYSTEM, quality: qs.get('q') || 'high' });
+window.__worlds = worlds;
+
+const R = body.radius;
+let ut0 = parseFloat(qs.get('ut') || '0');
+if (qs.get('ut') === 'perihelion' && body.orbit) {
+  // the moment of closest approach to the star within one orbit (comets: when the tail is out)
+  let best = Infinity; ut0 = 0;
+  for (let i = 0; i < 4000; i++) { const t = (i / 4000) * body.orbit.period, d = body.globalPosAt(t).length(); if (d < best) { best = d; ut0 = t; } }
+}
+const Y = new THREE.Vector3(0, 1, 0);
+// sun direction in the body's inertial frame and in its body-fixed frame at ut
+function sunInertial(ut) { return body.type === 'star' ? new THREE.Vector3(1, 0, 0) : body.globalPosAt(ut).multiplyScalar(-1).normalize(); }
+let ut = ut0;
+const S = sunInertial(ut);
+// a point (inertial unit vector) where the sun stands `el` above the horizon, off to one side
+function siteForSun(el, twist = 0.6) {
+  const side = new THREE.Vector3().crossVectors(S, Y).normalize();
+  const axis = side.clone().applyAxisAngle(S, twist);
+  return S.clone().applyAxisAngle(axis, Math.PI / 2 - el).normalize();
+}
+let siteI;                       // inertial unit vector of the site
+const padSite = view === 'base' || view === 'coast' || qs.get('site') === 'pad';
+if (padSite || qs.get('lat')) {
+  // a named place (the space centre, or lat/lon in degrees): find the time of day that gives the wanted sun elevation
+  const place = padSite ? SYSTEM.home.sites.pad.dir
+    : body.dirFromLatLon(parseFloat(qs.get('lat')) * Math.PI / 180, parseFloat(qs.get('lon') || '0') * Math.PI / 180);
+  let best = 0, bestErr = 9;
+  const morning = qs.get('pm') ? -1 : 1;
+  const span = body.rotPeriod;
+  for (let i = 0; i < 4000; i++) {
+    const t = (i / 4000) * span, d = body.surfaceDirToInertial(place, t), s = sunInertial(t);
+    const e = Math.asin(d.dot(s));
+    const d2 = body.surfaceDirToInertial(place, t + span / 8000), s2 = sunInertial(t + span / 8000); const rising = Math.asin(d2.dot(s2)) > e ? 1 : -1;
+    if (rising === morning && Math.abs(e - sunEl) < bestErr) { bestErr = Math.abs(e - sunEl); best = t; }
+  }
+  ut = best; siteI = body.surfaceDirToInertial(place, ut);
+} else siteI = siteForSun(sunEl, parseFloat(qs.get('twist') || '0.6'));
+const sun = sunInertial(ut);
+const siteBF = body.inertialToSurfaceDir(siteI, ut);
+const ground = body.surfaceHeight ? body.surfaceHeight(siteBF) : 0;
+const east = new THREE.Vector3().crossVectors(Y, siteI).normalize(), north = new THREE.Vector3().crossVectors(siteI, east).normalize();
+
+const defaults = { orbit: [2.6 * R, 0, -90], low: [0.14 * R, 20, -24], air: [5000, 30, -14], ground: [2.2, 40, -3], base: [2.2, 250, -1], coast: [400, 180, -10], sky: [2.2, 0, 35], system: [3 * R, 0, -90] }[view] || [2.2, 40, -3];
+const alt = parseFloat(qs.get('alt') ?? defaults[0]);
+// heading: degrees clockwise from north; by default relative to the sun's azimuth so the light rakes across the view
+const sunAz = Math.atan2(sun.dot(east), sun.dot(north));
+const az = sunAz + (parseFloat(qs.get('az') ?? defaults[1]) * Math.PI) / 180;
+const pitch = (parseFloat(qs.get('pitch') ?? defaults[2]) * Math.PI) / 180;
+const gas = body.gas || body.type === 'star';
+const camR = R + (alt > 50000 || gas ? alt : ground + alt);
+const origin = siteI.clone().multiplyScalar(camR);      // scene origin = the camera's place (floating origin)
+camera.position.set(0, 0, 0);
+const fwd = north.clone().multiplyScalar(Math.cos(az)).addScaledVector(east, Math.sin(az));
+const look = fwd.clone().multiplyScalar(Math.cos(pitch)).addScaledVector(siteI, Math.sin(pitch));
+camera.up.copy(siteI);
+if (view === 'orbit' || view === 'system') {
+  // look at the body from the side the sun lights, a little off axis
+  const sd = parseFloat(qs.get('phase') ?? '50') * Math.PI / 180;
+  const dir = sun.clone().applyAxisAngle(Y, sd).applyAxisAngle(new THREE.Vector3().crossVectors(sun, Y).normalize(), 0.3);
+  origin.copy(dir).multiplyScalar(R + alt);
+  camera.up.copy(Y);
+  camera.lookAt(origin.clone().multiplyScalar(-1));
+  camera.fov = 40;
+} else camera.lookAt(look);
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+// ---- probe: does the drawn ground agree with the ground physics stands on? (heightAt vs terrainHeight)
+function probeHeights() {
+  const out = { n: 0, max: 0, mean: 0, spacing: 0, near: { n: 0, max: 0, mean: 0 } };
+  if (gas || !worlds.heightAt) return out;
+  const o = {}, d = new THREE.Vector3(), up = origin.clone().normalize(), e1 = east, e2 = north;
+  let sum = 0, sumN = 0;
+  for (let i = 0; i < 400; i++) {
+    const r = 60 * Math.sqrt((i + 0.5) / 400), a = i * 2.399963;
+    d.copy(origin).addScaledVector(e1, r * Math.cos(a)).addScaledVector(e2, r * Math.sin(a));
+    body.inertialToSurfaceDir(d, ut, d);
+    const hv = worlds.heightAt(body, d, o), hp = body.surfaceHeight(d);
+    if (!(o.spacing < 1e9)) continue;
+    const err = Math.abs(hv - hp);
+    out.n++; sum += err; if (err > out.max) out.max = err;
+    if (r < 25) { out.near.n++; sumN += err; if (err > out.near.max) out.near.max = err; out.near.spacing = o.spacing; }
+    out.spacing = Math.max(out.spacing, o.spacing);
+  }
+  out.mean = out.n ? sum / out.n : 0; out.near.mean = out.near.n ? sumN / out.near.n : 0;
+  return out;
+}
+// ?probe=1: balls of 0.3 m radius resting on the PHYSICS ground; each should sit on the drawn ground, not in or over it
+if (qs.get('probe') && !gas) {
+  const geo = new THREE.SphereGeometry(0.3, 16, 10), mat = new THREE.MeshBasicMaterial({ color: 0xff7a2a });
+  const d = new THREE.Vector3(), bf = new THREE.Vector3();
+  for (let i = 0; i < 60; i++) {
+    const r = 3 + 45 * Math.sqrt((i + 0.5) / 60), a = i * 2.399963;
+    d.copy(origin).addScaledVector(east, r * Math.cos(a)).addScaledVector(north, r * Math.sin(a));
+    body.inertialToSurfaceDir(d, ut, bf);
+    const rr = R + body.surfaceHeight(bf) + 0.3;
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(d).setLength(rr).sub(origin);
+    scene.add(m);
+  }
+}
+
+let after = 0, frames = 0, quiet = 0, last = performance.now();
+const animate = qs.get('animate') === '1';
+const t0 = performance.now();
+function tick() {
+  const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (animate) ut += dt * parseFloat(qs.get('warp') || '1');
+  const info = worlds.update({ ut, dt, body, origin });
+  const dbg = qs.get('dbg') || '', tr = worlds.get(body).terrain;
+  if (dbg) { const e = worlds.get(body); if (dbg.includes('hideclouds') && e.clouds) e.clouds.mesh.visible = false; if (dbg.includes('hideair') && e.vis.atmosphere) e.vis.atmosphere.visible = false; if (dbg.includes('hidesun')) worlds.get(SYSTEM.star).vis.group.visible = false; }
+  if (dbg && tr) { if (dbg.includes('nomaps')) tr.uniforms.uMapsReady.value = 0; if (dbg.includes('nocloud')) tr.uniforms.uCloudShadow.value = 0; if (dbg.includes('nodetail')) tr.uniforms.uDetailK.value = 0; }
+  // software GL is slow: while chunks and maps are still arriving only the bookkeeping runs, not the drawing
+  if (animate || quiet > 2 || frames === 0 || window.__previewReady) renderer.render(scene, camera);
+  frames++;
+  const sc = worlds.get(body).scatter;
+  const busy = info.busy || (sc && sc.group.visible && sc.pending > 0);
+  quiet = busy ? 0 : quiet + 1;
+  if ((quiet > 6 || now - t0 > 110000) && !window.__previewReady) {
+    window.__stats = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, chunks: info.chunks, drawn: info.drawn, terrainTriangles: info.triangles, clutter: info.clutter, clutterTriangles: info.clutterTriangles, ms: now - t0, frames, alt: info.altitude, sunEl: info.sunElevation * 180 / Math.PI, skyLum: info.skyLum, starOpacity: info.starOpacity, programs: renderer.info.programs.length, timedOut: quiet <= 6, heights: probeHeights(), maps: getBodyMaps(body).level + ' ' + getBodyMaps(body).color.image.width };
+    window.__previewReady = true;
+    document.getElementById('note').textContent = `${body.name} · ${view} · sun ${(info.sunElevation * 180 / Math.PI).toFixed(0)}° · ${renderer.info.render.calls} draws · ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris`;
+  }
+  if (window.__previewReady && !animate) { if (++after < 3) requestAnimationFrame(tick); else window.__previewDone = true; return; }
+  if (animate) requestAnimationFrame(tick); else setTimeout(tick, quiet > 2 ? 0 : 40);
+}
+tick();
+</script>
+</body>
+</html>

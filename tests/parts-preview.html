@@ -1,0 +1,219 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Starwright parts preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#10151c;color:#dfe7ee;font:12px/1.3 system-ui,sans-serif;overflow:hidden}
+  #gl{position:fixed;inset:0;width:100%;height:100%}
+  .lbl{position:fixed;transform:translate(-50%,0);white-space:nowrap;text-shadow:0 1px 2px #000,0 0 6px #000;pointer-events:none;font-size:11px;text-align:center}
+  .lbl small{display:block;color:#8fa3b5;font-size:9px}
+  #note{position:fixed;left:8px;top:6px;color:#8fa3b5}
+  #thumbs{display:none;position:fixed;inset:0;overflow:auto;padding:26px 10px;background:#1d2631}
+  #thumbs .t{display:inline-block;width:104px;margin:3px;text-align:center;font-size:10px;vertical-align:top;background:#141a22;border-radius:6px;padding:4px 0}
+  #thumbs img{width:96px;height:96px;display:block;margin:0 auto}
+</style></head>
+<body><canvas id="gl"></canvas><div id="thumbs"></div><div id="note"></div>
+<script type="module">
+// Parts preview: contact sheets of every part, close-ups, thumbnails and assembled rockets.
+//   ?view=sheet&cat=engines&state=0|1&page=0   ?view=close&ids=a,b,c&state=1   ?view=thumbs
+//   ?view=rockets&set=0|1                      ?view=lod&ids=a,b
+import * as THREE from '../js/lib/three.module.min.js';
+import { PARTS, PART_LIST, CATEGORIES } from '../js/core/parts.js';
+import { Craft, stockCrafts } from '../js/core/craft.js';
+import { buildPartMesh, setPartState, renderPartThumbnail, ensurePartEnvironment, partDrawCalls, createPartLOD } from '../js/render/partmesh.js';
+
+const qs = new URLSearchParams(location.search), view = qs.get('view') || 'sheet';
+const canvas = document.getElementById('gl');
+// Renderer contract from docs/SECOND_PASS.md
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+ensurePartEnvironment(renderer);
+const scene = new THREE.Scene();
+const labels = [];
+function label(text, pos, sub) { const d = document.createElement('div'); d.className = 'lbl'; d.textContent = text; if (sub) { const s = document.createElement('small'); s.textContent = sub; d.appendChild(s); } document.body.appendChild(d); labels.push({ d, pos }); }
+let camera = new THREE.PerspectiveCamera(30, 1, 0.05, 5000);
+const sun = new THREE.DirectionalLight(0xfff1dc, 3.2); scene.add(sun, sun.target);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+scene.add(new THREE.HemisphereLight(0xbfd6f2, 0x4a443c, 0.75));
+function fitShadow(box, dir) {
+  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  sun.position.copy(c).addScaledVector(dir.clone().normalize(), r * 2.2); sun.target.position.copy(c);
+  const s = sun.shadow.camera; s.left = -r; s.right = r; s.top = r; s.bottom = -r; s.near = 0.1; s.far = r * 4.6; s.updateProjectionMatrix();
+}
+const updaters = []; let customRender = null;
+const forced = qs.get('state');
+function stateFor(def, on) {
+  const s = { deployed: on, instant: true };
+  if (def.chute) s.deployed = on ? 'full' : 'stowed';
+  if (def.engine) { s.throttle = on ? 1 : 0; s.ignited = on; s.gimbal = on ? { x: 0.06, z: 0.05 } : { x: 0, z: 0 }; }
+  if (def.light) s.light = on;
+  s.control = on ? 0.9 : 0; s.steer = on ? 0.4 : 0; s.spin = on ? 1 : 0; s.compress = on ? 0.6 : 0;
+  if (def.wheel && def.wheel.retract) s.deployed = !on;
+  s.temp = on && def.heatshield ? 1700 : 300;
+  return s;
+}
+function studio(color = 0x2a323c) {
+  scene.background = new THREE.Color(0x161c24);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+}
+
+const views = {
+  // every part of a category, each framed in its own cell (own viewport and camera)
+  sheet() {
+    studio();
+    const cat = qs.get('cat') || 'command', page = +(qs.get('page') || 0), on = forced === '1', per = +(qs.get('per') || 24), cols = +(qs.get('cols') || 6);
+    const all = PART_LIST.filter(d => d.cat === cat), defs = all.slice(page * per, page * per + per), rows = Math.max(1, Math.ceil(defs.length / cols));
+    let calls = 0, tris = 0; const cells = [], top = 22;
+    defs.forEach((def, i) => {
+      const g = buildPartMesh(def); setPartState(g, stateFor(def, on));
+      g.rotation.y = def.r ? 0.0 : -0.5; g.updateMatrixWorld(true);
+      const box = new THREE.Box3(); g.traverse(o => { if ((o.isMesh || o.isLineSegments) && (on || !(g.userData.canopy && isUnder(o, g.userData.canopy)))) box.expandByObject(o); });
+      g.position.y = -box.min.y + 0.004; box.translate(new THREE.Vector3(0, g.position.y, 0)); g.visible = false; scene.add(g);
+      const dc = partDrawCalls(g); calls += dc; let t = 0; g.traverse(o => { if (o.isMesh) t += o.geometry.attributes.position.count / 3; }); tris += t;
+      const d = document.createElement('div'); d.className = 'lbl'; d.textContent = def.name; const sm = document.createElement('small'); sm.textContent = `${def.id} · ${dc} draws · ${(t / 1000).toFixed(1)}k tris`; d.appendChild(sm); document.body.appendChild(d);
+      cells.push({ def, g, box, d, col: i % cols, row: Math.floor(i / cols) });
+    });
+    const cam = new THREE.PerspectiveCamera(22, 1, 0.02, 4000), dirSun = new THREE.Vector3(0.55, 1.0, 0.75);
+    customRender = () => {
+      const W = innerWidth, H = innerHeight - top, vw = W / cols, vh = H / rows;
+      renderer.setScissorTest(true);
+      for (const c of cells) {
+        const x = c.col * vw, y = H - (c.row + 1) * vh;
+        renderer.setViewport(x, y, vw, vh - 30); renderer.setScissor(x, y, vw, vh);
+        c.d.style.left = (x + vw / 2) + 'px'; c.d.style.top = (top + (c.row + 1) * vh - 28) + 'px';
+        const s = c.box.getBoundingSphere(new THREE.Sphere()), def = c.def;
+        const el = def.engine ? 0.06 : def.heatshield ? 0.1 : 0.34, az = 0.55;
+        cam.aspect = vw / (vh - 30); const dist = s.radius / Math.sin(cam.fov * Math.PI / 360) * (cam.aspect < 1 ? 1 / cam.aspect : 1) * 1.02;
+        cam.position.set(s.center.x + Math.sin(az) * Math.cos(el) * dist, s.center.y + Math.sin(el) * dist, s.center.z + Math.cos(az) * Math.cos(el) * dist); cam.lookAt(s.center); cam.updateProjectionMatrix();
+        fitShadow(c.box, dirSun); c.g.visible = true; renderer.render(scene, cam); c.g.visible = false;
+      }
+      renderer.setScissorTest(false);
+    };
+    document.getElementById('note').textContent = `${cat} ${page * per + 1}–${page * per + defs.length} of ${all.length} · state ${on ? 'on' : 'off'} · ${calls} draw calls, ${(tris / 1000).toFixed(0)}k triangles`;
+    window.__pages = Math.ceil(all.length / per);
+  },
+  // a few parts large, for critique
+  close() {
+    studio();
+    const ids = (qs.get('ids') || 'eng_goshawk,tank_m200,pod_acorn').split(','), on = forced === '1', q = qs.get('q') || 'high';
+    const root = new THREE.Group(); scene.add(root); let x = 0;
+    for (const id of ids) {
+      const def = PARTS[id]; if (!def) continue;
+      const g = buildPartMesh(def, { quality: q }); setPartState(g, stateFor(def, on));
+      g.updateMatrixWorld(true); const box = new THREE.Box3(); g.traverse(o => { if (o.isMesh && (on || !(g.userData.canopy && isUnder(o, g.userData.canopy)))) box.expandByObject(o); });
+      const size = box.getSize(new THREE.Vector3());
+      g.position.set(x + size.x / 2 - (box.min.x + size.x / 2), -box.min.y + 0.01, 0); g.rotation.y = +(qs.get('rot') || (def.r ? 0.5 : -0.6));
+      root.add(g); label(def.name, new THREE.Vector3(x + size.x / 2, 0, size.z / 2 + 0.2), `${partDrawCalls(g)} draws`);
+      x += Math.max(size.x, size.z) + Math.max(0.25, size.y * 0.15);
+    }
+    const box = new THREE.Box3().setFromObject(root), s = box.getBoundingSphere(new THREE.Sphere());
+    const az = +(qs.get('az') || 0.45), el = +(qs.get('el') || 0.22), dist = s.radius / Math.sin(camera.fov * Math.PI / 360) * 0.86;
+    camera.position.set(s.center.x + Math.sin(az) * Math.cos(el) * dist, s.center.y + Math.sin(el) * dist, s.center.z + Math.cos(az) * Math.cos(el) * dist); camera.lookAt(s.center);
+    fitShadow(box, new THREE.Vector3(0.6, 1.0, 0.7));
+  },
+  lod() {
+    studio();
+    const ids = (qs.get('ids') || 'eng_goshawk,tank_m200,pod_acorn,wheel_lumber').split(',');
+    const root = new THREE.Group(); scene.add(root); let x = 0;
+    for (const id of ids) for (const q of ['high', 'medium', 'low']) {
+      const def = PARTS[id], g = buildPartMesh(def, { quality: q }); g.position.set(x, def.h / 2 + 0.01, 0); g.rotation.y = 0.5; root.add(g);
+      let t = 0; g.traverse(o => { if (o.isMesh) t += o.geometry.attributes.position.count / 3; });
+      label(`${def.name} · ${q}`, new THREE.Vector3(x, 0, 0.8), `${partDrawCalls(g)} draws · ${(t / 1000).toFixed(1)}k tris`); x += (def.r || def.rw) * 2 + 0.7;
+    }
+    const lod = createPartLOD(PARTS[ids[0]]); lod.position.set(-3, 1, 0); root.add(lod); setPartState(lod, { throttle: 1, ignited: true });
+    const box = new THREE.Box3().setFromObject(root), s = box.getBoundingSphere(new THREE.Sphere()), dist = s.radius / Math.sin(camera.fov * Math.PI / 360) * 0.8;
+    camera.position.set(s.center.x + dist * 0.3, s.center.y + dist * 0.25, s.center.z + dist * 0.92); camera.lookAt(s.center); fitShadow(box, new THREE.Vector3(0.6, 1.0, 0.7));
+  },
+  thumbs() {
+    const el = document.getElementById('thumbs'); el.style.display = 'block';
+    const t0 = performance.now(), list = qs.get('cat') ? PART_LIST.filter(d => d.cat === qs.get('cat')) : PART_LIST;
+    for (const def of [...list, PARTS.pip]) {
+      const d = document.createElement('div'); d.className = 't';
+      const img = new Image(); img.src = renderPartThumbnail(renderer, def, 96); d.appendChild(img); d.appendChild(document.createTextNode(def.name)); el.appendChild(d);
+    }
+    document.getElementById('note').textContent = `thumbnails: ${(performance.now() - t0).toFixed(0)} ms for ${list.length + 1} parts`;
+  },
+  // assembled vehicles on a concrete apron under a sun and sky
+  rockets() {
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(2000, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+      vertexShader: 'varying vec3 d; void main(){ d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying vec3 d; void main(){ float h = max(d.y, 0.0); vec3 c = mix(vec3(0.78,0.86,0.93), vec3(0.20,0.42,0.78), pow(h, 0.45)); c = mix(c, vec3(0.55,0.6,0.55), smoothstep(0.0,-0.05,d.y)); gl_FragColor = vec4(c, 1.0);\n #include <tonemapping_fragment>\n #include <colorspace_fragment>\n }' }));
+    scene.add(sky);
+    const gc = document.createElement('canvas'); gc.width = gc.height = 512; const g2 = gc.getContext('2d'); g2.fillStyle = '#8d8f8c'; g2.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 9000; i++) { g2.fillStyle = `rgba(${40 + Math.random() * 60 | 0},${40 + Math.random() * 60 | 0},${40 + Math.random() * 50 | 0},${Math.random() * 0.12})`; g2.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 3, 1 + Math.random() * 3); }
+    g2.strokeStyle = 'rgba(40,42,44,0.6)'; g2.lineWidth = 3; g2.strokeRect(0, 0, 512, 512);
+    const gt = new THREE.CanvasTexture(gc); gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(120, 120); gt.colorSpace = THREE.SRGBColorSpace; gt.anisotropy = 8;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(960, 960), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.92 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+    const set = +(qs.get('set') || 0), root = new THREE.Group(); scene.add(root);
+    const crafts = set === 0 ? stockCrafts().slice(0, 4) : customCrafts(set);
+    let x = 0; const on = forced === '1';
+    for (const c of crafts) {
+      const grp = new THREE.Group(), b = c.bounds ? c.bounds() : null;
+      for (const p of c.parts) {
+        const def = PARTS[p.type], m = buildPartMesh(def); m.position.set(p.pos.x, p.pos.y, p.pos.z); m.rotation.y = p.rot || 0; if (p.flip) m.rotateX(Math.PI);
+        setPartState(m, stateFor(def, on)); if (def.legs || (def.wheel && def.wheel.retract)) setPartState(m, { deployed: true, instant: true });
+        if (def.solar && !def.solar.fixed) setPartState(m, { deployed: c.name.includes('Probe') || c.name.includes('Station') || on, instant: true });
+        grp.add(m);
+      }
+      grp.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(grp), sz = box.getSize(new THREE.Vector3());
+      if (c.horizontal) { grp.rotation.x = -Math.PI / 2; grp.rotation.z = Math.PI / 2; grp.updateMatrixWorld(true); }
+      const bb = new THREE.Box3().setFromObject(grp), s2 = bb.getSize(new THREE.Vector3());
+      grp.position.x += x - bb.min.x; grp.position.y -= bb.min.y; grp.position.z -= (bb.min.z + bb.max.z) / 2;
+      root.add(grp); label(c.name, new THREE.Vector3(x + s2.x / 2, 0, s2.z / 2 + 0.6), `${c.parts.length} parts · ${partDrawCalls(grp)} draws`);
+      x += s2.x + 2.2; void sz; void b;
+    }
+    const box = new THREE.Box3().setFromObject(root), s = box.getBoundingSphere(new THREE.Sphere());
+    camera.fov = 32; const az = +(qs.get('az') || 0.55), el = +(qs.get('el') || 0.14), dist = s.radius / Math.sin(camera.fov * Math.PI / 360) * +(qs.get('zoom') || 0.72);
+    camera.position.set(s.center.x + Math.sin(az) * Math.cos(el) * dist, Math.max(1.2, s.center.y * 0.8 + Math.sin(el) * dist), s.center.z + Math.cos(az) * Math.cos(el) * dist); camera.lookAt(s.center.x, s.center.y * 0.95, s.center.z);
+    sun.color.set(0xffe9c8); sun.intensity = 3.6; fitShadow(box, new THREE.Vector3(0.75, 0.55, 0.6));
+  },
+};
+function isUnder(o, anc) { for (let p = o; p; p = p.parent) if (p === anc) return true; return false; }
+
+// Hand-assembled vehicles that exercise the new parts. The Craft API may refuse a part (multi-couplers, plane
+// parts): those are placed directly so the preview never depends on builder rules.
+function customCrafts(set) {
+  const mk = name => ({ name, parts: [], y: 0 });
+  const stack = (c, ids) => { for (const id of ids) { const d = PARTS[id]; c.parts.push({ type: id, pos: { x: 0, y: c.y + d.h / 2, z: 0 }, rot: 0, _r: d.rBottom ?? d.r }); c.y += d.h; } return c; };
+  const at = (c, i) => c.parts[i];
+  const rad = (c, id, host, yFrac, ang, n = 1, extra = 0) => { const d = PARTS[id], hd = PARTS[host.type], r = (hd.rBottom + (hd.rTop - hd.rBottom) * yFrac) ?? hd.r; for (let k = 0; k < n; k++) { const a = ang + k * 2 * Math.PI / n; c.parts.push({ type: id, pos: { x: Math.cos(a) * (r + d.rw / 2 + extra), y: host.pos.y + (yFrac - 0.5) * hd.h, z: -Math.sin(a) * (r + d.rw / 2 + extra) }, rot: a }); } };
+  const side = (c, ids, host, ang, n, gap) => { for (let k = 0; k < n; k++) { const a = ang + k * 2 * Math.PI / n, hd = PARTS[host.type]; let y = host.pos.y - hd.h / 2; for (const id of ids) { const d = PARTS[id], R = hd.r + gap + PARTS[ids[1] || ids[0]].r; c.parts.push({ type: id, pos: { x: Math.cos(a) * R, y: y + d.h / 2, z: -Math.sin(a) * R }, rot: a }); y += d.h; } } };
+  if (set === 1) {
+    // heavy lifter with an XL core, L side boosters and a crewed top
+    const a = mk('Colossus Heavy'); stack(a, ['eng_quintet', 'tank_xl7200', 'tank_xl3600', 'dec_xl', 'adapter_xll', 'eng_osprey', 'tank_l1600', 'probe_beacon', 'dec_l', 'heatshield_l', 'pod_hearth', 'dock_m', 'chute']);
+    at(a, 12).pos.y -= 0; side(a, ['srb_anvil', 'nose_l'], at(a, 1), Math.PI / 4, 4, 0.5); rad(a, 'dec_radial_l', at(a, 1), 0.6, Math.PI / 4, 4); rad(a, 'fin_broad', at(a, 1), 0.2, 0, 4);
+    const b = mk('Whisper Probe'); stack(b, ['eng_whisper', 'xen_s', 'battery_s', 'probe_facet', 'gyro_s', 'dock_s']);
+    rad(b, 'solar_wing', at(b, 1), 0.5, 0, 2); rad(b, 'antenna_saucer', at(b, 3), 0.5, Math.PI / 2); rad(b, 'sci_compass', at(b, 3), 0.5, -Math.PI / 2); rad(b, 'gen_glowworm', at(b, 2), 0.5, 2.4);
+    const c = mk('Pell Lander'); stack(c, ['eng_sparrow', 'tank_l800', 'pod_burrow', 'dock_m']);
+    rad(c, 'leg_stilt', at(c, 1), 0.3, Math.PI / 4, 4); rad(c, 'rtank_pannier', at(c, 1), 0.5, 0, 4); rad(c, 'ladder_rung', at(c, 2), 0.5, 3 * Math.PI / 2); rad(c, 'solar_tile', at(c, 2), 0.6, 0.6, 2); rad(c, 'light_glim', at(c, 2), 0.2, Math.PI / 2 + 0.6, 2); rad(c, 'rcs', at(c, 2), 0.85, Math.PI / 4, 4);
+    return [a, b, c];
+  }
+  // set 2: aeroplane, rover, station core
+  const p = mk('Gull Jet'); stack(p, ['jet_puffin', 'fus_m', 'fus_m_long', 'cockpit_gull', 'cockpit_swift']); p.horizontal = true;
+  const wa = Math.PI;  // wings on ±X when dorsal is +Z
+  for (const a of [0, Math.PI]) { rad(p, 'wing_glide', at(p, 2), 0.42, a); rad(p, 'tail_swallow', at(p, 1), 0.1, a); }
+  rad(p, 'tail_rudder', at(p, 1), 0.1, -Math.PI / 2); rad(p, 'gear_tuck_s', at(p, 3), 0.7, Math.PI / 2); rad(p, 'gear_tuck_m', at(p, 2), 0.2, Math.PI / 2 - 0.5); rad(p, 'gear_tuck_m', at(p, 2), 0.2, Math.PI / 2 + 0.5); rad(p, 'intake_gill', at(p, 1), 0.7, 0, 2);
+  const r = mk('Trundle Rover'); stack(r, ['rover_trundle']); r.horizontal = true;
+  for (const yf of [0.15, 0.85]) for (const a of [Math.PI / 2 - 0.75, Math.PI / 2 + 0.75]) rad(r, 'wheel_scamper', at(r, 0), yf, a);
+  rad(r, 'antenna', at(r, 0), 0.9, -Math.PI / 2 + 0.3); rad(r, 'light_glare', at(r, 0), 1.0, -Math.PI / 2);
+  const s = mk('Station Core'); stack(s, ['dock_l', 'sci_lab', 'gyro_l', 'truss_m', 'mono_l', 'battery_l', 'pod_homestead'.replace('pod_homestead', 'adapter_lm'), 'cockpit_gull'.replace('cockpit_gull', 'pod_burrow'), 'dock_m']);
+  rad(s, 'solar_grand', at(s, 3), 0.5, 0, 2); rad(s, 'antenna_longear', at(s, 2), 0.5, Math.PI / 2); rad(s, 'rcs_gust', at(s, 4), 0.5, Math.PI / 4, 4); rad(s, 'sci_scope', at(s, 1), 0.85, -Math.PI / 2);
+  void wa; void Craft;
+  return [p, r, s];
+}
+
+(views[view] || views.sheet)();
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+const v = new THREE.Vector3();
+let frames = 0;
+function tick(t) {
+  for (const u of updaters) u(t / 1000);
+  if (customRender) customRender(); else renderer.render(scene, camera);
+  for (const { d, pos } of labels) { v.copy(pos).project(camera); d.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px'; d.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px'; d.style.display = v.z < 1 ? '' : 'none'; }
+  if (++frames === 3) { window.__info = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries }; window.__previewReady = true; if (!qs.has('live')) return; }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script></body></html>
