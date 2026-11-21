@@ -802,7 +802,7 @@ export class Vessel {
     let m = 0, cx = 0, cy = 0, cz = 0;
     for (const p of this._list) {
       let pm = p.def.mass * 1000;
-      const res = p.res;
+      const res = p.res, cy0 = cy;
       for (const k in res) if (k !== 'elec') pm += res[k];
       if (p.truss) for (const t of p.truss) {   // the lattice ring it carries: its mass sits half-way up the ring
         pm += t.mass;
@@ -812,12 +812,18 @@ export class Vessel {
       m += pm; cx += pm * p.pos.x; cy += pm * p.pos.y; cz += pm * p.pos.z;
       const oy = p.def.comY;   // ballast low in a capsule: its mass sits off the part's centre along its own axis
       if (oy) { cx += pm * oy * (p._ax || 0); cy += pm * oy * (p._ay ?? (p.flip ? -1 : 1)); cz += pm * oy * (p._az || 0); }
+      // where this part's mass sits (ballast and truss included): structure.js takes its loads about these points
+      p._mx = p.pos.x + (oy ? oy * (p._ax || 0) : 0); p._mz = p.pos.z + (oy ? oy * (p._az || 0) : 0);
+      p._my = pm > 0 ? (cy - cy0) / pm : p.pos.y;
     }
     if (!(m > 0)) { this.mass = 0; return; }
     cx /= m; cy /= m; cz /= m;
     let ix = 0, iy = 0, iz = 0;
     for (const p of this._list) {
       const d = p.def, pm = p.mass;
+      // NOTE (found by tests/verify chapter 7): this takes the part's geometric centre, not its mass point (_mx, _my,
+      // _mz), so a capsule's ballast offset is missing here: up to 9 % too much inertia for a capsule on a short stack.
+      // Left as it is in this pass because correcting it changes how every landing is flown; see docs/STRUCTURE.md.
       const dx = p.pos.x - cx, dy = p.pos.y - cy, dz = p.pos.z - cz;
       const r = p._stack ? Math.max(d.rTop, d.rBottom) : (d.rw || 0.2) / 2;
       const own = pm * (3 * r * r + d.h * d.h) / 12;

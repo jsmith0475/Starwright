@@ -292,7 +292,7 @@ Starwright is version 0.1: playable from the first launch to the outer planets, 
 
 ## Roadmap
 
-The next ten upgrades, in the order we plan to take them. There are no dates: each one ships when
+The next eleven upgrades, in the order we plan to take them. There are no dates: each one ships when
 it is good. **[Read the full roadmap](docs/ROADMAP.md)** for what each one is, why it matters,
 what the game does today, and what building it involves.
 
@@ -304,21 +304,23 @@ what the game does today, and what building it involves.
    carries a computed load, bends, and breaks when a rocket is too tall, too thin or flown too
    hard. The assembly building shows which joint is closest to its limit.
    [How it works and what was checked.](docs/STRUCTURE.md)
-3. **[Higher-fidelity worlds.](docs/ROADMAP.md#3-higher-fidelity-worlds)** Sharper terrain,
+3. **[Aerodynamic breakup.](docs/ROADMAP.md#3-aerodynamic-breakup)** A rocket that flips or
+   tumbles in thick air sheds its fins, panels and boosters and breaks into pieces.
+4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** Sharper terrain,
    richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
-4. **[Reusable boosters.](docs/ROADMAP.md#4-reusable-boosters)** Flip, boost back, steer on the
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the
    grid fins and land the first stage on its legs while the upper stage flies on to orbit.
-5. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#5-deeper-aerodynamics-and-re-entry)**
+6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
-6. **[Optional n-body gravity.](docs/ROADMAP.md#6-optional-n-body-gravity)** Lagrange points,
+7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,
    halo orbits and low-energy transfers, starting as an overlay in the map.
-7. **[Stations and surface bases.](docs/ROADMAP.md#7-stations-and-surface-bases)** Mine a moon,
+8. **[Stations and surface bases.](docs/ROADMAP.md#8-stations-and-surface-bases)** Mine a moon,
    refine propellant, and refuel ships far from home.
-8. **[A deeper career.](docs/ROADMAP.md#8-a-deeper-career)** More missions, more science at
+9. **[A deeper career.](docs/ROADMAP.md#9-a-deeper-career)** More missions, more science at
    every world, and crew who train into specialists.
-9. **[Sharing.](docs/ROADMAP.md#9-sharing)** Trade craft with other players, and add
+10. **[Sharing.](docs/ROADMAP.md#10-sharing)** Trade craft with other players, and add
    community-made parts and scenarios.
-10. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#10-a-desktop-app-and-a-seat-in-the-cockpit)**
+11. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#11-a-desktop-app-and-a-seat-in-the-cockpit)**
     A double-click app for Mac and Windows, a view from inside the capsule, and fuller sound.
 
 Want one of these to happen sooner? Pick it and help build it. See the next section.

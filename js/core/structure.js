@@ -185,6 +185,8 @@ export class Structure {
     this.wrench = new Float64Array(n * 6);
     this._sub = new Float64Array(n * 6);
     this._mp = new Float64Array(n * 3);   // mass points, relative to the vessel's centre of mass
+    this._ms = new Float64Array(n);       // part masses of the solved step
+    this._com = [0, 0, 0];                // ... and the centre of mass it was solved about
     this.flex = new Float32Array(n * 6);  // per part: displacement (3) and rotation vector (3), body axes
     this.joints = [];
     for (let i = 0; i < n; i++) { list[i]._si = i; list[i]._sj = null; }
@@ -351,11 +353,8 @@ export class Structure {
     const v = this.vessel, list = v._list, com = v.com, mp = this._mp;
     for (let i = 0; i < list.length; i++) {
       const p = list[i], pm = p.mass;
-      let x = p.pos.x, y = p.pos.y, z = p.pos.z;
-      const oy = p.def.comY;
-      if (oy) { x += oy * (p._ax || 0); y += oy * (p._ay ?? (p.flip ? -1 : 1)); z += oy * (p._az || 0); }
-      if (p.truss && pm > 0) for (const t of p.truss) y += t.mass * t.side * (p.flip ? -1 : 1) * (p.def.h + t.h) / 2 / pm;
-      mp[i * 3] = x - com.x; mp[i * 3 + 1] = y - com.y; mp[i * 3 + 2] = z - com.z;
+      mp[i * 3] = p._mx - com.x; mp[i * 3 + 1] = p._my - com.y; mp[i * 3 + 2] = p._mz - com.z;
+      this._ms[i] = pm;
     }
   }
 
@@ -368,6 +367,7 @@ export class Structure {
     const v = this.vessel, list = v._list, n = this._n, W = this.wrench, S = this._sub, mp = this._mp;
     if (!(m > 0) || n !== list.length) return 0;
     this._massPoints();
+    this._com[0] = v.com.x; this._com[1] = v.com.y; this._com[2] = v.com.z; this._mass = m;
     const wx = w.x, wy = w.y, wz = w.z;
     // the same angular acceleration and specific force the integrator is about to apply
     const alx = (Tx - (I.z - I.y) * wy * wz) / I.x, aly = (Ty - (I.x - I.z) * wz * wx) / I.y, alz = (Tz - (I.y - I.x) * wx * wy) / I.z;
@@ -537,14 +537,14 @@ export class Structure {
 
   /** Plain data of the last solved step, in the form `solveJointLoads` takes, plus the loads found. */
   snapshot() {
-    const v = this.vessel, list = v._list, W = this.wrench, mp = this._mp, com = v.com;
+    const v = this.vessel, list = v._list, W = this.wrench, mp = this._mp, c = this._com, com = { x: c[0], y: c[1], z: c[2] };
     const bodies = list.map((p, i) => ({
-      id: p.id, m: p.mass, r: [mp[i * 3], mp[i * 3 + 1], mp[i * 3 + 2]], I: [p._io || 0, p._iy || 0, p._io || 0],
+      id: p.id, m: this._ms[i], r: [mp[i * 3], mp[i * 3 + 1], mp[i * 3 + 2]], I: [p._io || 0, p._iy || 0, p._io || 0],
       F: [W[i * 6], W[i * 6 + 1], W[i * 6 + 2]], T: [W[i * 6 + 3], W[i * 6 + 4], W[i * 6 + 5]],
     }));
     const joints = this.joints.map(j => ({ parent: j.a._si, child: j.b._si, a: j.a.id, b: j.b.id, kind: j.kind, p: [j.px - com.x, j.py - com.y, j.pz - com.z], n: [j.nx, j.ny, j.nz], r: j.r, capT: j.capT, capC: j.capC, capS: j.capS, relB: j.relB, relF: j.relF }));
     const mo = this._motion;
     const loads = this.joints.map(j => ({ F: [j.fx, j.fy, j.fz], M: [j.mx, j.my, j.mz], axial: j.axial, shear: j.shear, bending: j.bending, torsion: j.torsion, util: j.util, mode: j.mode, damage: j.damage }));
-    return { valid: this.valid, mass: v.mass, inertia: [v.inertia.x, v.inertia.y, v.inertia.z], bodies, joints, motion: { w: mo.w.slice(), alpha: mo.alpha.slice(), f: mo.f.slice() }, loads, residual: { F: this.resF || 0, M: this.resM || 0 } };
+    return { valid: this.valid, mass: this._mass || v.mass, inertia: [v.inertia.x, v.inertia.y, v.inertia.z], bodies, joints, motion: { w: mo.w.slice(), alpha: mo.alpha.slice(), f: mo.f.slice() }, loads, residual: { F: this.resF || 0, M: this.resM || 0 } };
   }
 }

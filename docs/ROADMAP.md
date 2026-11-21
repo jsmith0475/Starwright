@@ -1,6 +1,6 @@
 # Starwright roadmap
 
-The next ten upgrades, in the order we plan to take them. There are no dates. Each one ships
+The next eleven upgrades, in the order we plan to take them. There are no dates. Each one ships
 when it is good, and the order will move as people play and tell us what matters most.
 
 Each item says what it is, why it matters when you are flying, what the game does today, and
@@ -10,14 +10,15 @@ which one you want, and read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 
 1. [Landing legs that work like legs](#1-landing-legs-that-work-like-legs)
 2. [Structural dynamics](#2-structural-dynamics)
-3. [Higher-fidelity worlds](#3-higher-fidelity-worlds)
-4. [Reusable boosters](#4-reusable-boosters)
-5. [Deeper aerodynamics and re-entry](#5-deeper-aerodynamics-and-re-entry)
-6. [Optional n-body gravity](#6-optional-n-body-gravity)
-7. [Stations and surface bases](#7-stations-and-surface-bases)
-8. [A deeper career](#8-a-deeper-career)
-9. [Sharing](#9-sharing)
-10. [A desktop app and a seat in the cockpit](#10-a-desktop-app-and-a-seat-in-the-cockpit)
+3. [Aerodynamic breakup](#3-aerodynamic-breakup)
+4. [Higher-fidelity worlds](#4-higher-fidelity-worlds)
+5. [Reusable boosters](#5-reusable-boosters)
+6. [Deeper aerodynamics and re-entry](#6-deeper-aerodynamics-and-re-entry)
+7. [Optional n-body gravity](#7-optional-n-body-gravity)
+8. [Stations and surface bases](#8-stations-and-surface-bases)
+9. [A deeper career](#9-a-deeper-career)
+10. [Sharing](#10-sharing)
+11. [A desktop app and a seat in the cockpit](#11-a-desktop-app-and-a-seat-in-the-cockpit)
 
 ---
 
@@ -68,7 +69,32 @@ moment of the flight, and in flight you can watch the load rise before it gives 
 - Wings that carry their load along the span, so a hard pull-up can fold one.
 - Per-part materials: a strength and stiffness for each part instead of one for each size.
 
-## 3. Higher-fidelity worlds
+## 3. Aerodynamic breakup
+
+**What it is.** A rocket that goes sideways or tumbles in thick air comes apart the way a real
+one does: fins and panels are torn off, side boosters are ripped from their clamps, the nose
+goes, and what is left breaks into pieces that fall on their own.
+
+**Why it matters.** A flip past max Q is the most dramatic thing that can happen on the way up,
+and it should look like it. It also teaches: you see what the air did, in what order, and why
+a steady hand through the dense part of the climb matters.
+
+**Today.** Structural dynamics (item 2) gives every joint a strength and breaks a stack that is
+bent too far: a tall rocket that flips at high dynamic pressure snaps in two. But the air load
+on a single part is still modest, because drag on a part does not rise sharply when it meets
+the flow broadside, and wings are treated as stronger than they are. So in a tumble the stack
+may break while fins, panels, noses and most side boosters stay on. Pieces that do come off are
+already separate vessels that fall and burn on their own.
+
+**Building it.** Give each exposed part the air load it really takes when the flow is across it
+(fins and wings at high angle, panels and antennas face on, a nose cone pushed sideways) and
+check it against the joint strengths that already exist. Rate thin surface parts for a maximum
+dynamic pressure, so solar panels and antennas left open are stripped first. Let a break shed
+its debris with a little spin and drag of its own, and cap the number of pieces so the frame
+rate holds. Then tune it on the stock rockets: a clean climb loses nothing, a flip past max Q
+loses the lot.
+
+## 4. Higher-fidelity worlds
 
 **What it is.** Sharper terrain and textures, better atmospheres, clouds and lighting, and more
 on the ground: rocks and craters at walking scale, weather and haze, surfaces that look
@@ -87,7 +113,7 @@ surface features (dunes, ice fractures, lava fields, canyons), cloud layers, and
 lighting at dawn and dusk. All of it has to stay procedural and stay inside the frame budget
 on a laptop graphics card. This is a good place for artists who can write shaders.
 
-## 4. Reusable boosters
+## 5. Reusable boosters
 
 **What it is.** Fly the first stage back. After separation the booster flips, makes a boostback
 burn, steers through the air on its grid fins, relights and lands on its legs, on the pad or
@@ -108,7 +134,7 @@ switch between them. Write boostback, entry and landing guidance that works in a
 recovery credit in career mode for stages landed intact. Item 1 makes the touchdown worth
 watching.
 
-## 5. Deeper aerodynamics and re-entry
+## 6. Deeper aerodynamics and re-entry
 
 **What it is.** Lift on capsules and bodies, so you can steer a re-entry by rolling. A speed of
 sound that changes with altitude. Winds. Heating that depends on the shape and attitude of the
@@ -128,7 +154,7 @@ the Sutton-Graves law, and heat shields ablate.
 parts stay cool, and optional winds. Every change needs a matching check in the verification
 suite, so the numbers stay honest. This is the item for people who know aerodynamics.
 
-## 6. Optional n-body gravity
+## 7. Optional n-body gravity
 
 **What it is.** A switch that lets every body pull on your ship at once. That brings Lagrange
 points, halo orbits, low-energy transfers and orbits that slowly drift. It starts as an overlay
@@ -147,7 +173,7 @@ reference to test against exists.
 can draw paths that are not conic sections, and a planner that still helps you. It must stay
 optional, because the simple model is easier to learn and is what the tutorials teach.
 
-## 7. Stations and surface bases
+## 8. Stations and surface bases
 
 **What it is.** Somewhere to go and stay. Mine a resource on a moon, refine it into propellant,
 store it, and refuel ships in orbit or on the ground. Stations and bases that grow one launch
@@ -165,7 +191,7 @@ gather and no drills or refineries.
 maps for each world, processing that keeps running while you are away, and career missions
 that ask for it.
 
-## 8. A deeper career
+## 9. A deeper career
 
 **What it is.** More to do and more reasons to do it: new mission types, experiments particular
 to each world, crew who train into specialists, and a program whose story builds from the first
@@ -182,7 +208,7 @@ experience. It is complete, and it is still a first pass at balance.
 rewards, add experiments and the reasons to carry them, and play it through again and again.
 This is one of the best items for someone who does not program.
 
-## 9. Sharing
+## 10. Sharing
 
 **What it is.** Export a craft to a file or a link and hand it to someone else. Later, add
 community-made parts and scenarios without editing the game's own files.
@@ -198,7 +224,7 @@ There is no way to share one craft, and adding a part means editing the source.
 Then a format for part and scenario packs that the game loads at start, with checks so a bad
 pack cannot break a save.
 
-## 10. A desktop app and a seat in the cockpit
+## 11. A desktop app and a seat in the cockpit
 
 **What it is.** Three things that make it feel like a finished game: an app for Mac and Windows
 that you double-click, with no terminal window and no browser tab; a view from inside the

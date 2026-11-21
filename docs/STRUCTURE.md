@@ -156,6 +156,22 @@ it sideways through the atmosphere.
 - The vessel's rotation uses a diagonal inertia, as the flight model always has. The joint
   loads are those of the motion the game actually produces.
 
+## Found by the verification, not yet fixed
+
+`Vessel._updateMass` takes the centre of mass from where each part's mass really sits (a
+capsule's ballast is low, `comY`), but takes the moment of inertia from the part's geometric
+centre. For a capsule on a short stack the vessel's inertia is up to 9 % too large (Acorn pod,
+M-400 tank, Sparrow engine: 10 396 against 9 467 kg·m²); for a large rocket it is under 1 %.
+It has been so since the first version. It means such a craft turns slightly more slowly than
+it should, and that the joint loads, which use the true mass points, do not quite close at the
+root: the leftover moment is up to 3 % of the largest joint load in a tumbling burn.
+
+Correcting it is one line, and was tried here. It changes how every landing is flown: with
+the corrected inertia the stock lander of the "Under the Giant" scenario tips over on
+touchdown. So the correction belongs in its own change, with the landing suites run in a
+browser, and is left out of this one. `tests/verify` chapter 7 reports the size of the error
+and will say when it is gone.
+
 ## API (`js/core/structure.js`)
 
 ```js
