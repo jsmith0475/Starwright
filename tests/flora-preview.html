@@ -7,10 +7,11 @@
 // Close-up preview of the vegetation under the hub's own sky and ground (renderer contract as in js/main.js).
 //   ?view=row|grove|far|top  &tod=0.4  &detail=high  &species=oak,maple,...
 import * as THREE from '../js/lib/three.module.min.js';
-import { createTreeSystem, createGrass } from '../js/render/flora.js';
+import { createTreeSystem, createGrass, loadFloraAssets } from '../js/render/flora.js';
 import { SPECIES_IDS } from '../js/render/treegen.js';
 import { createLocalGround, createSkyRig, skyAt } from '../js/render/baseenv.js';
 const q = new URLSearchParams(location.search), view = q.get('view') || 'row', tod = +(q.get('tod') || 0.4), detail = q.get('detail') || 'high';
+if (!q.get('painted')) await loadFloraAssets();
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight, false);
@@ -43,5 +44,9 @@ function frame(dt = 0.016) {
 window.__flora = { flora, grass, frame, renderer, camera, scene, sky, rig };
 for (let i = 0; i < 3; i++) frame();
 document.body.dataset.ready = '1';
-if (q.get('live')) (function loop() { frame(); requestAnimationFrame(loop); })();
+if (q.get('live')) {
+  // ?live=1: run freely and report the frame rate (window.__fps: { fps, ms, frames } over the last two seconds)
+  let n = 0, t0 = performance.now(), last = t0; window.__fps = { fps: 0, ms: 0, frames: 0 };
+  (function loop() { const now = performance.now(); frame(Math.min(0.1, (now - last) / 1000)); last = now; n++; if (now - t0 >= 2000) { window.__fps = { fps: +(n * 1000 / (now - t0)).toFixed(1), ms: +((now - t0) / n).toFixed(2), frames: n, dpr: renderer.getPixelRatio(), size: [canvas.width, canvas.height] }; document.title = window.__fps.fps + ' fps'; n = 0; t0 = now; } requestAnimationFrame(loop); })();
+}
 </script>

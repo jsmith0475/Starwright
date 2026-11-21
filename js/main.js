@@ -482,6 +482,8 @@ async function boot() {
     loadOptionalScreen('builder', 'builder.js', 'createBuilderScreen'),
     loadOptionalScreen('flight', 'flight.js', 'createFlightScreen'),
     loadOptionalScreen('tracking', 'tracking.js', 'createTrackingScreen'),
+    // scanned leaves and bark for the trees (media/flora/): without them, or after 6 s, the trees are painted in code
+    Promise.race([import('./render/floratex.js').then(m => m.loadFloraAssets()), new Promise(res => setTimeout(res, 6000))]).catch(() => {}),
   ]);
 
   if (!app.renderer) app.toast('WebGL is not available in this browser: 3D views will not work.', 'bad', 8000);

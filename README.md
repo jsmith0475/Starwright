@@ -368,6 +368,12 @@ Starwright's code is released under the [MIT License](LICENSE). Rendering uses
 [three.js](https://threejs.org/), also MIT licensed; its license is in
 [js/lib/LICENSE-three.txt](js/lib/LICENSE-three.txt).
 
+The leaves and bark of the trees are built from public-domain scans: Leaf Set 010, 014, 016, 019
+and 022 and Bark 001, 004 and 014 from [ambientCG](https://ambientcg.com) by Lennart Demes,
+released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The small files
+made from them are in `media/flora/` (see [media/flora/README.md](media/flora/README.md));
+`tools/flora_assets.py` rebuilds them.
+
 The MIT License covers the game's code. The trailer in `media/`, including its voice-over and
 music, is not offered under the MIT License: you are welcome to watch and link to it, and all
 other rights in it are reserved.

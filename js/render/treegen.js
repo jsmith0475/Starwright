@@ -28,8 +28,8 @@ export const SPECIES = {
   oak: { kind: 'broad', cell: 'oak', bark: 0, height: 17, trunk: 0.3, trunkR: 0.6, limbs: 8, limbAngle: [0.75, 1.15], limbLen: 0.46, twigs: 5, up: 0.16, spread: 0.95, card: 3.7, leafTint: [1.0, 1.0, 0.9], barkTint: [0.78, 0.70, 0.62] },
   maple: { kind: 'broad', cell: 'maple', bark: 0, height: 15, trunk: 0.28, trunkR: 0.46, limbs: 8, limbAngle: [0.55, 0.95], limbLen: 0.42, twigs: 5, up: 0.3, spread: 0.95, card: 3.3, leafTint: [0.9, 1.02, 0.85], barkTint: [0.66, 0.62, 0.60] },
   birch: { kind: 'broad', cell: 'birch', bark: 1, height: 14.5, trunk: 0.4, trunkR: 0.24, limbs: 9, limbAngle: [0.4, 0.75], limbLen: 0.4, twigs: 4, up: 0.34, spread: 0.7, droop: 0.5, card: 2.5, airy: 1, leafTint: [1.12, 1.1, 0.8], barkTint: [1, 1, 1] },
-  spruce: { kind: 'conifer', cell: 'spruce', bark: 0, height: 18, trunkR: 0.27, whorls: 13, perWhorl: 6, base: 0.1, reach: 3.7, droop: 0.42, taper: 1.15, leafTint: [1.22, 1.2, 0.9], barkTint: [0.55, 0.47, 0.42] },
-  pine: { kind: 'pine', cell: 'pine', bark: 0, height: 17, trunkR: 0.3, whorls: 6, perWhorl: 4, base: 0.5, reach: 3.6, leafTint: [1.2, 1.25, 1.0], barkTint: [0.86, 0.60, 0.44] },
+  spruce: { kind: 'conifer', cell: 'spruce', bark: 3, height: 18, trunkR: 0.27, whorls: 13, perWhorl: 6, base: 0.1, reach: 3.7, droop: 0.42, taper: 1.15, leafTint: [1.22, 1.2, 0.9], barkTint: [0.55, 0.47, 0.42] },
+  pine: { kind: 'pine', cell: 'pine', bark: 4, height: 17, trunkR: 0.3, whorls: 6, perWhorl: 4, base: 0.5, reach: 3.6, leafTint: [1.2, 1.25, 1.0], barkTint: [0.86, 0.60, 0.44] },
   bush: { kind: 'bush', cell: 'bush', bark: 0, height: 2.2, trunkR: 0.05, card: 1.9, leafTint: [0.95, 1.0, 0.8], barkTint: [0.6, 0.5, 0.42] },
   palm: { kind: 'palm', cell: 'palm', bark: 2, height: 9, trunkR: 0.24, fronds: 15, frondLen: 4.2, leafTint: [1.0, 1.05, 0.75], barkTint: [0.84, 0.76, 0.62] },
 };
