@@ -210,7 +210,7 @@
 .bld-report-btn { flex: none; height: 24px !important; }
 .bld-report-btn svg { width: 13px; height: 13px; }
 .bld-report {
-  position: absolute; left: calc(var(--bl) + 2 * var(--gap)); right: calc(var(--br) + 2 * var(--gap)); bottom: 60px; max-height: 46%;
+  position: absolute; left: calc(var(--bl) + 2 * var(--gap)); right: calc(var(--br) + 2 * var(--gap)); bottom: 88px; max-height: 46%;
   display: flex; flex-direction: column; overflow: hidden;
 }
 .bld-report-head { flex: none; display: flex; align-items: center; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--sw-line); }
@@ -221,8 +221,58 @@
 .bld-report-table tfoot td { border-top: 1px solid var(--sw-line); font-weight: 700; }
 .bld-report-note { margin: 6px 8px 0; color: var(--sw-faint); font-size: 11px; }
 
+/* ---- structure: the most loaded joint (second row of the info bar) and the list of the five most loaded ---- */
+.bld-struct {
+  flex: 1 1 100%; min-width: 0; height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 2px; margin-top: 1px;
+  border: 0; border-top: 1px solid var(--sw-line); border-radius: 0 0 6px 6px; background: transparent; color: var(--sw-text);
+  font-family: var(--sw-font); font-size: 12px; text-align: left; cursor: pointer; outline: none; transition: background 0.12s, opacity 0.15s;
+}
+.bld-struct:hover:not([disabled]), .bld-struct.open { background: var(--sw-line-soft); }
+.bld-struct:focus-visible { box-shadow: 0 0 0 2px rgba(57, 208, 192, 0.55); }
+.bld-struct[disabled] { cursor: default; color: var(--sw-dim); }
+.bld-struct.stale { opacity: 0.55; }
+.bld-struct .sw-label { flex: none; font-size: 9px; letter-spacing: 0.1em; }
+.bld-ld-bar { flex: none; position: relative; width: 56px; height: 6px; border-radius: 3px; background: rgba(8, 11, 16, 0.7); box-shadow: inset 0 0 0 1px var(--sw-line); overflow: hidden; }
+.bld-ld-bar i { position: absolute; left: 0; top: 0; bottom: 0; min-width: 3px; border-radius: 3px; background: var(--sw-teal); }
+.bld-ld-bar.warn i { background: var(--sw-amber); }
+.bld-ld-bar.bad i { background: var(--sw-red); }
+.bld-ld-bar.over { box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.8), 0 0 6px rgba(255, 107, 107, 0.6); }
+.bld-ld-bar.over i { animation: bld-ld-pulse 0.9s ease-in-out infinite; }
+@keyframes bld-ld-pulse { 50% { opacity: 0.45; } }
+.bld-struct-pct { flex: none; min-width: 42px; font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--sw-teal); text-align: right; }
+.warn > .bld-struct-pct { color: var(--sw-amber); }
+.bad > .bld-struct-pct { color: var(--sw-red); }
+.none > .bld-struct-pct { color: var(--sw-faint); }
+.bld-struct-text { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sw-dim); font-weight: 550; }
+.bld-struct-text > span { color: var(--sw-text); font-weight: 650; }
+.bld-struct-text strong, .bld-ld-text strong { font-weight: 750; color: var(--sw-amber); }
+.bad .bld-struct-text strong, .bld-ld-row.bad strong { color: var(--sw-red); }
+.bld-braced { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; border: 1px solid rgba(57, 208, 192, 0.5); color: var(--sw-teal); font-style: normal; font-size: 10px; font-weight: 700; line-height: 14px; letter-spacing: 0.03em; vertical-align: 1px; }
+.bld-struct-more { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--sw-faint); font-size: 11px; font-weight: 600; }
+.bld-struct-more svg { width: 13px; height: 13px; transition: transform 0.15s; }
+.bld-struct.open .bld-struct-more svg { transform: rotate(180deg); }
+/* (narrow and to the left: the craft in the middle of the hall stays in view while a row points at a joint) */
+.bld-loads { right: auto; width: min(480px, calc(100% - var(--bl) - var(--br) - 4 * var(--gap))); max-height: 60%; }
+.bld-loads .bld-report-head { gap: 6px; }
+.bld-loads-switch { height: 22px !important; padding: 0 8px !important; font-size: 11px !important; gap: 5px; }
+.bld-loads-switch svg { width: 13px; height: 13px; }
+.bld-loads-switch .sw-kbd { margin-left: 2px; }
+.bld-loads-switch.active { color: var(--sw-teal); border-color: rgba(57, 208, 192, 0.6); background: rgba(57, 208, 192, 0.13); }
+.bld-loads-body { padding: 5px 6px 7px; display: flex; flex-direction: column; gap: 3px; }
+.bld-loads.stale .bld-loads-body { opacity: 0.55; }
+.bld-ld-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 3px 8px; border: 1px solid var(--sw-line); border-radius: 7px;
+  background: rgba(8, 11, 16, 0.42); color: var(--sw-text); font-family: var(--sw-font); text-align: left; cursor: pointer; outline: none;
+}
+.bld-ld-row:hover, .bld-ld-row:focus-visible { border-color: rgba(255, 179, 71, 0.6); background: var(--sw-line-soft); }
+.bld-ld-row.pinned { border-color: var(--sw-amber); background: rgba(255, 179, 71, 0.09); }
+.bld-ld-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.bld-ld-where { font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bld-ld-text small { font-size: 11px; color: var(--sw-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bld-loads-btn.active { color: var(--sw-teal); }
+
 .bld-status {
-  position: absolute; left: calc(var(--bl) + 76px); right: calc(var(--br) + 24px); bottom: 62px; margin: 0 auto; width: fit-content; max-width: calc(100% - var(--bl) - var(--br) - 110px);
+  position: absolute; left: calc(var(--bl) + 76px); right: calc(var(--br) + 24px); bottom: 90px; margin: 0 auto; width: fit-content; max-width: calc(100% - var(--bl) - var(--br) - 110px);
   padding: 4px 12px; border-radius: 999px; background: rgba(9, 13, 18, 0.82); border: 1px solid var(--sw-line);
   color: #cdd8e3; font-size: 12px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
@@ -293,8 +343,9 @@ textarea.bld-desc { width: 100%; height: auto; min-height: 96px; padding: 8px 10
   .bld-report-btn span { display: none; }
   .bld-stage-stats { gap: 5px; font-size: 10px; }
   .bld-chip { width: 31px; height: 31px; }
-  .bld-status { bottom: 76px; }
-  .bld-report { bottom: 76px; }
+  .bld-status { bottom: 104px; }
+  .bld-report { bottom: 104px; }
+  .bld-struct-more { font-size: 0; }
   .bld-right-foot .sw-label { font-size: 9.5px; letter-spacing: 0.04em; }
   .bld-right-foot { gap: 4px; padding: 6px; }
 }

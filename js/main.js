@@ -4,7 +4,7 @@
 //   renderer            the one THREE.WebGLRenderer (on <canvas id="gl">); null only if WebGL is unavailable
 //   canvas, uiRoot      the canvas and the click-through DOM overlay root (<div id="ui">)
 //   career              Career | null (null on the title screen before a game is loaded)
-//   settings            { musicVolume, sfxVolume, invertPitch, showHints } — same object as career.settings
+//   settings            { musicVolume, sfxVolume, invertPitch, showHints, structFail } — same object as career.settings
 //   input, audio        see js/ui/input.js, js/ui/audio.js
 //   world               set by the flight screen (window.__sw.world reads it)
 //   screens             { name: screen } registry; registerScreen(name, screen)
@@ -41,6 +41,7 @@ const BG_COLOR = 0x0b0f14;
 export const NEW_GAME_UT = 16950;
 const SETTINGS_KEY = 'starwright.settings.v1';
 const DEFAULT_SETTINGS = { musicVolume: 0.5, sfxVolume: 0.8, invertPitch: false, showHints: true,
+  structFail: true,                          // structural failures: overloaded joints break (TUNING.STRUCT_FAIL, docs/STRUCTURE.md); off = loads are shown, nothing breaks
   gfxQuality: 'high', gfxBloom: 0.7, gfxShadows: true, gfxAO: true, gfxLens: true, gfxShake: 1,
   gfxAuto: true, gfxVegetation: 'auto',     // vegetation detail: 'auto' (from Detail) | 'low' | 'medium' | 'high' | 'ultra' (js/render/flora.js)
   uiScale: 'auto' };   // uiScale: interface size, 'auto' (from the window) or 0.8 to 1.75 (js/ui/dom.js resolveUiScale)     // gfxAuto: lower render scale / shadows / post automatically when frames come slowly (js/ui/governor.js)     // graphics: read by the flight screen
@@ -237,6 +238,8 @@ const app = {
     if (syncUiScale() && app.current && app.current.resize) { try { app.current.resize(app.size.w, app.size.h); } catch (err) { console.error('[starwright] resize failed:', err); } }
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* private mode */ }
     if (app.career) app.career.settings = s;
+    // structural failures on / off: the flight model reads TUNING.STRUCT_FAIL every step
+    import('./core/vessel.js').then(m => { if (m.TUNING) m.TUNING.STRUCT_FAIL = app.settings.structFail !== false; }, () => { /* the core reports its own load errors */ });
   },
 
   hasSave() { try { return !!(app.Career && app.Career.hasSave()); } catch { return false; } },

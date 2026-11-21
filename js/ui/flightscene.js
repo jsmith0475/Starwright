@@ -18,9 +18,13 @@
 //   fs.views                             Map(Vessel → {group, parts: Map(id → {part, mesh}), stamp, builds})
 //   fs.info                              { sunElevation, daylight, skyLum, heatGlow, rumble, buffet, mach, groundDist }
 //   fs.fx                                { smoke (particle pool), post, quality }      fs.applySettings()
+//   fs.setStressOverlay(on) / fs.stressOverlay   a ring at every joint of every drawn vessel, coloured by its load
 //   fs.dispose()
 // A vessel's meshes are re-synchronised whenever vessel.structureStamp changes (stage, break, dock, undock) and
 // rebuilt from scratch after a `dock` / `undock` event. Parts honour `part.flip` (yaw(rot) · rotX(π)).
+//
+// Structural flex (docs/STRUCTURE.md): while a vessel's joints are bent, each part mesh is moved and turned by
+// vessel.structure.partFlex() on top of its place in the craft (updateView); nothing runs while nothing is bent.
 //
 // Optional work of other modules is used when present and skipped when not (the scene always runs):
 //   js/render/basegfx.js  createBase()          the space centre at the launch site (else planetgfx.createLaunchPad)
@@ -36,6 +40,7 @@ import { createPostChain } from '../render/post.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
+import { STRESS_COLORS, stressColor } from './stress.js';
 
 const { buildPartMesh, setPartState, disposePartMesh, animatePip, nozzleExits } = PM;
 const { createBodyVisual, createTerrainPatch, createStarfield, createLaunchPad, skyColor, createFlagMesh } = GFX;
@@ -421,6 +426,7 @@ export function createFlightScene(app) {
       if (p.roll) e.mesh.quaternion.multiply(_tq.setFromAxisAngle(X_AXIS_T, p.roll));
     }
     e.rot = p.rot || 0; e.flip = !!p.flip; e.tilt = (p.pitch || 0) + 7 * (p.roll || 0);
+    e.q0.copy(e.mesh.quaternion); e.flexed = false;      // the unbent orientation: structural flex is applied on top of it
   }
   function syncParts(view, fresh = false) {
     const v = view.vessel;
@@ -433,7 +439,7 @@ export function createFlightScene(app) {
       const mesh = buildPartMesh(p.def, { quality: v.type === 'debris' ? 'low' : (quality.mesh || 'high') });
       if (p.truss && PM.setPartInterstages) PM.setPartInterstages(mesh, p.truss);   // the lattice ring it carries up to the engine above
       shadowFlags(mesh, true, true);
-      const e = { part: p, mesh, plume: null, plumes: null, rE: 0, canopyQ: null, rot: 0, flip: false, smoke: 0, ground: 0, rcs: 0, spin: 0, comp: 0, gx: 0, gz: 0 };
+      const e = { part: p, mesh, plume: null, plumes: null, rE: 0, canopyQ: null, rot: 0, flip: false, smoke: 0, ground: 0, rcs: 0, spin: 0, comp: 0, gx: 0, gz: 0, q0: new THREE.Quaternion(), flexed: false };
       if (p.def.engine) {
         // one plume per bell; they ride on the gimballed bell group when the mesh has one
         const exits = nozzleExits ? nozzleExits(p.def) : [null];
@@ -458,6 +464,7 @@ export function createFlightScene(app) {
   /** A random unit-ish vector perpendicular to `n` (into v5). */
   function radial(n) { v5.set(rnd(), rnd(), rnd()); v5.addScaledVector(n, -v5.dot(n)); if (v5.lengthSq() < 1e-6) v5.set(n.y, n.z, n.x).addScaledVector(n, -(n.y * n.x + n.z * n.y + n.x * n.z)); return v5.normalize(); }
 
+  const fxP = new THREE.Vector3(), fxR = new THREE.Vector3(), fxQ = new THREE.Quaternion();
   function updateView(view, dt, simDt, isActive, world) {
     const v = view.vessel, body = v.body;
     if (view.dirty || (view.kind !== v.type && (view.kind === 'debris' || v.type === 'debris'))) syncParts(view, true);
@@ -487,6 +494,10 @@ export function createFlightScene(app) {
     const act = v.actuation, live = loaded && v.controllable !== false && v.type !== 'eva';
     const rolling = !!v.grounded && !v.landed;
     let lampN = 0; lampAcc.set(0, 0, 0); lampDir.set(0, 0, 0);
+    // structural flex: only vessels that have a structure, and only while one of its joints is bent
+    const struct = v.structure || null;
+    const flex = !!struct && struct.updateFlex();
+    view.flexed = flex;
     for (const e of view.parts.values()) {
       const p = e.part, def = p.def, mesh = e.mesh;
       if (def.wheel) {
@@ -495,6 +506,14 @@ export function createFlightScene(app) {
         mesh.position.set(p.pos.x - com.x, p.pos.y - com.y, wz + (def.rw || 0) / 2 - com.z);
       } else mesh.position.set(p.pos.x - com.x, p.pos.y - com.y, p.pos.z - com.z);
       if (e.rot !== (p.rot || 0) || e.flip !== !!p.flip || e.tilt !== (p.pitch || 0) + 7 * (p.roll || 0)) orient(e);
+      if (flex) {
+        // displacement and small rotation of this part in craft axes, on top of where it is normally drawn
+        struct.partFlex(p, fxP, fxR);
+        mesh.position.add(fxP);
+        fxQ.set(fxR.x * 0.5, fxR.y * 0.5, fxR.z * 0.5, 1).normalize();
+        mesh.quaternion.copy(e.q0).premultiply(fxQ);
+        e.flexed = true;
+      } else if (e.flexed) { mesh.quaternion.copy(e.q0); e.flexed = false; }
       const level = loaded && p.ignited && !p.flameout ? (Number.isFinite(p.level) ? p.level : 0) : 0;
       const st = pstate;
       st.deployed = p.deployed; st.throttle = level; st.ignited = p.ignited && level > 0; st.flameout = p.flameout; st.temp = p.temp;
@@ -741,6 +760,76 @@ export function createFlightScene(app) {
     void world;
   }
 
+  // ------------------------------------------------------------------ stress overlay
+  // One band per joint of every drawn vessel, around the joint point, across the joint's axis, coloured by how close the
+  // joint is to its limit (teal / amber / red; slate while the loads are unknown: landed, on rails). All rings are
+  // one instanced mesh, built the first time the overlay is switched on and updated only while it is on.
+  // The bands are drawn over everything (no depth test) but only their outer face: the half toward the camera.
+  let stressOn = false, stressMesh = null, stressCap = 0;
+  const sP = new THREE.Vector3(), sQ = new THREE.Quaternion(), sS = new THREE.Vector3(), sN = new THREE.Vector3(), sM = new THREE.Matrix4(), sC = new THREE.Color();
+  function stressRing(cap) {
+    if (stressMesh) { stressMesh.removeFromParent(); stressMesh.dispose(); }
+    else { stressGeo = stressBandGeometry(); stressMat = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: THREE.FrontSide, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, toneMapped: false, fog: false }); }
+    stressCap = cap;
+    stressMesh = new THREE.InstancedMesh(stressGeo, stressMat, cap);
+    stressMesh.name = 'stress_overlay'; stressMesh.frustumCulled = false; stressMesh.renderOrder = 50; stressMesh.count = 0;
+    stressMesh.castShadow = false; stressMesh.receiveShadow = false;
+    stressMesh.setColorAt(0, sC.set(0xffffff));
+    near.add(stressMesh);
+  }
+  let stressGeo = null, stressMat = null;
+  /** A unit band (radius 1, height 1, open, axis +Y): a bright stripe between two dark rims, so that it reads as a
+   *  marker and not as part of the paintwork (tanks carry teal bands of their own). */
+  function stressBandGeometry() {
+    const S = 40, rows = [[0.5, 0.3, 0.1], [0.3, -0.3, 1], [-0.3, -0.5, 0.1]], pos = [], col = [], idx = [];
+    for (const [y0, y1, k] of rows) {
+      const base = pos.length / 3;
+      for (const y of [y0, y1]) for (let i = 0; i <= S; i++) { const th = i / S * TAU; pos.push(Math.sin(th), y, Math.cos(th)); col.push(k, k, k); }
+      for (let i = 0; i < S; i++) { const a = base + i, b = base + i + S + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    return g;
+  }
+  function updateStressOverlay() {
+    let need = 0;
+    for (const view of views.values()) { const st = view.vessel.structure; if (st) need += st.joints.length; }
+    if (!stressMesh || need > stressCap) stressRing(Math.max(64, need * 2));
+    let n = 0;
+    for (const view of views.values()) {
+      const v = view.vessel, st = v.structure;
+      if (!st) continue;
+      const com = v.com, live = st.valid, flex = !!view.flexed, gq = view.group.quaternion, gp = view.group.position;
+      for (const j of st.joints) {
+        sP.set(j.px - com.x, j.py - com.y, j.pz - com.z);
+        sQ.setFromUnitVectors(Y_AXIS, sN.set(j.nx, j.ny, j.nz));
+        if (flex) {
+          // the joint rides on its far-side part: that part's shift, plus its turn about its own centre
+          const b = j.b; st.partFlex(b, fxP, fxR);
+          sP.add(fxP).add(sN.copy(fxR).cross(sS.set(j.px - b.pos.x, j.py - b.pos.y, j.pz - b.pos.z)));
+          sQ.premultiply(fxQ.set(fxR.x * 0.5, fxR.y * 0.5, fxR.z * 0.5, 1).normalize());
+        }
+        sP.applyQuaternion(gq).add(gp); sQ.premultiply(gq);
+        const r = Math.max(j.r, 0.14) * 1.06;
+        sM.compose(sP, sQ, sS.set(r, clamp(r * 0.28, 0.09, 0.36), r));
+        stressMesh.setMatrixAt(n, sM);
+        stressMesh.setColorAt(n, sC.set(live ? stressColor(j.util) : STRESS_COLORS.idle));
+        n++;
+      }
+    }
+    stressMesh.count = n;
+    stressMesh.visible = n > 0;
+    stressMesh.instanceMatrix.needsUpdate = true;
+    if (stressMesh.instanceColor) stressMesh.instanceColor.needsUpdate = true;
+  }
+  function setStressOverlay(on) {
+    stressOn = !!on;
+    if (!stressOn && stressMesh) { stressMesh.count = 0; stressMesh.visible = false; }
+    return stressOn;
+  }
+
   // ------------------------------------------------------------------ main update
   function update(world, dt, simDt, cam) {
     clock += dt; lastDt = dt;
@@ -870,6 +959,7 @@ export function createFlightScene(app) {
       updateView(view, dt, simDt, v === a, world);
     }
     for (const [v, view] of views) if (v.dead || !world.vessels.includes(v)) { freeView(view); views.delete(v); }
+    if (stressOn) updateStressOverlay();
     if (!a || !views.has(a)) {
       if (glow) { glow.object.removeFromParent(); glow.update(0, null, dt); }
       if (vapor) { vapor.object.removeFromParent(); vapor.update(0, null, dt); }
@@ -1104,6 +1194,30 @@ export function createFlightScene(app) {
       for (let i = 0; i < 8; i++) { radial(axis); t3.copy(mid).addScaledVector(v5, rr); smoke.emit(t3, { size: 0.2, growth: 0, life: 0.5 + Math.random() * 0.5, alpha: 1, vel: t1.copy(v5).multiplyScalar(8 + Math.random() * 10), drag: 0.5, color: col2.setRGB(4, 2.6, 0.9), add: 1, fadeIn: 0.01, shrink: true }); }
       return;
     }
+    if (type === 'structure' && p.pos && p.vessel && (p.body || p.vessel.body) === body) {
+      // a joint let go: a puff of dust and a handful of sparks and fragments where it was (the smoke pool, as for
+      // staging). While the scene is fixed to the ground the bits start with the vessel's speed and fall behind.
+      const ref = !gRef.ok && anchor.vessel && !anchor.vessel.dead ? anchor.vessel.pos : anchor.pos;
+      const at = v1.copy(p.pos).sub(ref);
+      if (at.lengthSq() > 4e6) return;
+      const dens = body.density(Math.max(0, anchor.pos.length() - body.radius));
+      const carry = v2.set(0, 0, 0); if (gRef.ok && p.vessel.surfaceVel && !p.vessel.landed) carry.copy(p.vessel.surfaceVel);
+      const rr = clamp((p.debris && p.debris.baseRadius) || p.vessel.baseRadius || 0.8, 0.4, 2.5) * 0.7;
+      burst(at, Math.round(14 * pq), () => {
+        t3.copy(at).add(v5.set(rnd(), rnd(), rnd()).multiplyScalar(rr * 2));
+        t1.copy(v5).multiplyScalar(4 + Math.random() * 5).add(carry);
+        smoke.emit(t3, { size: 0.45, growth: 3, life: 0.6 + Math.random() * 0.7, alpha: 0.5, vel: t1, drag: dens > 0.01 ? 2.4 : 0.4, color: col2.setRGB(0.82, 0.82, 0.8), fadeIn: 0.03 });
+      });
+      for (let i = 0; i < 16; i++) {
+        t3.copy(at).add(v5.set(rnd(), rnd(), rnd()).multiplyScalar(rr * 2));
+        t1.copy(v5).normalize().multiplyScalar(6 + Math.random() * 14).add(carry);
+        const hot = i % 3 !== 0;       // two sparks to one grey fragment
+        if (hot) smoke.emit(t3, { size: 0.14 + Math.random() * 0.1, growth: 0, life: 0.35 + Math.random() * 0.6, alpha: 1, vel: t1, drag: 0.5, color: col2.setRGB(4, 2.8, 1.1), add: 1, fadeIn: 0.01, shrink: true });
+        else smoke.emit(t3, { size: 0.16 + Math.random() * 0.14, growth: 0, life: 0.9 + Math.random() * 0.9, alpha: 0.95, vel: t1, drag: dens > 0.01 ? 0.6 : 0.05, gravity: dens > 0.01 ? 6 : 0, color: col2.setRGB(0.5, 0.52, 0.55), fadeIn: 0.01, shrink: true });
+      }
+      info.jolt = Math.max(info.jolt || 0, clamp(1 - at.length() / 300, 0, 1) * 0.7);
+      return;
+    }
     if ((type === 'landed' || type === 'splashed') && p.vessel && p.vessel.body === body) {
       const view = views.get(p.vessel);
       const at = v1.copy(p.vessel.pos).sub(anchor.pos).addScaledVector(info.up, -(view ? view.ext : 1) + 0.2);
@@ -1225,6 +1339,7 @@ export function createFlightScene(app) {
     far.remove(stars); stars.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
     haze.geometry.dispose(); haze.material.dispose();
     smoke.dispose(); pool.dispose(); lampPool.dispose(); lamp.dispose();
+    if (stressMesh) { stressMesh.removeFromParent(); stressMesh.dispose(); stressGeo.dispose(); stressMat.dispose(); stressMesh = null; }
     catcher.geometry.dispose(); catcher.material.dispose();
     if (pad) pad.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.dispose) o.material.dispose(); });
     if (base) { near.remove(base.group); try { base.dispose(); } catch { /* ignore */ } base = null; }
@@ -1247,5 +1362,8 @@ export function createFlightScene(app) {
     get worlds() { return worldsR; },
     /** Ask the next frame to build missing terrain chunks on this thread for up to `ms` (captures, loading screens). */
     settleTerrain(ms = 2000) { settleMs = Math.max(0, +ms || 0); },
+    /** Stress overlay: a ring at every joint, coloured by its load (teal / amber / red). → the new state. */
+    setStressOverlay,
+    get stressOverlay() { return stressOn; }, get stressMesh() { return stressMesh; },
   };
 }
