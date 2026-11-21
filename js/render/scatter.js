@@ -217,6 +217,7 @@ float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
 const VS = `#include <common>
 #include <logdepthbuf_pars_vertex>
 uniform float uRange, uTime, uSway;
+uniform vec4 uShadowDims;        // of the thing that casts it, per unit of its height scale: radius, height; then lift off the ground (m), depth pull
 uniform vec3 uSun;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
 void main(){
@@ -233,9 +234,9 @@ void main(){
     vec3 flt = uSun - upW * mu;
     vec3 away = -flt / max(length(flt), 1e-4);
     vec3 side = cross(upW, away);
-    float len = min(6.5 * sz * sqrt(max(1.0 - mu * mu, 0.0)) / max(mu, 0.13), 60.0);
-    float rad = 2.6 * sz * k;
-    vec3 wpos = wc.xyz + upW * (0.12 + 0.02 * rad) + side * (position.x * rad) + away * (position.z * (rad + 0.5 * len) + 0.5 * len + 0.3 * rad) * k;
+    float len = min(uShadowDims.y * sz * sqrt(max(1.0 - mu * mu, 0.0)) / max(mu, 0.13), 60.0);
+    float rad = uShadowDims.x * sz * k;
+    vec3 wpos = wc.xyz + upW * (uShadowDims.z + 0.02 * rad) + side * (position.x * rad) + away * (position.z * (rad + 0.5 * len) + 0.5 * len + 0.3 * rad) * k;
     vN = upW; vC = vec3(0.0); vL = position; vY = length(position.xz); vT = smoothstep(-0.02, 0.1, mu); vFade = k;
     vView = wpos - cameraPosition;
     gl_Position = projectionMatrix * viewMatrix * vec4(wpos, 1.0);
@@ -254,7 +255,7 @@ const FS = `#include <common>
 #include <logdepthbuf_pars_fragment>
 ${ATMO_GLSL}
 ${NOISE}
-uniform vec3 uSun, uSunColor, uAmb, uUp, uCamU; uniform float uRadius, uShadowK;
+uniform vec3 uSun, uSunColor, uAmb, uUp, uCamU; uniform float uRadius, uShadowK, uShadowGain; uniform vec4 uShadowDims;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
 void main(){
   #include <logdepthbuf_fragment>
@@ -263,10 +264,10 @@ void main(){
   vec3 V = -vView / dist;
   #ifdef SHADOW
     // soft-edged and not black: the sky still lights the shade
-    float a = (1.0 - smoothstep(0.35, 1.0, vY)) * uShadowK * vT * vFade;
+    float a = min((1.0 - smoothstep(0.35, 1.0, vY)) * uShadowK * uShadowGain * vT * vFade, 0.92);
     gl_FragColor = vec4(vec3(0.0), a);
     #ifdef USE_LOGDEPTHBUF
-      gl_FragDepth = log2(vFragDepth * 0.985) * logDepthBufFC * 0.5;      // lie on the ground even where it rolls a little
+      gl_FragDepth = log2(vFragDepth * uShadowDims.w) * logDepthBufFC * 0.5;      // lie on the ground even where it rolls a little
     #endif
   #else
   vec3 N = normalize(vN);
@@ -310,7 +311,7 @@ void main(){
     ndl = max(dot(N, uSun), 0.0);
     alb *= (0.66 + 0.5 * r1) * (0.8 + 0.3 * r2) * (0.88 + 0.24 * r3);
     alb *= 1.0 + 0.22 * smoothstep(0.35, 0.9, dot(N, uUp));
-    ao = (0.42 + 0.58 * smoothstep(0.0, 0.45, vY)) * (0.75 + 0.25 * smoothstep(0.25, 0.6, r2));
+    ao = (0.42 + 0.58 * smoothstep(0.04, 0.6, vY)) * (0.75 + 0.25 * smoothstep(0.25, 0.6, r2));
   #endif
   vec3 col = alb * (uSunColor * ndl * ao + uAmb * ao * (0.6 + 0.4 * max(dot(N, uUp), 0.0))) + extra;
   // the same air the terrain is seen through
@@ -337,13 +338,13 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
   const cellLevel = (size) => Math.max(0, Math.round(Math.log2(faceSize / size)));
   const atmoU = atmoUniforms(body);
 
-  function makeLayer(name, define, geo, cellSize, radius, perTile, range, place, { sway = 0, side = THREE.FrontSide, shadowOf = null, farGeo = null, farDist = 0 } = {}) {
+  function makeLayer(name, define, geo, cellSize, radius, perTile, range, place, { sway = 0, side = THREE.FrontSide, shadowOf = null, farGeo = null, farDist = 0, stretch = 0, shadowDims = [2.6, 6.5, 0.12, 0.985], shadowGain = 1 } = {}) {
     const level = cellLevel(cellSize), span = 2 * radius + 1, slots = span * span + 2 * span;
     perTile = Math.max(1, Math.round(perTile));
     const uniforms = {
       ...atmoU,
       uSun: { value: new THREE.Vector3(1, 0, 0) }, uSunColor: { value: new THREE.Vector3(1, 1, 1) }, uAmb: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3(0, 1, 0) },
-      uCamU: { value: new THREE.Vector3(0, 2, 0) }, uRadius: { value: R }, uRange: { value: range }, uTime: { value: 0 }, uSway: { value: sway }, uShadowK: { value: 0.5 },
+      uCamU: { value: new THREE.Vector3(0, 2, 0) }, uRadius: { value: R }, uRange: { value: range }, uTime: { value: 0 }, uSway: { value: sway }, uShadowK: { value: 0.5 }, uShadowGain: { value: shadowGain }, uShadowDims: { value: new THREE.Vector4(...shadowDims) },
     };
     const opts = { uniforms, defines: { [define]: 1 }, vertexShader: VS, fragmentShader: FS, side };
     if (shadowOf) Object.assign(opts, { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
@@ -363,7 +364,7 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
     const farMesh = farGeo ? mk(farGeo, name + '_far') : null;
     if (shadowOf) shadowOf.shadow = mesh;
     const trisOf = (gm) => (gm.index ? gm.index.count : gm.attributes.position.count) / 3;
-    const L = { name, mesh, farMesh, farDist, farTris: farGeo ? trisOf(farGeo) : 0, shadow: null, lastPack: new THREE.Vector3(), mat, uniforms, level, cells: 2 ** level, radius, perTile, range, place, cap, shadowOf, tris: trisOf(geo),
+    const L = { name, mesh, farMesh, farDist, farTris: farGeo ? trisOf(farGeo) : 0, shadow: null, lastPack: new THREE.Vector3(), mat, uniforms, level, cells: 2 ** level, radius, perTile, range, place, cap, shadowOf, stretch, tris: trisOf(geo),
       slots: [], tiles: new Map(), anchor: new THREE.Vector3(), anchored: false, data: [], mats: [], cols: [], counts: [], dirty: false, face: -1, seed: layers.length * 7919 + 13 };
     if (!shadowOf) for (let i = 0; i < slots; i++) { L.slots.push(null); L.data.push(new Float64Array(perTile * 7)); L.mats.push(new Float32Array(perTile * 16)); L.cols.push(new Float32Array(perTile * 3)); L.counts.push(0); }
     layers.push(L);
@@ -385,6 +386,7 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
   const g = { x: 0, y: 0, z: 0, h: 0 };
   const isGreen = (c) => c[1] > c[0] * 1.02;
 
+  let boulders = null;
   if (sc.rocks) {
     const stone = (r, o, size, sink) => {
       body.surfaceColorAt(g, _rgb);
@@ -393,16 +395,17 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
         (w * rockColor[0] + (1 - w) * _rgb[0]) * t, (w * rockColor[1] + (1 - w) * _rgb[1]) * t, (w * rockColor[2] + (1 - w) * _rgb[2]) * t, sink * size);
       return true;
     };
-    makeLayer('boulders', 'ROCK', rockGeometry(2, 3), 64, 2, Math.max(3, sc.rocks * 1.5 * dens), 150, (r, face, u, v, o) => {
+    // (boulders lie part-buried, a different depth each, and no two have the same proportions: see stretch in writeTile)
+    boulders = makeLayer('boulders', 'ROCK', rockGeometry(2, 3), 64, 2, Math.max(3, sc.rocks * 1.5 * dens), 150, (r, face, u, v, o) => {
       if (!ground(u, v, face, g)) return false;
       const q = r();
-      return stone(r, o, 0.4 + 1.1 * q * q * q + (r() < 0.04 ? 0.8 + 1.6 * r() : 0), -0.04);
-    });
+      return stone(r, o, 0.4 + 1.1 * q * q * q + (r() < 0.04 ? 0.8 + 1.6 * r() : 0), -(0.04 + 0.13 * r()));
+    }, { stretch: 0.3 });
     makeLayer('pebbles', 'ROCK', rockGeometry(1, 9), 20, 2, Math.max(4, sc.rocks * 4.5 * dens), 46, (r, face, u, v, o) => {
       if (!ground(u, v, face, g)) return false;
       const q = r();
       return stone(r, o, 0.06 + 0.34 * q * q, -0.03);
-    });
+    }, { stretch: 0.3 });
   }
   if (sc.grass) {
     const tuft = (r, o, s, dryK) => {
@@ -447,6 +450,11 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
     makeLayer('shade_broadleaf', 'SHADOW', shadowGeometry(), 320, 2, per, 760, null, { shadowOf: bro });
   }
 
+  // the shade a boulder throws: without it a stone on sunlit ground looks pasted on. (Made last, so the layers before
+  // it keep the seeds they always had and every tree and tuft stays where it was.) Darker where there is no air to
+  // light the shade.
+  if (boulders) makeLayer('shade_boulders', 'SHADOW', shadowGeometry(), 64, 2, boulders.perTile, 150, null, { shadowOf: boulders, shadowDims: [1.15, 0.7, 0.03, 0.997], shadowGain: body.atmo ? 1.15 : 1.6 });
+
   // an object record: position (3 doubles), size, yaw, tilt, squash; colour kept beside it
   const rec = {
     f: null, i: 0, c: null, ci: 0,
@@ -467,7 +475,9 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
       _q.setFromUnitVectors(Y, _up);
       _q2.setFromAxisAngle(Y, f[i + 4]); _q.multiply(_q2);
       if (f[i + 5]) { _q2.setFromAxisAngle(X, f[i + 5]); _q.multiply(_q2); }
-      _s.set(f[i + 3], f[i + 3] * f[i + 6], f[i + 3]);
+      // (stones: longer one way than the other, by an amount taken from the yaw so it never changes)
+      const st = L.stretch ? L.stretch * Math.sin(f[i + 4] * 7.3) : 0;
+      _s.set(f[i + 3] * (1 + st), f[i + 3] * f[i + 6], f[i + 3] * (1 - st));
       _m.compose(_p, _q, _s);
       out.set(_m.elements, k * 16);
     }

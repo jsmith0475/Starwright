@@ -1159,6 +1159,7 @@ export function createFlightScreen(app) {
     row('Vegetation', 'trees, grass and ground detail at the space centre', seg('gfxVegetation', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']]));
     if (!soft) row('Automatic quality', 'lowers resolution, then shadows, then effects when frames come slowly', seg('gfxAuto', [[false, 'Off'], [true, 'On']]));
     row('Shadows', 'the sun casts shadows on the vessel and the ground', seg('gfxShadows', [[false, 'Off'], [true, 'On']]));
+    row('Ambient occlusion', 'soft shade in creases and where things touch the ground (high detail only)', seg('gfxAO', [[false, 'Off'], [true, 'On']]));
     row('Bloom', 'glow around flames, the sun and hot metal', range('gfxBloom', 1.5));
     row('Lens effects', 'sun flare, soft vignette, film grain', seg('gfxLens', [[false, 'Off'], [true, 'On']]));
     row('Camera shake', 'from thrust, air and impacts', range('gfxShake', 1.5));

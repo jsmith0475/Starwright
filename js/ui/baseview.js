@@ -18,6 +18,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { createBase, baseMaterials, BASE_LAYOUT } from '../render/basegfx.js';
 import { createLocalGround, createSkyRig, skyAt } from '../render/baseenv.js';
 import { VERDA_DAY } from './dom.js';
+import { createPostChain } from '../render/post.js';
 
 const clamp = THREE.MathUtils.clamp;
 const HOME = { target: new THREE.Vector3(10, 0, 430), az: -0.74, el: 0.235, dist: 1650 };
@@ -93,6 +94,20 @@ export function getBaseView(app) {
     if (litId) byId[litId].object3d.traverse(o => { if (!SKIP_LIT[o.name]) o.layers.enable(1); });
   }
   const _size = new THREE.Vector2(), _clear = new THREE.Color();
+  // ambient occlusion at this view's two best quality steps: the scene is drawn through the flight screen's post chain
+  // (js/render/post.js, display mode: the picture is otherwise unchanged). Made on first use; null when it cannot be had.
+  let post = null, postTried = false;
+  function postChain() {
+    if (!postTried) {
+      postTried = true;
+      try {
+        post = createPostChain(renderer, { display: true });
+        if (!post.supported) { post.dispose(); post = null; }
+        else { post.params.ao = 1; post.setAO(true); }
+      } catch (err) { console.warn('[base] ambient occlusion unavailable:', err && err.message); post = null; }
+    }
+    return post;
+  }
 
   // Quality governor: the view holds 60 fps on a laptop GPU at full quality. If frames come slowly (a weak GPU, or
   // the software rasteriser the automated tests run on) it lowers the render resolution and drops the shadow pass;
@@ -206,8 +221,18 @@ export function getBaseView(app) {
       }
       // on a software rasteriser the scene appears a few objects per frame, so compiling its shaders never blocks for long
       for (let i = 0; i < 3 && reveal.length; i++) reveal.pop().visible = true;
-      renderer.setRenderTarget(null); renderer.autoClear = true;
-      renderer.render(scene, camera);
+      const p = !low && (!software || locked) && level <= 1 && !(app.settings && app.settings.gfxAO === false) ? postChain() : null;
+      renderer.autoClear = true;
+      if (p) {
+        renderer.getDrawingBufferSize(_size); p.setSize(_size.x, _size.y, 1);
+        const rt = p.begin(); rt.viewport.set(0, 0, rt.width, rt.height);
+        // (buildings seen from hundreds of metres: the radius keeps growing with distance, to the scale of a building)
+        if (p.ao) Object.assign(p.ao.params, { radius: 1.5, intensity: 2.5, maxDist: 5000, grow: 0.03, growMax: 20 });
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+        p.end({ camera });
+        renderer.setRenderTarget(null); renderer.autoClear = true;
+      } else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
       shownVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); shown = true;
       setLit(highlightId);
       if (!litId) return;

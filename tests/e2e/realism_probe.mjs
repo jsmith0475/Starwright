@@ -61,6 +61,8 @@ const fmt = n => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).t
 const MEASURE = () => {
   const app = window.__sw.app, r = app.renderer, f = app.flight;
   const scenes = f ? [f.scene, f.nearScene] : [window.__swView.scene];
+  // (a frame between refreshes of the reflection probe: a refresh frame also draws one cube face of the far scene)
+  if (f) for (let i = 0; i < 8 && f.view.probePending; i++) f.view.render(r);
   r.info.autoReset = false; r.info.reset();
   if (f) f.view.render(r); else window.__swView.render(null, true);
   const out = { calls: r.info.render.calls, tris: r.info.render.triangles, textures: r.info.memory.textures, geometries: r.info.memory.geometries, programs: r.info.programs ? r.info.programs.length : 0 };

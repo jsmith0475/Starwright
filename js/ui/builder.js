@@ -30,6 +30,7 @@
 //
 // Test hooks: app.builder (see `api` at the bottom).
 import * as THREE from '../lib/three.module.min.js';
+import { createPostChain } from '../render/post.js';
 import { isModalOpen } from './dom.js';
 import { PARTS, PART_LIST, partDef } from '../core/parts.js';
 import { Craft } from '../core/craft.js';
@@ -139,6 +140,8 @@ export function createBuilderScreen(app) {
   let viewShift = 0;                   // px: the free view between the panels is not centred on the canvas
   let renderState = null;
   let quality = 'high';                // 'low' when there is no GPU (see softwareGL)
+  let post = null;                     // ambient occlusion (js/render/post.js with everything else in it turned off); null at 'low'
+  const _db = new THREE.Vector2();
 
   // editor state
   const state = { tool: 'place', symmetry: 1, symMode: 'radial', snap: true, show: { com: false, cot: false, col: false }, body: 'verda', atmo: false, category: 'command', search: '', sort: '' };
@@ -1091,6 +1094,16 @@ export function createBuilderScreen(app) {
     const wantShadow = quality === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     r.shadowMap.enabled = true; if (r.shadowMap.type !== wantShadow) { r.shadowMap.type = wantShadow; r.shadowMap.needsUpdate = true; }
     if (r.toneMapping === THREE.NoToneMapping) { r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0; }
+    // ambient occlusion: the hall is drawn into the post chain's target exactly as it would be to the canvas, and the
+    // chain adds the shade in the corners, under the craft and between its parts (js/render/post.js, display mode)
+    post = null;
+    if (quality !== 'low' && !(app.settings && app.settings.gfxAO === false)) {
+      try {
+        post = createPostChain(r, { display: true });
+        if (!post.supported) { post.dispose(); post = null; }
+        else { post.params.ao = 1; post.setAO(true); }
+      } catch (err) { console.warn('[builder] ambient occlusion unavailable:', err && err.message); post = null; }
+    }
     scene = new THREE.Scene();
     const fogCol = horizontal() ? 0x8a97a2 : 0x56636f;
     scene.background = new THREE.Color(0x1a2029);
@@ -1288,6 +1301,7 @@ export function createBuilderScreen(app) {
       looseObjs = [];
       for (const fx of [nodeFx, cursorFx, gizmo, balanceFx, thumbs]) { try { fx && fx.dispose(); } catch { /* ignore */ } }
       if (hall) hall.dispose();
+      if (post) { post.dispose(); post = null; }
       if (renderState && app.renderer) { const r = app.renderer; r.shadowMap.enabled = renderState.shadow; r.shadowMap.type = renderState.shadowType; r.toneMapping = renderState.tone; r.toneMappingExposure = renderState.exposure; }
       scene = camera = hall = craftGroup = heldLayer = looseLayer = nodeFx = cursorFx = gizmo = balanceFx = thumbs = null;
       if (panels) panels.dispose();
@@ -1312,6 +1326,19 @@ export function createBuilderScreen(app) {
     render() {
       const r = app.renderer;
       if (!r || !scene) return;
+      if (post) {
+        // (renderer.info counts the whole frame, not only the last pass)
+        const autoReset = r.info.autoReset; r.info.autoReset = false; r.info.reset();
+        r.getDrawingBufferSize(_db); post.setSize(_db.x, _db.y, 1);
+        const rt = post.begin(); rt.viewport.set(0, 0, rt.width, rt.height);      // (never renderer.setViewport() on a target: it takes CSS pixels)
+        if (post.ao) Object.assign(post.ao.params, { radius: 0.7, intensity: 2.0, maxDist: 300 });
+        r.render(scene, camera);
+        r.setRenderTarget(null);
+        post.end({ camera });
+        r.setRenderTarget(null);
+        r.info.autoReset = autoReset;
+        return;
+      }
       r.setRenderTarget(null);
       r.render(scene, camera);
     },

@@ -193,6 +193,17 @@ vec3 triFine(vec3 p, vec3 w, out float h, out float a) {
   return vec3(0.0, gx.x, gx.y) * w.x + vec3(gy.y, 0.0, gy.x) * w.y + vec3(gz.x, gz.y, 0.0) * w.z;
 }
 
+// the same relief with its repeat broken up: two copies of the tile, each shifted by an amount that changes from one
+// patch of ground to the next (k: slow hashed noise over the globe, 0..1), cross-faded where the patches meet. A tile
+// laid once repeats every period in straight rows, which shows from a few hundred metres up.
+vec3 triGradV(vec3 p, vec3 w, float k, out float h, out float a) {
+  float l = k * 8.0, i = floor(l), f = l - i, ha, aa, hb, ab;
+  vec3 ga = triGrad(p + sin(vec3(3.0, 7.0, 5.0) * i), w, ha, aa), gb = triGrad(p + sin(vec3(3.0, 7.0, 5.0) * (i + 1.0)), w, hb, ab);
+  float m = smoothstep(0.2, 0.8, f - 0.1 * (ha - hb));
+  h = mix(ha, hb, m); a = mix(aa, ab, m);
+  return mix(ga, gb, m);
+}
+
 void main() {
   #include <logdepthbuf_fragment>
   float dist = length(vView);
@@ -229,10 +240,11 @@ void main() {
   vec3 g = vec3(0.0);
   // a fifth, finest scale: the grain of the ground you stand on (blades, grit, gravel)
   float ff = 1.0 - smoothstep(5.0, 18.0, dist), hm = 0.5, am = 0.5;
+  vec3 Pm = dirO * uRadius;                     // the fragment on the globe, metres
   if (ff > 0.0) g += triFine(fract(uPh0 * 5.0) + vPo / 0.54, w, hm, am) * ff * 0.6 * uGrain;
-  if (f0 > 0.0) g += triGrad(uPh0 + vPo / 2.7, w, h0, a0) * f0;
-  if (f1 > 0.0) g += triGrad(uPh1 + vPo / 37.0, w, h1, a1) * f1 * 0.9;
-  if (f2 > 0.0) g += triGrad(uPh2 + vPo / 530.0, w, h2, a2) * f2 * 0.8;
+  if (f0 > 0.0) g += triGradV(uPh0 + vPo / 2.7, w, tNoise(Pm / 9.0 + 31.0), h0, a0) * f0;
+  if (f1 > 0.0) g += triGradV(uPh1 + vPo / 37.0, w, tNoise(Pm / 120.0 + 17.0), h1, a1) * f1 * 0.9;
+  if (f2 > 0.0) g += triGradV(uPh2 + vPo / 530.0, w, tNoise(Pm / 1700.0 + 23.0), h2, a2) * f2 * 0.8;
   if (f3 > 0.0) g += triGrad(uPh3 + vPo / 7900.0, w, h3, a3) * f3 * 0.6;
   float hd = mix(0.5, h0, f0) * 0.3 + mix(0.5, h1, f1) * 0.3 + mix(0.5, h2, f2) * 0.25 + mix(0.5, h3, f3) * 0.15;
   float ad = mix(0.5, a0, f0) * 0.25 + mix(0.5, a1, f1) * 0.3 + mix(0.5, a2, f2) * 0.25 + mix(0.5, a3, f3) * 0.2;
@@ -245,7 +257,9 @@ void main() {
   float water = 0.0;
   #ifdef OCEAN
     float depth = uSea - vH;
-    water = smoothstep(0.0, 0.25, depth);
+    // (the water's edge is drawn wider with distance: far off, the shore is a line between coarse vertices and a hard
+    // edge shows every one of them as a tooth)
+    water = smoothstep(0.0, 0.25 + dist * 0.0003, depth);
   #endif
 
   // ---- material: biome colour, then what actually covers the ground: lush and dry growth (or pale dust and dark
@@ -258,7 +272,6 @@ void main() {
   }
   // patches at tens of metres to kilometres come from hashed noise laid on the globe in metres: the tiling detail
   // map would repeat them in rows toward the horizon
-  vec3 Pm = dirO * uRadius;
   float q1 = 1.0 - smoothstep(2500.0, 9000.0, dist), q2 = 1.0 - smoothstep(12000.0, 40000.0, dist), q3 = 1.0 - smoothstep(50000.0, 160000.0, dist);
   float m1 = q1 > 0.0 ? (tNoise(Pm / 70.0) - 0.5) * q1 : 0.0, m2 = q2 > 0.0 ? (tNoise(Pm / 310.0 + 3.0) - 0.5) * q2 : 0.0, m3 = q3 > 0.0 ? (tNoise(Pm / 1500.0 + 9.0) - 0.5) * q3 : 0.0;
   float m4 = q1 > 0.0 ? (tNoise(Pm / 23.0 + 5.0) - 0.5) * q1 : 0.0, m5 = q2 > 0.0 ? (tNoise(Pm / 140.0 + 11.0) - 0.5) * q2 : 0.0;
@@ -291,7 +304,7 @@ void main() {
   }
   // bare earth showing through in patches
   float dn = (a0 - 0.5) * f0 * 0.8 + (h1 - 0.5) * f1 * 0.9 - m4 * 1.3 - m5 * 0.9 + (hm - 0.5) * ff * 0.4;
-  float dirt = smoothstep(uDirtT, uDirtT + 0.2 + 0.3 * (1.0 - uDirtK), dn) * veg * (1.0 - forest) * (1.0 - calm) * uDirtK;
+  float dirt = smoothstep(uDirtT, uDirtT + 0.2 + 0.3 * (1.0 - uDirtK), dn) * veg * (1.0 - forest) * (1.0 - calm) * uDirtK * (1.0 - water);      // (no bare patches on the sea bed: through water they read as stains)
   albedo = mix(albedo, wSrgb(uDirt) * (0.72 + 0.56 * ad) * (0.8 + 0.4 * mix(0.5, hm, ff)), dirt);
   float rockK = smoothstep(uRockSlope.x, uRockSlope.y, slope + (hd - 0.5) * 0.22);
   vec3 rock = wSrgb(uRock) * (0.7 + 0.6 * ad);
@@ -350,7 +363,14 @@ void main() {
       // body of the water: sea bed showing through the shallows, then the deep colour
       float turb = 1.0 - exp(-max(depth, 0.0) / uClarity);
       vec3 body = mix(wSrgb(uShallow), wSrgb(uDeep), turb) * (sunC * max(dot(up, uSun), 0.0) * 0.55 + amb);
-      body = mix(col, body, smoothstep(0.0, 2.5, depth) * (0.4 + 0.6 * turb) + 0.0);
+      // wave faces turned to the sun and the bright sky are lighter than those turned away
+      vec3 lightDir = normalize(uSun + up);
+      body *= clamp(1.0 + 1.8 * (dot(Nw, lightDir) - dot(up, lightDir)), 0.6, 1.5);
+      // the sea bed seen through the water: red light is lost in the first metres, green and blue carry on, so sand
+      // and bare patches on the bed turn green and then fade into the water's own colour
+      vec3 tr = exp(-max(depth, 0.0) * vec3(4.5, 1.3, 0.9) / uClarity);
+      float sct = 1.0 - exp(-max(depth, 0.0) * 3.0 / uClarity);
+      body = col * tr * (1.0 - 0.5 * sct) + body * sct;
       vec3 wcol = mix(body, sky, fres);
       // sun glint: tight up close, a broad sheen from orbit where the waves are below a pixel
       vec3 Hh = normalize(uSun + V);
@@ -358,7 +378,7 @@ void main() {
       float spec = pow(max(dot(Nw, Hh), 0.0), rough) * (rough + 8.0) * 0.012;
       wcol += sunC * spec * (0.3 + 0.7 * fres) * step(0.0, dot(up, uSun));
       // foam where the water is centimetres to a metre deep, and a little on wave crests
-      float foam = (1.0 - smoothstep(0.15, 1.5 + 1.4 * foamN, depth)) * smoothstep(0.35, 0.6, foamN + 0.25 * sin(t * 0.7 + depth * 3.0));
+      float foam = (1.0 - smoothstep(0.05, 0.45 + 0.6 * foamN, depth)) * smoothstep(0.35, 0.6, foamN + 0.25 * sin(t * 0.7 + depth * 3.0));
       foam *= 1.0 - smoothstep(1500.0, 6000.0, dist);
       wcol = mix(wcol, vec3(0.9) * (sunC * max(dot(up, uSun), 0.0) + amb), foam * 0.85);
       col = mix(col, wcol, water);

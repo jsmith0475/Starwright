@@ -41,7 +41,7 @@ const BG_COLOR = 0x0b0f14;
 export const NEW_GAME_UT = 16950;
 const SETTINGS_KEY = 'starwright.settings.v1';
 const DEFAULT_SETTINGS = { musicVolume: 0.5, sfxVolume: 0.8, invertPitch: false, showHints: true,
-  gfxQuality: 'high', gfxBloom: 0.7, gfxShadows: true, gfxLens: true, gfxShake: 1,
+  gfxQuality: 'high', gfxBloom: 0.7, gfxShadows: true, gfxAO: true, gfxLens: true, gfxShake: 1,
   gfxAuto: true, gfxVegetation: 'auto',     // vegetation detail: 'auto' (from Detail) | 'low' | 'medium' | 'high' | 'ultra' (js/render/flora.js)
   uiScale: 'auto' };   // uiScale: interface size, 'auto' (from the window) or 0.8 to 1.75 (js/ui/dom.js resolveUiScale)     // gfxAuto: lower render scale / shadows / post automatically when frames come slowly (js/ui/governor.js)     // graphics: read by the flight screen
 const GAME_SCREENS = new Set(['flight', 'builder', 'tracking']);      // 3D screens written by other modules
