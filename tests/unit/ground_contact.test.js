@@ -63,14 +63,16 @@ for (const [bodyId, wants] of [['verda', [9, 18]], ['pell', [9, 20]], ['sear', [
       const where = `${bodyId}, ${s.slope.toFixed(1)}° slope`;
       for (const x of w.vessels) {                       // the lander, and whatever broke off it on the way down
         if (x.dead || !(x.landed || x.grounded) || x.type === 'eva') continue;
-        const hs = x._pts.map(c => clearance(w, x, b, c.x, c.y, c.z));
+        // a foot stands where its strut has closed to (part._comp, up the craft's axis): landing-leg suspension
+        const up = c => (c.leg ? (c.p._comp || 0) * (c.p.flip ? -1 : 1) : 0);
+        const hs = x._pts.map(c => clearance(w, x, b, c.x, c.y + up(c), c.z));
         const low = Math.min(...hs);
         const lean = new Vector3(0, 1, 0).applyQuaternion(x.q).angleTo(x.pos) * 180 / Math.PI;
         assert.ok(low > -0.03, `${where}: ${x.name} (${x.parts.size} parts, lean ${lean.toFixed(0)}°) has a contact point ${(-low * 100).toFixed(1)} cm inside the ground`);
         // the drawn foot pads (render/parts/shapes_aero.js: a dish 0.2 m in radius, rim 2.5 cm above the sole)
         for (const p of x.legParts) {
           if (!p.deployed) continue;
-          const L = p.def.legs, fr = 0.2 * p.def.h / 1.2, cx = p.pos.x + p._ox * L.spread, cz = p.pos.z + p._oz * L.spread, y = p.pos.y - L.reach + 0.025;
+          const L = p.def.legs, fr = 0.2 * p.def.h / 1.2, cx = p.pos.x + p._ox * L.spread, cz = p.pos.z + p._oz * L.spread, y = p.pos.y - L.reach + 0.025 + (p._comp || 0);
           const rim = Math.min(...[[p._ox, p._oz], [-p._ox, -p._oz], [-p._oz, p._ox], [p._oz, -p._ox]].map(([ax, az]) => clearance(w, x, b, cx + ax * fr, y, cz + az * fr)));
           assert.ok(rim > -0.03, `${where}: ${x.name} (lean ${lean.toFixed(0)}°) has the rim of a foot pad ${(-rim * 100).toFixed(1)} cm inside the ground`);
         }

@@ -297,8 +297,9 @@ it is good. **[Read the full roadmap](docs/ROADMAP.md)** for what each one is, w
 what the game does today, and what building it involves.
 
 1. **[Landing legs that work like legs.](docs/ROADMAP.md#1-landing-legs-that-work-like-legs)**
-   Real suspension, so a lander compresses, bounces a little, settles, and tips over if you come
-   in crooked. Today a vessel touches down as one rigid body.
+   **Built.** Each leg is a spring and damper: a lander compresses, settles, bottoms out or
+   breaks its legs if you come in too fast, and tips over if you come in crooked.
+   [How it works and what was checked.](docs/LANDING_LEGS.md)
 2. **[Structural dynamics.](docs/ROADMAP.md#2-structural-dynamics)** Joints that flex under
    load, show stress, and break when a rocket is too tall, too thin or flown too hard.
 3. **[Higher-fidelity worlds.](docs/ROADMAP.md#3-higher-fidelity-worlds)** Sharper terrain,

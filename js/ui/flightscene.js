@@ -520,6 +520,14 @@ export function createFlightScene(app) {
         e.comp += (clamp(comp / (R * 0.3), 0, Math.min(3, 1.2 * (p._travel || R * 0.3) / (R * 0.3))) - e.comp) * Math.min(1, dt * 12);
         st.steer = live && v.grounded ? p._steer || 0 : 0; st.spin = e.spin; st.compress = e.comp;
       }
+      if (def.legs) {
+        // the strut closes by what the core's spring has closed (core/vessel.js _contact: part._comp, metres along
+        // the craft's axis). A pinned lander keeps the sag it came to rest with.
+        const comp = p.deployed && (v.grounded || v.landed) ? p._comp || 0 : 0;
+        e.comp = (e.comp || 0) + (comp - (e.comp || 0)) * Math.min(1, dt * 18);
+        if (e.comp < 1e-4) e.comp = 0;
+        st.compress = e.comp;
+      }
       if (def.light) {
         st.light = p.deployed ? 1 : 0;
         if (p.deployed && isActive) { lampN++; lampAcc.x += p.pos.x - com.x; lampAcc.y += p.pos.y - com.y; lampAcc.z += p.pos.z - com.z; lampDir.x += Math.cos(p.rot || 0); lampDir.z -= Math.sin(p.rot || 0); }

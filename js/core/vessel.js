@@ -68,8 +68,21 @@ export const TUNING = {
   // --- ground contact
   GROUND_W: 34,              // rad/s: natural frequency of the contact springs (per vessel)
   GROUND_ZETA: 0.85,         // damping ratio of the contact springs
+  GROUND_REBOUND: 4,         // × that damping while a point is leaving the ground again
   GROUND_MU: 0.8,            // friction of hull parts on the ground
   LEG_MU: 1.1,
+  // --- landing legs: each deployed leg is its own spring and damper (see docs/LANDING_LEGS.md)
+  LEG_W: 11,                 // rad/s: natural frequency of a lander on its legs (1.75 Hz). Each leg's spring rate is
+                             // mass × LEG_W² / legs down, so the static sag is g / LEG_W² : 7.9 cm on Verda, 1.3 cm on Pell
+  LEG_ZETA: 0.3,             // damping ratio while a leg closes ...
+  LEG_ZETA_REBOUND: 4,       // ... and while it opens again (an oleo strut lets go slowly: little bounce where gravity is weak)
+  LEG_STROKE: 0.3,           // × reach: travel of a leg whose part does not say (`legs.stroke`, m)
+  LEG_EASE: 0.15,            // m/s: how fast a leg found under the ground without having been driven there takes up its load
+  LEG_BOTTOM_TOL: 0.3,       // × the part's impact tolerance: a leg that reaches the end of its travel still closing faster than this breaks
+  STANCE_MIN: 0.04,          // m: loaded contact points spread less than this across their line are a knife edge, not a footprint
+  STANCE_NUDGE: 0.002,       // rad/s (× the gravity scale): the push a craft balanced on a knife edge gets once a second
+  STANCE_WAIT: 25,           // s: ... and how long it is left unpinned there
+  SLEEP_G_REF: 9.6,          // m/s²: below this gravity "quiet enough to pin" is scaled down (things move slowly where gravity is weak)
   FRICTION_RATE: 22,         // 1/s: viscous slope of the friction law below the Coulomb limit
   CONTACT_DT: 0.01,          // s: largest physics step while touching the ground
   WHEEL_BRAKE_MU: 0.45,      // braking force per wheel is at most this × its load (the tyre itself grips to WHEEL_MU)
@@ -743,6 +756,10 @@ export class Vessel {
         if (d.legs && p.deployed) {
           const fx = p.pos.x + p._ox * d.legs.spread, fy = p.pos.y - d.legs.reach * (p.flip ? -1 : 1), fz = p.pos.z + p._oz * d.legs.spread;
           cp.push({ p, x: fx, y: fy, z: fz, r: 0 });
+          // The foot and the rim of its pad belong to the leg's suspension (`leg`): _contact closes the strut by what
+          // the deepest of them is under the ground, up to its stroke, and only then are they a hard contact.
+          p._lp0 = pts.length; p._stroke = Math.max(0.02, d.legs.stroke || TUNING.LEG_STROKE * d.legs.reach); p._sg = p.flip ? -1 : 1;
+          p._comp = p._comp || 0; p._pen = 0; p._x = p._x || 0;
           add(fx, fy, fz, 1);
           // The foot is a dished pad, not a point (render/parts/shapes_aero.js leg: radius 0.2 of the strut's scale,
           // 0.26 on the heavy one, its rim 2.5 cm above its sole). Without the rim a craft lying on its side had the
@@ -750,7 +767,8 @@ export class Vessel {
           const ls = d.h / 1.2, fr = (d.variant === 'heavy' ? 0.26 : 0.2) * ls, ry = fy + 0.025 * ls * (p.flip ? -1 : 1);
           add(fx + p._ox * fr, ry, fz + p._oz * fr, 1); add(fx - p._ox * fr, ry, fz - p._oz * fr, 1);
           add(fx - p._oz * fr, ry, fz + p._ox * fr, 1); add(fx + p._oz * fr, ry, fz - p._ox * fr, 1);
-        }
+          for (let i = p._lp0; i < pts.length; i++) pts[i].leg = true;
+        } else if (d.legs) { p._comp = 0; p._pen = 0; p._x = 0; }
       }
     }
     for (const c of cp) minY = Math.min(minY, c.y);
@@ -1710,7 +1728,12 @@ export class Vessel {
       const mx = clamp(c.pitch || 0, -1, 1), my = clamp(c.roll || 0, -1, 1), mz = -clamp(c.yaw || 0, -1, 1);
       const manual = Math.abs(mx) > 0.01 || Math.abs(my) > 0.01 || Math.abs(mz) > 0.01;
       cx = mx; cy = my; cz = mz;
-      if (c.sas) {
+      // Standing on its feet (or its hull) with the engines shut down, the attitude hold lets go. Reaction wheels
+      // strong enough to turn a lander in space hold it up on one foot where gravity is weak: it then stood, and
+      // was pinned, with three feet 10 to 30 cm in the air (Dray, Nym, Wend). The pilot's own stick still works.
+      const standing = this.grounded && this._groundT > TUNING.GROUND_SIT_TIME && !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(c.throttle > 0) && !eva;
+      if (standing) { if (this._groundT > 2) this.sasTarget = null; }      // (a bounce is flown with the hold it came down with)
+      else if (c.sas) {
         const w = this.w;
         const T = Math.max(TUNING.SAS_T, 2.5 * dt);
         const alx = ax / I.x, aly = ay / I.y, alz = az / I.z;
@@ -1961,6 +1984,7 @@ export class Vessel {
       }
     }
     this._nearGround = near;
+    if (!near && this._legLoad) { this._legLoad = false; for (const p of this._legs) { p._comp = 0; p._pen = 0; p._load = 0; p._x = 0; } }
     if (!near && (this.grounded || this._groundT > 0)) { this.grounded = false; this.groundContacts = 0; this.wheelsOnGround = 0; this._onWheels = false; this._groundT = 0; this._sleepT = 0; }
     if (!this.grounded) {
       this._airT += dt;
@@ -2031,10 +2055,23 @@ export class Vessel {
     // --- coming to rest: a vessel that sits quietly on the ground (or floats quietly) is pinned to the surface
     if (this.grounded) {
       const sp2 = Math.hypot(vel.x - wy * pos.z, vel.y, vel.z + wy * pos.x);
-      const calm = this._onWheels ? 0.06 : (this._floating ? 0.12 : TUNING.SLEEP_SPEED);
-      if (sp2 < calm && w.length() < TUNING.SLEEP_SPIN * (this._floating ? 0.4 : 1) && !this._slipping && this._supported && !this._wantsAwake(thrust, null)) {
+      // Where gravity is weak everything is slow: a lander rocking from one pair of feet to the other on a small moon
+      // never moves faster than "quiet" at home. Without the scale it was pinned in the middle of a rock, with feet
+      // 10 to 30 cm in the air (Pell, Slate, Dray, Nym, Wend). Speeds on a rock go with the square root of gravity.
+      const gs = this._onWheels || this._floating ? 1 : clamp(Math.sqrt(gm / (R2 * R2) / TUNING.SLEEP_G_REF), 0.04, 1);
+      const calm = this._onWheels ? 0.06 : (this._floating ? 0.12 : TUNING.SLEEP_SPEED * gs);
+      if (sp2 < calm && w.length() < TUNING.SLEEP_SPIN * (this._floating ? 0.4 : 1) * gs && !this._slipping && this._supported && !this._legMoving && !this._wantsAwake(thrust, null)) {
         this._sleepT += dt;
-        if (this._sleepT >= TUNING.SLEEP_TIME * (this._floating ? 2.5 : 1)) this._pin(ut);
+        // Balanced on a line (see `_stance`) it is not at rest, only slow: it is not pinned there. A craft set down
+        // dead level stands on such a line exactly, and nothing in a computer disturbs it; nature would. Once a
+        // second it gets the smallest of pushes about that line, and falls onto its other feet as a real one does.
+        // (After STANCE_WAIT of this it is pinned anyway: something round that can find no footprint.)
+        const edge = !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(this._stance > TUNING.STANCE_MIN);
+        if (edge) {
+          this._edgeT = (this._edgeT || 0) + dt;
+          if (this._edgeT > (this._nudgeT || 0) && this._rockAxis) { this._nudgeT = this._edgeT + 1; w.addScaledVector(this._rockAxis, TUNING.STANCE_NUDGE * Math.sqrt(gs)); }
+        } else { this._edgeT = 0; this._nudgeT = 0; }
+        if (this._sleepT >= TUNING.SLEEP_TIME * (this._floating ? 2.5 : 1) / Math.max(gs, 0.4) && (!edge || this._edgeT > TUNING.STANCE_WAIT / Math.max(gs, 0.25))) this._pin(ut);
       } else this._sleepT = 0;
     }
   }
@@ -2197,7 +2234,7 @@ export class Vessel {
       c.hp = hp; c.rx = rx; c.ry = ry; c.rz = rz;
       const vx = ux + (w.y * rz - w.z * ry), vy = uy + (w.z * rx - w.x * rz), vz = uz + (w.x * ry - w.y * rx);
       c.vx = vx; c.vy = vy; c.vz = vz;
-      if (hp < 0) {
+      if (hp < 0 && !c.leg) {
         nPen++;
         const p = c.p;
         if (!p._tcP && !p._tc) {
@@ -2248,6 +2285,43 @@ export class Vessel {
         p._tc = true;
       }
     }
+    // landing legs: how far is each foot under the ground, and has the strut run out of travel
+    const legs = this._legs;
+    let nLt = 0, nLdown = 0, snapped = null;
+    for (let i = 0; i < legs.length; i++) {
+      const p = legs[i];
+      p._load = 0;
+      if (!p.deployed || p._lp0 === undefined) continue;
+      nLdown++;
+      let pen = 0, at = -1;
+      for (let j = p._lp0; j < p._lp0 + 5; j++) { const h = -pts[j].hp; if (h > pen) { pen = h; at = j; } }
+      const penP = p._pen || 0;
+      p._pen = pen; p._at = at;
+      if (at < 0) { p._comp = 0; p._x = 0; continue; }
+      nLt++;
+      const c = pts[at];
+      if (!p._tcP && !p._tc) { const hit = Math.sqrt(c.vx * c.vx + c.vy * c.vy + c.vz * c.vz); if (hit > p._hit) p._hit = hit; }
+      p._tc = true;
+      // the strut slides along the craft's axis; against ground that leans it has less travel, and none lying down
+      const an = p._sg * ny, strokeN = p._stroke * (an > 0 ? an : 0);
+      p._strokeN = strokeN;
+      // How far the strut is closed (`_x`, along the ground normal). It closes as fast as the foot is driven into the
+      // ground and no faster: a foot that is suddenly found deep under it (a leg unfolded while the craft stands on
+      // its engine, a craft placed low) has not been loaded by anything, and a spring released from there would
+      // throw a lander on a small moon tens of metres up. Such a leg takes up its load at LEG_EASE.
+      const vn = c.vx * nx + c.vy * ny + c.vz * nz;
+      // (in contact already, the strut follows the foot; at first contact it may be closed by what the speed of
+      // arrival explains over one step)
+      const want = pen < strokeN ? pen : strokeN, xP = p._x || 0;
+      const can = Math.max(0, penP > 0 ? xP + (pen - penP) + TUNING.LEG_EASE * dt : (vn < 0 ? -1.5 * vn * dt : 0) + 0.005 + TUNING.LEG_EASE * dt);
+      const x = want < can ? want : can;
+      p._x = x; p._ease = want > can + 1e-9;
+      if (pen > strokeN && x >= strokeN && xP < strokeN && an > 0.5) {
+        p._bottomV = -vn;
+        if (-vn > TUNING.LEG_BOTTOM_TOL * p.def.tolerance) (snapped || (snapped = [])).push(p.id);
+        else if (-vn > 0.3) ev.push({ type: 'legBottom', vessel: this, part: p, speed: -vn });
+      }
+    }
     // --- crashes: parts that arrive faster than they can take are destroyed and soak up some of the speed
     let doomed = null, absorb = 0, all = false, hitMax = 0;
     for (let i = 0; i < list.length; i++) {
@@ -2257,7 +2331,13 @@ export class Vessel {
       const tol = p.def.tolerance;
       // a scrape while rolling (a tail strike, a wing tip) costs the part that touched; only a hard slam takes the whole craft
       if ((p._hitN >= 0 ? p._hitN : p._hit) > tol * TUNING.CRASH_ALL) all = true;
-      else if (p._hit > tol) { (doomed || (doomed = [])).push(p.id); if (tol > absorb) absorb = tol; }
+      else if (p._hit > tol) {
+        (doomed || (doomed = [])).push(p.id);
+        // what a part takes with it: its tolerance, but a leg only what it can take at the end of its stroke (a leg
+        // good for 14 m/s used to stop the whole craft dead from 14 m/s: arriving faster was safer than slower)
+        const soak = p.def.legs ? TUNING.LEG_BOTTOM_TOL * tol : tol;
+        if (soak > absorb) absorb = soak;
+      }
     }
     if (body.gas && (nPen || nW)) { this.destroyParts([...this.parts.keys()], ev, 'crushed'); return true; }
     if (all) { this.destroyParts([...this.parts.keys()], ev, 'crash'); return true; }
@@ -2271,7 +2351,14 @@ export class Vessel {
       this.destroyParts(doomed, ev, 'crash');
       return true;
     }
-    const touching = nPen > 0 || nW > 0 || wet > 0;
+    // a leg that bottomed out too fast collapses. Its spring has already taken what it could: nothing more is
+    // taken off the speed, and the craft comes down on what is left.
+    if (snapped) {
+      for (const id of snapped) ev.push({ type: 'legBroke', vessel: this, part: this.parts.get(id) });
+      this.destroyParts(snapped, ev, 'crash');
+      return true;
+    }
+    const touching = nPen > 0 || nW > 0 || wet > 0 || nLt > 0;
     if (touching && !this._touched) {
       this._touched = true;
       this._impact = speed;
@@ -2284,20 +2371,29 @@ export class Vessel {
     const inv0 = nPen > 0 ? 1 / nPen : 0;
     const I = this.inertia, iIx = 1 / I.x, iIy = 1 / I.y, iIz = 1 / I.z;
     const wRho = TUNING.WATER_RHO;
+    // how the points that carry load are spread over the ground (two axes across the normal): see `_stance`
+    let t1x, t1y, t1z;
+    if (Math.abs(nx) < 0.9) { t1x = 0; t1y = nz; t1z = -ny; } else { t1x = -nz; t1y = 0; t1z = nx; }
+    { const l = Math.sqrt(t1x * t1x + t1y * t1y + t1z * t1z) || 1; t1x /= l; t1y /= l; t1z /= l; }
+    const t2x = ny * t1z - nz * t1y, t2y = nz * t1x - nx * t1z, t2z = nx * t1y - ny * t1x;
+    let sN = 0, sU = 0, sV = 0, sUU = 0, sVV = 0, sUV = 0;
     for (let i = 0; i < pts.length; i++) {
       const c = pts[i];
       let px = 0, py = 0, pz = 0;
-      if (c.hp < 0) {
+      if (c.hp < 0 && !c.leg) {
         const vn = c.vx * nx + c.vy * ny + c.vz * nz;
         // the spring saturates a few centimetres in: deeper overlaps (a vessel placed inside the ground) ease out gently
         // effective mass seen by this point (a blow far from the centre of mass mostly turns the vessel)
         const ax = c.ry * nz - c.rz * ny, ay = c.rz * nx - c.rx * nz, az = c.rx * ny - c.ry * nx;
         const inv = inv0;
-        let N = (kN * (c.hp < -0.04 ? 0.04 : -c.hp) - cN * vn / (1 + m * (ax * ax * iIx + ay * ay * iIy + az * az * iIz))) * inv0;
+        // (on the way back out the damper is GROUND_REBOUND times firmer: what the ground gives back is what makes a
+        // craft that has struck it hop, and where gravity is a fiftieth of home a hop of 0.8 m/s is a flight of metres)
+        let N = (kN * (c.hp < -0.04 ? 0.04 : -c.hp) - cN * (vn > 0 ? TUNING.GROUND_REBOUND : 1) * vn / (1 + m * (ax * ax * iIx + ay * ay * iIy + az * az * iIz))) * inv0;
         if (N > 0) {
           const cap = 60 * m * gLoc + kN * 0.05;        // a single point never pushes harder than this
           if (N > cap) N = cap;
           support += N;
+          { const u = c.rx * t1x + c.ry * t1y + c.rz * t1z, v = c.rx * t2x + c.ry * t2y + c.rz * t2z; sN++; sU += u; sV += v; sUU += u * u; sVV += v * v; sUV += u * v; }
           const tvx = c.vx - vn * nx, tvy = c.vy - vn * ny, tvz = c.vz - vn * nz;
           const vt = Math.sqrt(tvx * tvx + tvy * tvy + tvz * tvz);
           px = N * nx; py = N * ny; pz = N * nz;
@@ -2319,6 +2415,58 @@ export class Vessel {
         tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;
       }
     }
+    // --- landing legs: one spring and damper per leg, a hard stop at the end of the stroke, friction under the foot
+    if (nLt) {
+      const Wl = TUNING.LEG_W, kL = m * Wl * Wl / nLdown, cIn = 2 * TUNING.LEG_ZETA * Wl * m / nLdown, cOut = 2 * TUNING.LEG_ZETA_REBOUND * Wl * m / nLdown;
+      const invL = 1 / nLt;
+      let sDamp = 0;
+      for (let i = 0; i < legs.length; i++) {
+        const p = legs[i];
+        if (!p.deployed || !(p._pen > 0) || p._at < 0) { if (p._comp) p._comp = 0; continue; }
+        const c = pts[p._at], pen = p._pen, strokeN = p._strokeN;
+        const vn = c.vx * nx + c.vy * ny + c.vz * nz;
+        const comp = p._x;
+        // the foot stands on the ground: the force acts there, not where the unloaded foot would be
+        const rx = c.rx + nx * pen, ry = c.ry + ny * pen, rz = c.rz + nz * pen;
+        // The spring is taken where the strut will be at mid-step (x + v dt/2). Taken at the start of the step it lags
+        // the motion by half a step, which acts as negative damping (W dt / 2 against a ratio of 0.3) and the legs
+        // closed deeper than the equation they stand for. At rest the two are the same.
+        // While a leg is still taking up its load (`_ease`) the strut itself is opening at LEG_EASE.
+        const vs = vn - (p._ease ? TUNING.LEG_EASE : 0), cL = vs < 0 ? cIn : cOut;
+        let N = kL * (comp - 0.5 * vs * dt) - cL * vs;
+        if (!(strokeN > 0)) N = 0;
+        if (pen > strokeN && comp >= strokeN) {
+          const ax = ry * nz - rz * ny, ay = rz * nx - rx * nz, az = rx * ny - ry * nx;
+          const over = pen - strokeN;
+          N += (kN * (over > 0.04 ? 0.04 : over) - cN * (vn > 0 ? TUNING.GROUND_REBOUND : 1) * vn / (1 + m * (ax * ax * iIx + ay * ay * iIy + az * az * iIz))) * invL;
+        }
+        const an = p._sg * ny;
+        p._comp = an > 0.2 ? Math.min(comp / an, p._stroke) : 0;
+        if (!(N > 0)) continue;
+        const cap = 60 * m * gLoc + kN * 0.05;
+        if (N > cap) N = cap;
+        support += N;
+        p._load = N;
+        sDamp += Math.abs(N - kL * comp);
+        { const u = rx * t1x + ry * t1y + rz * t1z, v = rx * t2x + ry * t2y + rz * t2z; sN++; sU += u; sV += v; sUU += u * u; sVV += v * v; sUV += u * v; }
+        let px = N * nx, py = N * ny, pz = N * nz;
+        const tvx = c.vx - vn * nx, tvy = c.vy - vn * ny, tvz = c.vz - vn * nz;
+        const vt = Math.sqrt(tvx * tvx + tvy * tvy + tvz * tvz);
+        if (vt > 1e-9) {
+          const ex = tvx / vt, ey = tvy / vt, ez = tvz / vt;
+          const bx = ry * ez - rz * ey, by = rz * ex - rx * ez, bz = rx * ey - ry * ex;
+          let F = kf * invL * vt / (1 + m * (bx * bx * iIx + by * by * iIy + bz * bz * iIz));
+          if (F > TUNING.LEG_MU * N) { F = TUNING.LEG_MU * N; if (vt > 0.05) slipping = true; }
+          const k = F / vt;
+          px -= k * tvx; py -= k * tvy; pz -= k * tvz;
+        }
+        fx += px; fy += py; fz += pz;
+        tx += ry * pz - rz * py; ty += rz * px - rx * pz; tz += rx * py - ry * px;
+      }
+      this._legLoad = true;
+      // still creeping up (or down) on its dampers: the springs do not yet carry what the ground does
+      this._legMoving = sDamp > 0.03 * m * (gLoc > 3 ? gLoc : 3);      // (3 m/s²: on the smallest moons the slow rocking of a craft at rest is more than 3 % of its weight)
+    } else this._legMoving = false;
     // --- buoyancy and water drag
     if (g.water && wet > 0) {
       for (let i = 0; i < bpts.length; i++) {
@@ -2436,12 +2584,27 @@ export class Vessel {
     }
     this._cfx = fx; this._cfy = fy; this._cfz = fz; this._ctx = tx; this._cty = ty; this._ctz = tz;
     this.grounded = touching;
-    this.groundContacts = nPen + nW;
+    this.groundContacts = nPen + nW + nLt;
     this.wheelsOnGround = onWheels;
     this._onWheels = onWheels >= 2 && onWheels >= nPen;
     this._slipping = slipping;
     this._floating = floating && nPen === 0 && nW === 0;
     this._supported = support > 0.5 * m * gLoc;
+    // A craft stands only on a footprint with some width. On a single line of contact (two feet of four, the other
+    // two in the air) it is balanced on a knife edge, however still it is: `_stance` is the smaller spread of the
+    // loaded points (m), `_rockAxis` the line they lie on (craft frame). See the pinning rule in _stepFlight.
+    if (sN >= 2) {
+      const a = sUU / sN - (sU / sN) * (sU / sN), b = sUV / sN - (sU / sN) * (sV / sN), d = sVV / sN - (sV / sN) * (sV / sN);
+      const h = Math.sqrt((a - d) * (a - d) / 4 + b * b), lo = (a + d) / 2 - h, hi = (a + d) / 2 + h;
+      this._stance = Math.sqrt(Math.max(0, lo));
+      // direction of the larger spread
+      let eu = b, ev2 = hi - a;
+      if (Math.abs(eu) + Math.abs(ev2) < 1e-12) { eu = hi - d; ev2 = b; }
+      if (Math.abs(eu) + Math.abs(ev2) < 1e-12) { eu = 1; ev2 = 0; }
+      const el = Math.hypot(eu, ev2);
+      eu /= el; ev2 /= el;
+      (this._rockAxis || (this._rockAxis = new Vector3())).set(eu * t1x + ev2 * t2x, eu * t1y + ev2 * t2y, eu * t1z + ev2 * t2z);
+    } else { this._stance = 0; if (this._rockAxis) this._rockAxis.set(0, 0, 0); }
     if (touching) { this._groundT += dt; this._airT = 0; } else { this._groundT = 0; this._sleepT = 0; }
     return false;
   }
@@ -2820,7 +2983,7 @@ export class Vessel {
     for (const p of this.parts.values()) {
       parts.push({
         id: p.id, type: p.type, pos: j3(p.pos), rot: p.rot, links: p.links.slice(), res: { ...p.res },
-        ignited: p.ignited, flameout: p.flameout, deployed: p.deployed, deployT: p.deployT, temp: p.temp,
+        ignited: p.ignited, flameout: p.flameout, deployed: p.deployed, deployT: p.deployT, comp: p._comp > 0.001 ? +p._comp.toFixed(4) : undefined, temp: p.temp,
         crew: p.crew.slice(), sym: p.sym,
         flip: p.flip || undefined, pitch: p.pitch || undefined, roll: p.roll || undefined, dockedTo: p.dockedTo ?? undefined, dockName: p.dockName, dockType: p.dockType,
         truss: p.truss && p.truss.length ? p.truss.map(t => ({ ...t })) : undefined,
@@ -2856,7 +3019,7 @@ export class Vessel {
     for (const j of o.parts) {
       const p = makePart(j.id, currentPartId(j.type), j.pos, j.rot, j.sym);
       p.links = j.links.slice(); p.res = { ...j.res };
-      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.deployed = j.deployed; p.deployT = j.deployT || 0;
+      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.deployed = j.deployed; p.deployT = j.deployT || 0; if (j.comp > 0) p._comp = j.comp;
       p.temp = j.temp ?? TUNING.AMBIENT_T; p.crew = (j.crew || []).slice();
       p.flip = !!j.flip; p.pitch = +j.pitch || 0; p.roll = +j.roll || 0; p.dockedTo = j.dockedTo ?? null;
       if (j.dockName !== undefined) p.dockName = j.dockName;
