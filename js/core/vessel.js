@@ -720,7 +720,13 @@ export class Vessel {
         else if ((p._covB || 0) > rB + 1e-6) add(p.pos.x, p.pos.y, p.pos.z, 0);
         // A separator is drawn with a collar and bolt heads 4 cm proud of the stack (render/parts/shapes_stack.js
         // decoupler), and both its rings are hidden in its neighbours: lying on its side it was the deepest thing in the ground.
-        if (d.shape === 'decoupler' && !tub) ring(p.pos.y, rB + 0.04);
+        if (d.shape === 'decoupler' && !tub) {
+          ring(p.pos.y, rB + 0.04);
+          // Between two parts of the stack the blow of a fall is theirs, as it was when a ring was eight points and the
+          // separator's seldom reached the ground first: it is the weakest part of any stack (9 m/s), and with sixteen
+          // points every lander that fell over at home snapped in two at it.
+          if (p._hasT && p._hasB) for (let i = pts.length - 1; i >= 0 && pts[i].p === p; i--) pts[i].skin = true;
+        }
         // An interstage truss stands on this part and reaches the height of the engine it wrapped. While that engine
         // is still there its own mount ring (or the tank on it) is the contact; once the stack has split the open
         // rim of the lattice is the first thing to touch the ground.
@@ -2252,7 +2258,7 @@ export class Vessel {
       if (hp < 0 && !c.leg) {
         nPen++;
         const p = c.p;
-        if (!p._tcP && !p._tc) {
+        if (!p._tcP && !p._tc && !c.skin) {
           let hit = Math.sqrt(vx * vx + vy * vy + vz * vz);
           if (rolling) {       // a vehicle rolling on its wheels that brushes the ground scrapes: the sink rate counts in full, the slide for a third
             const vn = vx * nx + vy * ny + vz * nz;
