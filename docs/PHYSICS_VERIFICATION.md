@@ -92,6 +92,15 @@ Notes on rows that are loose on purpose:
   simplified textbook by 2.6 % in aphelion. The game is right; the textbook shortcut is coarse in a system this
   small.
 
+### Structural loads (chapter 7 of the checks)
+
+The joint loads of structural dynamics are verified the same way, in `tests/verify/ref_structure.mjs`
+and `checks_structure.mjs`: a separately written multibody reference, closed-form rods and rings,
+live flights, failure timing, brace struts. 300 checks pass, 0 fail; the loads agree with the
+reference to about 1e-14. The checks also found that the vessel's moment of inertia is taken about
+part centres and not mass points (up to 9 % too large on small capsule ships), which is reported
+and not yet fixed. Model, results and that defect: [STRUCTURE.md](STRUCTURE.md).
+
 ## 4. Model honesty: patched conics against n-body gravity
 
 "n-body" here means the ship feels every body, and Verda recoils from its moons as real gravity requires.

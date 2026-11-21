@@ -101,6 +101,12 @@ And around the flying:
   station, on final descent to a moon, or falling from 120 km in a bare capsule.
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
+- **Rockets that bend and break.** Every joint between two parts carries a computed load. Tall
+  thin stacks wobble, and a hard turn in thick air snaps them. A read-out and a stress overlay
+  (the `;` key) show the load in flight, and the assembly building tells you which joint will
+  give way before you launch (the `L` key). Wider parts, shorter stacks and brace struts are the
+  cure. A switch in Settings turns the breaking off.
+- **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
 
 <p align="center">
@@ -231,6 +237,12 @@ Starwright does not fake its orbits, and it shows its work.
   same cases and compares: **861 checks, 0 failures.** Read the method, the numbers and the
   bugs it found in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it
   yourself with `npm run verify`.
+- **Structures from first principles.** The vessel flies as one rigid body, and each step the
+  game works out what every joint must carry for it to move that way: Newton's second law on
+  the piece beyond the joint, compared with the strength of a thin bolted ring. A separately
+  written multibody reference and closed-form cases check it: **300 more checks, 0 failures**,
+  agreeing to about one part in 10¹⁴. The model, its numbers, its limits and one defect the
+  checks found are in [docs/STRUCTURE.md](docs/STRUCTURE.md).
 - **Honest about its limits.** No n-body gravity, so no Lagrange points and no halo orbits.
   Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
@@ -270,7 +282,7 @@ media/               trailer and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 349 tests, including scripted flights flown by the autopilot
+npm test            # 417 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
