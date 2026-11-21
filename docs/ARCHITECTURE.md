@@ -1199,3 +1199,71 @@ part and nothing is saved in a design: it is derived from the part tree.
   owner's mesh group; `flightscene.js` calls it when it builds a part, `builder.js` on every `syncMeshes()`.
 - Capture script: `node tests/e2e/preview_interstage.mjs` → `tests/out/interstage/*.png`. Tests:
   `tests/unit/interstage.test.js`.
+
+## Additions (round 5: realism pass 3)
+
+Spec and task list: `docs/REALISM_PASS_SPEC.md`, `docs/REALISM_PASS_PLAN.md`. Everything is still made in code; no
+asset files were added. Nothing in `js/core` changed.
+
+### Ambient occlusion (`js/render/ao.js`, `post.js`)
+
+- `createAO(pass)`: a half-resolution pass over the scene target's depth texture (12 spiral taps, normal rebuilt from
+  depth, height-over-distance-squared estimate) and a 4x4 depth-aware blur. Two extra draw calls per frame.
+- The scene target of the post chain carries a `DepthTexture` while occlusion is on (`post.setAO(on)`); three r170
+  resolves the multisampled depth into it. Depth is logarithmic: distance = `exp2(d * log2(far + 1)) - 1`.
+- A half-resolution pixel sits on the border of four depth texels: depth is read with `texelFetch` and positions are
+  rebuilt from the centre of the texel that was read (`aoSnap`), or lines of false shade appear.
+- Flight: on at "high" only, behind the "Ambient occlusion" setting (`gfxAO`) and the governor's first three levels
+  (`LEVELS[n].ao` in `governor.js`). The composite multiplies it in before bloom, and leaves the sky, the distance
+  (`maxDist`) and anything bright enough to glow alone.
+- Hangars and space centre: `createPostChain(renderer, { display: true })`. In this mode the scene target is flagged
+  `isXRRenderTarget` with an sRGB-tagged texture, which makes three r170 tone-map and colour-convert each material
+  into it exactly as it does for the canvas; the composite only multiplies the occlusion in. The picture is otherwise
+  unchanged (materials with `toneMapped: false` and the background keep their colours). This relies on how r170
+  picks a program's tone mapping and output colour space; re-check it when three is updated. `builder.js` uses it
+  at quality "high"; `baseview.js` at its two best quality steps, with a radius that grows to building size
+  (`params.grow`, `growMax`). From the overview distance the effect is close to invisible.
+- With the post chain in use `renderer.info` is reset once per frame by the hangar, so its counts cover the shadow
+  pass too (three's own automatic reset happens after the shadow pass).
+
+### Live reflections (`js/render/envprobe.js`, `flightscene.js`)
+
+- `createEnvProbe(renderer, { size: 64 })`: a 64 px half-float cube map of the far scene from the vessel's position,
+  filtered with `PMREMGenerator.fromCubemap` into one reused target. The first refresh draws six faces at once,
+  later ones one face per frame. `probe.update(scene, position, { force, near, far })` returns true when the
+  filtered map changed.
+- At "high" it replaces both the painted sky map on the near scene and the parts' studio map
+  (`setPartEnvironment`), at intensity 1 and with no rotation (the cube is in scene axes). The studio map is put
+  back when the flight scene is disposed or quality drops.
+- Refresh triggers (in `update()`): another body, the sun or the local vertical turned 2 degrees, height changed by a
+  fifth (at least 50 m), or 20 s passed. A refresh frame draws one face of the far scene on top of the normal
+  frame (about 150 draw calls on the pad); `realism_probe.mjs` measures a frame between refreshes. The first refresh runs in `prewarm()` before programs are compiled, because
+  swapping the materials' environment map during `compileAsync` throws inside three.
+- `settings.gfxReflect === false` turns it off (used by `tests/e2e/env_probe.mjs`; there is no menu row).
+
+### Terrain, rocks, water
+
+- `worldshaders.js` `triGradV`: the 37 m and 530 m relief layers are sampled twice with offsets that change from
+  patch to patch (slow hashed noise over the globe) and cross-faded, which removes the visible repeat from a few
+  hundred metres up. `tests/e2e/tiling_probe.mjs` measures it as the strongest autocorrelation peak of a top-down
+  picture (limit 0.2; Pell from 300 m went from 0.32 to 0.12).
+- `scatter.js`: boulders throw a soft shadow (`shade_boulders`, the trees' shadow layer with its own dimensions in
+  `uShadowDims`; darker on airless worlds), lie buried to different depths, and are stretched differently per
+  instance (`stretch`). The shadow layer is created last so the seeds of every other layer are unchanged.
+- Sea (`TERRAIN_FS`, OCEAN): the bed is seen through per-colour absorption (red goes first) instead of a flat mix,
+  bare-earth patches are not drawn under water, the surf band is narrower, wave faces turned to the light are
+  brighter, and the water's edge widens with distance to hide the coarse shoreline. `tests/e2e/preview_water.mjs`
+  captures it.
+- Already present before this pass, so not redone: slope rock blending, the fine grain layer, Fresnel and sun
+  glitter on water.
+
+### Tests and probes
+
+`tests/unit/perf.test.js` (governor keeps occlusion for three levels); `tests/e2e/ao_probe.mjs`, `env_probe.mjs`,
+`tiling_probe.mjs` (checks), `preview_water.mjs` (captures).
+
+### Not done
+
+Shallow sea seen from several kilometres up shows the sandy bed inside the fine-terrain radius and the baked blue map
+outside it (a stepped ring); it was there before this pass. Frame rate and final look on a real GPU are unmeasured:
+every check ran on the software rasteriser.

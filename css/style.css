@@ -95,7 +95,9 @@ html, body {
   position: fixed; inset: 0; z-index: 10;
   zoom: var(--sw-ui-scale, 1);
   pointer-events: none;
-  overflow: hidden;
+  /* clip, not hidden: a hidden box can still be scrolled by focus and scrollIntoView (a long Settings dialog did), */
+  /* which slides every panel off the top of the window. hidden stays as the fallback for browsers without clip. */
+  overflow: hidden; overflow: clip;
 }
 
 /* Interactive things re-enable pointer events for themselves. */

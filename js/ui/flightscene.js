@@ -33,6 +33,8 @@ import * as PM from '../render/partmesh.js';
 import * as GFX from '../render/planetgfx.js';
 import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
 import { createPostChain } from '../render/post.js';
+import { createEnvProbe } from '../render/envprobe.js';
+import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
 
 const { buildPartMesh, setPartState, disposePartMesh, animatePip, nozzleExits } = PM;
@@ -54,7 +56,7 @@ const QUALITY = {
   soft: { post: true, samples: 0, shadow: 0, particles: 0.4, scale: 0.34, noBloom: true, mesh: 'low' },
   low: { post: false, samples: 0, shadow: 0, particles: 0.5, mesh: 'medium' },
   medium: { post: true, samples: 0, shadow: 1024, particles: 0.75, mesh: 'medium' },
-  high: { post: true, samples: 4, shadow: 2048, particles: 1, mesh: 'high' },
+  high: { post: true, samples: 4, shadow: 2048, particles: 1, mesh: 'high', ao: true, reflect: true },
 };
 
 const HAZE_VS = `#include <common>
@@ -189,6 +191,21 @@ export function createFlightScene(app) {
   const engineLight = new THREE.PointLight(0xffb070, 0, 0, 2); near.add(engineLight);
   const env = makeEnvironment(app.renderer);
   if (env) { near.environment = env.texture; near.environmentIntensity = 0.6; }
+  // live reflections (js/render/envprobe.js) at "high": a small cube map of the far scene around the vessel replaces
+  // the painted sky above and the parts' studio map, so metal shows the ground, sky and space it is really in
+  const PROBE_K = 1.0, PROBE_COS = Math.cos(2 * Math.PI / 180), ORIGIN = new THREE.Vector3();
+  let probe = null, probeOn = false, probeDirty = false, probeApplied = false, studioEnv = null, pBody = null, pAlt = 0, pTime = 0;
+  const pUp = new THREE.Vector3(), pSun = new THREE.Vector3();
+  function applyProbe() {
+    if (!probeApplied) { studioEnv = partEnvironment(); probeApplied = true; }
+    near.environment = probe.texture; near.environmentIntensity = PROBE_K; near.environmentRotation.set(0, 0, 0);
+    setPartEnvironment(probe.texture, PROBE_K);
+  }
+  function setProbe(on) {
+    if (on && !probe) { try { probe = createEnvProbe(app.renderer, { size: 64 }); } catch (err) { console.warn('[flight] live reflections unavailable:', err && err.message); on = false; } }
+    probeOn = on; probeDirty = on;
+    if (!on && probeApplied) { probeApplied = false; near.environment = env ? env.texture : null; setPartEnvironment(studioEnv, 0.9); studioEnv = null; }
+  }
   const sunTint = new THREE.Color(1, 1, 1), ambTint = new THREE.Color();
 
   // ---- ground shadow catcher (the vessel's shadow on whatever terrain is drawn under it) + engine light pool
@@ -367,6 +384,10 @@ export function createFlightScene(app) {
     if (shadows && sunNear.shadow.mapSize.x !== shadowSize) { sunNear.shadow.mapSize.set(shadowSize, shadowSize); if (sunNear.shadow.map) { sunNear.shadow.map.dispose(); sunNear.shadow.map = null; } }
     // [realism pass] vegetation detail follows the setting, the quality level and the governor (js/render/basegfx.js)
     if (base && typeof base.setVegetation === 'function') base.setVegetation(s.gfxVegetation, name, gs.detail);
+    // ambient occlusion (js/render/ao.js): "high" only, the player's switch, and the governor's first three levels
+    const wantProbe = !!quality.reflect && s.gfxReflect !== false && !!app.renderer;      // (gfxReflect: a switch for the probes, no menu row)
+    if (wantProbe !== probeOn) setProbe(wantProbe);
+    if (post) post.setAO(!!quality.ao && gs.ao !== false && s.gfxAO !== false);
     if (post) { post.params.bloom = quality.noBloom || !gs.bloom ? 0 : Number.isFinite(s.gfxBloom) ? s.gfxBloom : 0.7; post.params.lens = quality.noBloom || s.gfxLens === false ? 0 : 1; }
   }
   applySettings();
@@ -906,7 +927,14 @@ export function createFlightScene(app) {
     bounce.position.copy(up).multiplyScalar(-600).addScaledVector(sunDir, -200); bounce.color.copy(dustCol).lerp(col2.setRGB(0.7, 0.8, 1), 0.5); bounce.intensity = 0.5 * planetShine;
     head.position.copy(camera.position).normalize().multiplyScalar(500).addScaledVector(cam.right, 260).addScaledVector(cam.up, 220);
     head.intensity = 0.12 + 0.14 * lit + 0.22 * (1 - lit);          // in a planet's shadow the ship must still read
-    if (near.environment) {
+    if (probeOn) {
+      // refresh when what the vessel could reflect has changed: another world, the sun or the horizon turned 2 degrees,
+      // the height changed by a fifth, or twenty seconds went by (terrain and clouds arrive, the day moves on)
+      const now = performance.now();
+      if (!(probe && probe.busy) && (body !== pBody || up.dot(pUp) < PROBE_COS || sunDir.dot(pSun) < PROBE_COS || Math.abs(alt - pAlt) > Math.max(50, 0.2 * Math.abs(pAlt)) || now - pTime > 20000)) {
+        probeDirty = true; pBody = body; pUp.copy(up); pSun.copy(sunDir); pAlt = alt; pTime = now;
+      }
+    } else if (near.environment) {
       near.environmentIntensity = 0.1 + 0.75 * Math.min(1, lum * 1.5) * (0.3 + 0.7 * lit) + 0.25 * planetShine;
       q1.setFromUnitVectors(Y_AXIS, up); near.environmentRotation.copy(e1.setFromQuaternion(q1));
     }
@@ -1106,11 +1134,21 @@ export function createFlightScene(app) {
     info.jolt = clamp(1.6 - fx.object.position.length() / 400, 0, 1.6) * clamp((p.size || 2) / 3, 0.4, 1.5);
   }
 
+  /** One step of the reflection probe's refresh, when one is due (all six faces the first time). */
+  function refreshProbe() {
+    if (!probeOn || !probe || !(probeDirty || probe.busy)) return;
+    try {
+      const changed = probe.update(far, ORIGIN, { force: probeDirty, near: camera.near, far: camera.far }); probeDirty = false;
+      if (changed && near.environment !== probe.texture) applyProbe();
+    } catch (err) { console.warn('[flight] live reflections failed:', err && err.message); setProbe(false); }
+  }
+
   const dbSize = new THREE.Vector2();
   function render(renderer) {
     if (!renderer) return;
     const prevAuto = renderer.autoClear;
     renderer.setScissorTest(false);
+    refreshProbe();
     const usePost = !!post && quality.post;
     if (usePost) {
       renderer.getDrawingBufferSize(dbSize);
@@ -1129,7 +1167,7 @@ export function createFlightScene(app) {
     if (usePost) {
       renderer.setRenderTarget(null);
       renderer.setViewport(0, 0, app.size.w, app.size.h);
-      post.end({ sunUv: info.sunUv, sunVisible: info.sunVisible, dt: lastDt });
+      post.end({ sunUv: info.sunUv, sunVisible: info.sunVisible, dt: lastDt, camera });
     }
     renderer.setRenderTarget(null);
     renderer.autoClear = prevAuto;
@@ -1145,6 +1183,8 @@ export function createFlightScene(app) {
     if (!renderer || typeof renderer.compileAsync !== 'function' || disposed) return Promise.resolve(0);
     const before = renderer.info.programs ? renderer.info.programs.length : 0;
     let work;
+    // (the probe swaps the materials' environment map: do it before the programs are compiled, not while they are)
+    refreshProbe();
     try {
       // programs depend on where they draw to (the HDR target is linear and not tone-mapped; the canvas is neither)
       const usePost = !!post && quality.post;
@@ -1181,6 +1221,8 @@ export function createFlightScene(app) {
     if (pad) pad.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.dispose) o.material.dispose(); });
     if (base) { near.remove(base.group); try { base.dispose(); } catch { /* ignore */ } base = null; }
     if (sunNear.shadow.map) sunNear.shadow.map.dispose();
+    if (probeOn) setProbe(false);
+    if (probe) { probe.dispose(); probe = null; }
     if (env) env.dispose();
     if (post) post.dispose();
   }
@@ -1190,7 +1232,7 @@ export function createFlightScene(app) {
     get smoke() { return smoke; }, get terrain() { return terrain; }, get pad() { return base ? base.group : pad; }, get base() { return base; },
     get fx() { return { smoke, post, quality: qualityName, explosions }; },
     /** true when a software rasteriser was detected (the scene then runs in the reduced 'soft' mode unless settings.gfxForce). */
-    get softGL() { return softGL; }, get qualityName() { return qualityName; },
+    get softGL() { return softGL; }, get envProbe() { return probe; }, get probePending() { return probeOn && !!probe && (probeDirty || probe.busy); }, get qualityName() { return qualityName; },
     /** The automatic quality governor (js/ui/governor.js): level, state { scale, shadow, msaa, bloom }, lock(n | null). */
     get governor() { return gov; },
     /** The world renderer (planetgfx.createWorldRenderer) or null: `worlds.info.busy` tells previews when the terrain is in. */

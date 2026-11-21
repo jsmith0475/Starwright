@@ -107,6 +107,7 @@ export function settingsRows(app, h = settingsControls(app)) {
     row('Vegetation', 'Trees, grass and ground detail at the space centre', seg('gfxVegetation', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']])),
     row('Automatic quality', 'Lowers resolution, then shadows, then effects when frames come slowly', seg('gfxAuto', [[false, 'Off'], [true, 'On']])),
     row('Shadows', 'The sun casts shadows on the vessel and the ground', seg('gfxShadows', [[false, 'Off'], [true, 'On']])),
+    row('Ambient occlusion', 'Soft shade in creases and where things touch the ground (high detail only)', seg('gfxAO', [[false, 'Off'], [true, 'On']])),
     h.slider('gfxBloom', 'Bloom', 'Glow around flames, the sun and hot metal', null, 1.5),
     row('Lens effects', 'Sun flare, soft vignette, film grain', seg('gfxLens', [[false, 'Off'], [true, 'On']])),
     h.slider('gfxShake', 'Camera shake', 'From thrust, air and impacts', null, 1.5),

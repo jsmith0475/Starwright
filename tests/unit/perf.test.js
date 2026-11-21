@@ -192,3 +192,10 @@ test('perf: shader programs count against the frame that compiled them, not when
     assert.equal(perf.summary(3).programs, 4);
   } finally { perf.enable(false); perf.renderer = before; }
 }));
+
+test('governor: ambient occlusion is kept for the first three levels and dropped before shadows', () => {
+  assert.equal(LEVELS.length, 8, 'the level count is part of the contract with tests/e2e/perf.mjs');
+  LEVELS.forEach((l, i) => assert.equal(l.ao, i < 3, 'level ' + i));
+  const firstShadowCut = LEVELS.findIndex(l => l.shadow < 1), firstAoCut = LEVELS.findIndex(l => !l.ao);
+  assert.ok(firstAoCut > 0 && firstAoCut < firstShadowCut, 'occlusion goes before shadows');
+});
