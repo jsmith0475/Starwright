@@ -99,3 +99,26 @@ test('flora: the vegetation level follows the setting, the quality level and the
   for (let i = 0; i < LEVELS.length; i++) { assert.ok(Number.isInteger(LEVELS[i].detail) && LEVELS[i].detail >= 0, 'level ' + i); if (i) assert.ok(LEVELS[i].detail >= LEVELS[i - 1].detail); }
   assert.equal(LEVELS[0].detail, 0);
 });
+
+test('flora: mip levels of the leaf atlas keep the cover of the full picture, cell by cell', async () => {
+  const { coverMips, loadFloraAssets, floraAssets } = await import('../../js/render/floratex.js');
+  // two cells side by side: a fine checker (half covered) and a sparse scatter (about one texel in eight)
+  const W = 128, H = 64, d = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const o = (y * W + x) * 4, on = x < 64 ? (x + y) % 2 === 0 : hash01(x, y) < 0.125;
+    d[o] = on ? 40 : 255; d[o + 1] = on ? 200 : 0; d[o + 2] = on ? 30 : 255; d[o + 3] = on ? 255 : 0;
+  }
+  const cover = (L, x0, x1) => { let n = 0, t = 0; for (let y = 0; y < L.height; y++) for (let x = x0; x < x1; x++, t++) if (L.data[(y * L.width + x) * 4 + 3] > 0.4 * 255) n++; return n / t; };
+  const kept = coverMips(d, W, H, 2, 1, true), plain = coverMips(d, W, H, 2, 1, false);
+  assert.equal(kept.length, 8); assert.equal(kept[0].data, d);
+  assert.deepEqual(kept.map(L => [L.width, L.height]).slice(-2), [[2, 1], [1, 1]]);
+  const L2 = kept[2], P2 = plain[2];
+  assert.equal(cover(P2, 16, 32), 0, 'plain averaging loses the sparse cell altogether');
+  assert.ok(cover(L2, 16, 32) >= 0.1 && cover(L2, 16, 32) < 0.5, 'the sparse cell keeps its cover');
+  assert.ok(cover(L2, 0, 16) > 0.4, 'the half-covered cell keeps its cover');
+  // colour is averaged over covered texels only: no magenta from the transparent ones
+  assert.ok(L2.data[0] < 60 && L2.data[1] > 180 && L2.data[2] < 60);
+  // without a browser there are no scans to load: the promise still resolves and the painted textures are used
+  const a = await loadFloraAssets();
+  assert.equal(a, floraAssets); assert.equal(a.photo, false); assert.equal(a.leaves, null);
+});

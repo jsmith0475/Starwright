@@ -20,7 +20,8 @@
 // tree outside the shadow map's reach, lay a soft blot on the ground instead, stretched away from the sun.
 import * as THREE from '../lib/three.module.min.js';
 import { SPECIES, SPECIES_IDS, buildTree, lodDistances } from './treegen.js';
-import { leafAtlas, barkTextures, blobTexture } from './floratex.js';
+import { leafAtlas, barkTextures, blobTexture, loadFloraAssets, floraAssets } from './floratex.js';
+export { loadFloraAssets, floraAssets };
 
 /** Vegetation detail levels, lowest first. `off` keeps impostors only where a level says so. */
 export const VEG_LEVELS = ['low', 'medium', 'high', 'ultra'];
@@ -35,6 +36,12 @@ export function vegLevel(setting, quality = 'high', drop = 0) {
 }
 
 const LEAF_GAIN = 1.65;        // the painted leaves are dark (they are painted with their own shading); this brings a sunlit crown to the brightness of sunlit turf
+const BARK_GAIN_PHOTO = 0.9;
+// Scanned leaves are photographed lit from the front on a white bed: far brighter and yellower than a leaf's own
+// colour in a crown. These bring each species to its colour in the field (pine and palm cells are still painted).
+const PHOTO_TINT = { oak: [0.52, 0.54, 0.46], maple: [0.74, 0.62, 0.6], birch: [0.6, 0.63, 0.46], spruce: [0.72, 0.8, 0.74], bush: [0.66, 0.62, 0.5], pine: [1.5, 1.45, 1.3], palm: [1.5, 1.5, 1.1] };
+const leafTint = (sp, id, atlas) => (atlas.userData.photo && PHOTO_TINT[id] ? new THREE.Vector3(...PHOTO_TINT[id]) : new THREE.Vector3(...sp.leafTint).multiplyScalar(LEAF_GAIN));
+const barkTint = (sp, bark) => (bark.photo ? new THREE.Vector3(BARK_GAIN_PHOTO, BARK_GAIN_PHOTO, BARK_GAIN_PHOTO) : new THREE.Vector3(...sp.barkTint));
 const IMP = { yaws: 8, rows: 3, els: [0.14, 0.62, 1.13] };       // impostor views: 8 round, at 8°, 35° and 65° above the horizon
 const DITHER = 'fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))';
 
@@ -71,6 +78,9 @@ const TRANSLUCENT_GLSL = /* glsl */`
     vec3 Ls = directionalLights[0].direction, Vv = normalize(vViewPosition);
     float back = pow(clamp(dot(-Vv, Ls), 0.0, 1.0), 3.0), wrap = clamp(dot(normal, Ls) * 0.5 + 0.5, 0.0, 1.0);
     reflectedLight.directDiffuse += directionalLights[0].color * diffuseColor.rgb * RECIPROCAL_PI * thin * (back * 0.8 + 0.1 * wrap) * vec3(1.12, 1.08, 0.5);
+    // the waxy upper side of a leaf glints where it mirrors the sun
+    vec3 Hh = normalize(Ls + Vv); float nl = clamp(dot(normal, Ls), 0.0, 1.0);
+    reflectedLight.directDiffuse += directionalLights[0].color * (sheen * nl * pow(clamp(dot(normal, Hh), 0.0, 1.0), 48.0) * 0.045);
   }
   #endif
   // sunlit leaves are warm and bright, the shaded side takes the cool light of the sky (and never goes dead at dusk)
@@ -88,17 +98,19 @@ function treeGeometry(id, lod, seed) {
 }
 
 /** Materials of one species' mesh levels (colour pass + shadow pass). `fade` is that level's own uniform. */
-function meshMaterials(sp, U, fade, atlas, bark) {
+function meshMaterials(sp, U, fade, atlas, bark, id) {
   const mat = new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide, alphaToCoverage: true });
-  const un = { uTime: U.uTime, uWind: U.uWind, uCamPos: U.uCamPos, uFade: fade, uBark: { value: bark.map }, uBarkN: { value: bark.normalMap }, uLeafTint: { value: new THREE.Vector3(...sp.leafTint).multiplyScalar(LEAF_GAIN) }, uBarkTint: { value: new THREE.Vector3(...sp.barkTint) } };
+  const un = { uTime: U.uTime, uWind: U.uWind, uCamPos: U.uCamPos, uFade: fade, uBark: { value: bark.map }, uBarkN: { value: bark.normalMap }, uLeafTint: { value: leafTint(sp, id, atlas) }, uBarkTint: { value: barkTint(sp, bark) }, uLeafN: { value: atlas.userData.tilt } };
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, un);
     sh.vertexShader = 'attribute vec3 bark; attribute vec3 leaf; uniform float uTime, uWind; uniform vec4 uFade; uniform vec3 uCamPos; varying vec3 vBark, vLeaf; varying vec2 vFadeK;\n' +
       sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + WIND_GLSL + '\n vBark = bark; vLeaf = leaf;');
-    sh.fragmentShader = 'uniform sampler2D uBark, uBarkN; uniform vec3 uLeafTint, uBarkTint; varying vec3 vBark, vLeaf; varying vec2 vFadeK;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform sampler2D uBark, uBarkN, uLeafN; uniform vec3 uLeafTint, uBarkTint; varying vec3 vBark, vLeaf; varying vec2 vFadeK;\n' + sh.fragmentShader
       .replace('#include <map_fragment>', /* glsl */`
         float isBark = step(0.5, vBark.z), thin = (1.0 - isBark) * vLeaf.x;
         vec4 lt = texture2D(map, vMapUv), bt = texture2D(uBark, vBark.xy);
+        vec3 tl = texture2D(uLeafN, vMapUv).xyz;
+        float sheen = (1.0 - isBark) * tl.z * vLeaf.x;
         float la = mix(lt.a, 1.0, isBark);
         la = (la - 0.4) / max(fwidth(la), 0.0001) + 0.5;
         float dn = ${DITHER};
@@ -106,8 +118,14 @@ function meshMaterials(sp, U, fade, atlas, bark) {
         diffuseColor.rgb *= mix(lt.rgb * uLeafTint, bt.rgb * uBarkTint, isBark) * mix(1.0, vLeaf.x, 0.9);
         diffuseColor.a = clamp(la, 0.0, 1.0);`)
       .replace('#include <normal_fragment_begin>', /* glsl */`#include <normal_fragment_begin>
-        if (isBark < 0.5) normal = normalize(vNormal);
-        else {
+        if (isBark < 0.5) {
+          // the crown's own rounded normal, turned a little the way this leaf leans: leaves side by side take the sun differently
+          vec3 q0 = dFdx(-vViewPosition), q1 = dFdy(-vViewPosition), gN = normalize(cross(q0, q1)); vec2 st0 = dFdx(vMapUv), st1 = dFdy(vMapUv);
+          vec3 q1p = cross(q1, gN), q0p = cross(gN, q0), Tt = q1p * st0.x + q0p * st1.x, Bt = q1p * st0.y + q0p * st1.y;
+          float det = max(dot(Tt, Tt), dot(Bt, Bt)), sc = det == 0.0 ? 0.0 : inversesqrt(det);
+          vec2 lean = tl.xy * 2.0 - 1.0;
+          normal = normalize(normalize(vNormal) + (Tt * lean.x + Bt * lean.y) * (sc * 0.9));
+        } else {
           vec3 nt = texture2D(uBarkN, vBark.xy).xyz * 2.0 - 1.0; nt.xy *= 1.4;
           vec3 q0 = dFdx(-vViewPosition), q1 = dFdy(-vViewPosition); vec2 st0 = dFdx(vBark.xy), st1 = dFdy(vBark.xy);
           vec3 q1p = cross(q1, normal), q0p = cross(normal, q0), Tt = q1p * st0.x + q0p * st1.x, Bt = q1p * st0.y + q0p * st1.y;
@@ -162,7 +180,7 @@ function impostorMaterial(U, fade, rtA, rtN, nSpecies) {
         float ial = min(ia.a * 1.25, 1.0), la = (ial - 0.3) / max(fwidth(ial), 0.0001) + 0.5;
         float dn = ${DITHER};
         if (dn >= vFadeK.x || la <= 0.0) discard;
-        float thin = inr.a;
+        float thin = inr.a, sheen = 0.0;
         diffuseColor.rgb *= ia.rgb * ia.rgb;
         diffuseColor.a = clamp(la, 0.0, 1.0);`)
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n normal = normalize(vRot * (inr.xyz * 2.0 - 1.0));')
@@ -236,7 +254,7 @@ export function createTreeSystem({ trees = [], detail = 'high', groundLift = 0.1
     // the impostor frames the whole tree: a sphere round the middle of its bounding box
     const cy = T.height / 2, rad = Math.hypot(T.radius, T.height / 2) * 1.02;
     const lods = geos.map((g, k) => {
-      const { mat, depth } = meshMaterials(sp, U, fades[k], atlas, barks[sp.bark]);
+      const { mat, depth } = meshMaterials(sp, U, fades[k], atlas, barks[sp.bark], id);
       const im = new THREE.InstancedMesh(g, mat, Math.max(1, n)); im.name = `trees:${id}:lod${k}`;
       im.customDepthMaterial = depth; im.castShadow = shadows && id !== 'bush'; if (id === 'bush') noCast(im); im.receiveShadow = true; im.frustumCulled = false; im.count = 0;
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -312,7 +330,7 @@ export function createTreeSystem({ trees = [], detail = 'high', groundLift = 0.1
       renderer.setClearColor(0x010203, 0.5); renderer.state.buffers.depth.setMask(true); renderer.state.buffers.color.setMask(true);
       rt.scissorTest = true;
       for (const S of bySpecies) {
-        const mat = new THREE.ShaderMaterial({ uniforms: { map: { value: atlas }, uBark: { value: barks[S.sp.bark].map }, uLeafTint: { value: new THREE.Vector3(...S.sp.leafTint).multiplyScalar(LEAF_GAIN) }, uBarkTint: { value: new THREE.Vector3(...S.sp.barkTint) }, uMode: { value: mode }, uView: { value: new THREE.Vector3() } }, vertexShader: BAKE_VS, fragmentShader: BAKE_FS, side: THREE.DoubleSide });
+        const mat = new THREE.ShaderMaterial({ uniforms: { map: { value: atlas }, uBark: { value: barks[S.sp.bark].map }, uLeafTint: { value: leafTint(S.sp, S.id, atlas) }, uBarkTint: { value: barkTint(S.sp, barks[S.sp.bark]) }, uMode: { value: mode }, uView: { value: new THREE.Vector3() } }, vertexShader: BAKE_VS, fragmentShader: BAKE_FS, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(S.geos[0], mat); mesh.frustumCulled = false; scene.add(mesh);
         oc.left = oc.bottom = -S.rad; oc.right = oc.top = S.rad; oc.near = 0.1; oc.far = S.rad * 4; oc.updateProjectionMatrix();
         for (let r = 0; r < IMP.rows; r++) for (let y = 0; y < IMP.yaws; y++) {
@@ -438,25 +456,27 @@ export function createGrass({ mask = null, planetRadius = 0, detail = 'high', li
   const shared = { uTime: { value: 0 }, uPR: { value: planetRadius }, uLift: { value: lift }, uMask: { value: mask ? mask.texture : white }, uMaskRect: { value: new THREE.Vector4(rect[0], rect[1], 1 / rect[2], 1 / rect[3]) },
     uRoot: { value: new THREE.Color().fromArray(colors.root || [0.05, 0.095, 0.028]) }, uTip: { value: new THREE.Color().fromArray(colors.tip || [0.13, 0.2, 0.06]) }, uDry: { value: new THREE.Color().fromArray(colors.dry || [0.3, 0.27, 0.11]) } };
   const rings = [];
-  const ring = (name, G, count, geo, seed) => {
+  const ring = (name, G, count, geo, seed, gain = 1) => {
     const ig = new THREE.InstancedBufferGeometry(); ig.index = geo.index; for (const k of Object.keys(geo.attributes)) ig.setAttribute(k, geo.attributes[k]);
     const off = new Float32Array(count * 4); let a = seed >>> 0; const r = () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; };
     for (let i = 0; i < count; i++) { off[i * 4] = r() * G; off[i * 4 + 1] = r() * G; off[i * 4 + 2] = r(); off[i * 4 + 3] = r(); }
     ig.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 4)); ig.instanceCount = count;
-    const un = { ...shared, uGrass: { value: new THREE.Vector4(0, 0, G, G / 2) } };
+    const un = { ...shared, uGrass: { value: new THREE.Vector4(0, 0, G, G / 2) }, uGain: { value: gain } };
     const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, un);
       sh.vertexShader = GRASS_VS_HEAD + sh.vertexShader.replace('#include <begin_vertex>', GRASS_VS);
-      sh.fragmentShader = 'uniform vec3 uRoot, uTip, uDry; varying vec3 vG;\n' + sh.fragmentShader
+      sh.fragmentShader = 'uniform vec3 uRoot, uTip, uDry; uniform float uGain; varying vec3 vG;\n' + sh.fragmentShader
         .replace('#include <map_fragment>', /* glsl */`
-          float thin = vG.x;
-          vec3 gcol = mix(uRoot, mix(uTip, uDry, smoothstep(0.72, 0.98, vG.y - 0.25 * vG.z)), vG.x * (0.75 + 0.25 * vG.x));
-          diffuseColor.rgb *= gcol * (0.85 + 0.3 * vG.y);`)
+          float thin = vG.x, sheen = vG.x * 0.5;
+          vec3 gcol = mix(uRoot, mix(uTip, uDry, smoothstep(0.55, 0.98, vG.y - 0.25 * vG.z)), vG.x * (0.75 + 0.25 * vG.x));
+          // no two tufts the same green: some bluer, some gone yellow, and whole patches lighter or darker
+          gcol *= mix(vec3(0.86, 0.98, 1.06), vec3(1.14, 1.04, 0.8), fract(vG.y * 7.31)) * (0.9 + 0.22 * vG.z);
+          diffuseColor.rgb *= gcol * (0.8 + 0.4 * vG.y) * uGain;`)
         .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n normal = normalize(vNormal);')
         .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + TRANSLUCENT_GLSL);
     };
-    mat.customProgramCacheKey = () => 'sw-grass';
+    mat.customProgramCacheKey = () => 'sw-grass2';
     const mesh = noCast(new THREE.Mesh(ig, mat)); mesh.name = 'grass:' + name; mesh.frustumCulled = false; mesh.receiveShadow = true;
     mesh.onBeforeRender = (renderer, scene, camera) => {
       camera.getWorldPosition(_v); group.updateWorldMatrix(true, false); group.worldToLocal(_v);
@@ -469,8 +489,8 @@ export function createGrass({ mask = null, planetRadius = 0, detail = 'high', li
     rings.push({ mesh, ig, count, G, tris: geo.attributes.position.count / 3 });
   };
   let camY = 0, level = '';
-  ring('near', 36, 32000, tuftGeometry(4, 0.14, 0.4, 0.016, 0.03, 0.3, 5), 11);
-  ring('far', 150, 25600, tuftGeometry(3, 0.3, 0.62, 0.05, 0.09, 0.45, 8), 29);
+  ring('near', 36, 32000, tuftGeometry(6, 0.12, 0.42, 0.007, 0.015, 0.36, 5), 11);
+  ring('far', 150, 25600, tuftGeometry(5, 0.22, 0.5, 0.024, 0.042, 0.75, 8), 29, 1.3);
   const stats = { tufts: 0, triangles: 0 };
   function setDetail(l) {
     if (l === level) return; level = l;
