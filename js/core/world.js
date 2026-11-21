@@ -710,6 +710,7 @@ export class World {
     v.w.set(0, 0, 0);
     v.thrust = 0; v.gForce = 0;
     for (const p of v.parts.values()) { p.thrust = 0; p.level = 0; }
+    if (v.structure) v.structure.rest(1);      // coasting on rails: nothing is loaded, and nothing stays bent
   }
   _leaveRails(v) {
     if (v.orbit) { v.orbit._state(this.ut, v.pos, v.vel); }

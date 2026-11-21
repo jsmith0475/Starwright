@@ -10,6 +10,7 @@ import { partDef, currentPartId, engineThrust, engineIsp, G0 } from './parts.js'
 import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
 import { maneuverBasis } from './trajectory.js';
+import { Structure, STRUCT } from './structure.js';
 
 const TAU = Math.PI * 2;
 
@@ -116,6 +117,7 @@ export const TUNING = {
   JET_ALT_EXP: 0.7,
   LADDER_REACH: 1.6,         // m: how close a Pip must be to grab a ladder
   LADDER_SPEED: 0.9,         // m/s climbing
+  STRUCT_FAIL: true,         // joints break when overloaded (docs/STRUCTURE.md); false = loads are still worked out and shown
 };
 
 export const SAS_MODES = ['hold', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut',
@@ -418,6 +420,7 @@ export class Vessel {
     this._antennas = []; this._ladders = []; this._pts = []; this._ctlAuth = new Vector3();
     this._groundT = 0; this._airT = 99; this._sleepT = 0; this._touched = false; this._gnd = null; this._onWheels = false; this._rollUt = -1e9;
     this._driven = 0; this._impact = 0; this._wake = false;
+    this.structure = null;        // joint loads, flex and failure (js/core/structure.js); null for a one-part vessel
   }
 
   // ------------------------------------------------------------------ construction
@@ -650,6 +653,8 @@ export class Vessel {
       this.controlId = c ? c.id : (list[0] ? list[0].id : null);
     }
     this._buildContacts();
+    if (list.length > 1 && this.type !== 'eva') { if (this.structure) this.structure.build(); else this.structure = new Structure(this); }
+    else this.structure = null;
   }
 
   /**
@@ -1267,6 +1272,47 @@ export class Vessel {
     this.estimateDeltaV();
   }
 
+  /** Joints that gave way this step (structure.js): cut their links; whatever is no longer attached leaves. */
+  _breakJoints(events) {
+    const st = this.structure, broken = st.pending;
+    st.pending = null;
+    if (!broken || this.dead) return;
+    const info = [];
+    for (const j of broken) {
+      const a = this.parts.get(j.a.id), b = this.parts.get(j.b.id);
+      if (!a || !b || !a.links.includes(b.id)) continue;
+      a.links = a.links.filter(x => x !== b.id);
+      b.links = b.links.filter(x => x !== a.id);
+      if (a.dockedTo === b.id) a.dockedTo = null;
+      if (b.dockedTo === a.id) b.dockedTo = null;
+      _a.set(j.px, j.py, j.pz).sub(this.com).applyQuaternion(this.q).add(this.pos);
+      info.push({ a: a.id, b: b.id, kind: j.kind, mode: j.mode, util: j.util, aName: a.def.name, bName: b.def.name, pos: _a.clone() });
+    }
+    if (!info.length) return;
+    const pieces = [], seen = new Set();
+    for (const p of this.parts.values()) {
+      if (seen.has(p.id)) continue;
+      const comp = this._component(p.id, null);
+      for (const id of comp) seen.add(id);
+      pieces.push(comp);
+    }
+    let main = pieces.find(c => c.has(this.controlId));
+    if (!main) main = pieces.find(c => [...c].some(id => this.parts.get(id).def.command)) || pieces[0];
+    const left = [];
+    for (const c of pieces) {
+      if (c === main) continue;
+      const debris = this._splitOff(c);
+      left.push(debris);
+      events.push({ type: 'decouple', vessel: this, debris, part: null });
+    }
+    if (!left.length) { this._rebuild(); this._updateMass(true); }      // still held some other way (a docked ring)
+    for (const i of info) {
+      const debris = left.find(d => d.parts.has(i.a) || d.parts.has(i.b)) || null;
+      events.push({ type: 'structure', vessel: this, debris, joint: { a: i.a, b: i.b, kind: i.kind, aName: i.aName, bName: i.bName }, mode: i.mode, util: i.util, pos: i.pos, body: this.body });
+    }
+    this.estimateDeltaV();
+  }
+
   // ------------------------------------------------------------------ toggles
   setLegs(down) {
     for (const p of this._legs) { p.deployed = !!down; }
@@ -1700,6 +1746,7 @@ export class Vessel {
     const eva = this.type === 'eva';
     const elec = eva ? 1 : this._total('elec');
     if (this._wheel > 0 && elec > 0) { ax = ay = az = this._wheel; }
+    this._auW = ax;             // what makes the control torque (structure.js shares it out to those parts)
     ax += this._gim; az += this._gim;
     // a rover standing on its driven wheels steers with them: reaction wheels and thrusters leave pitch and yaw alone
     const rover = this._onWheels && this._driven > 0;
@@ -1711,6 +1758,7 @@ export class Vessel {
       ax += fx; ay += fy; az += fz;
     }
     const rcsOn = c.rcs && this._rcsThrust > 0 && this._total('mono') > 0;
+    this._auR = rcsOn;
     if (rcsOn) { ax += rover ? 0 : this._rcsAuth.x; ay += this._rcsAuth.y; az += rover ? 0 : this._rcsAuth.z; }
     // fly-by-wire limiter: never command more than MAX_ANG_ACC, however light the vessel is
     const lim = TUNING.MAX_ANG_ACC;
@@ -1792,9 +1840,12 @@ export class Vessel {
       for (let i = 0; i < n && !this.dead && !this.landed; i++) {
         this._stepFlight(h, ut - dt + (i + 1) * h, ev);
         if (this._massDirty && !this.dead) this._updateMass(true);
+        if (this.structure && this.structure.pending) break;
       }
     } else this._stepFlight(dt, ut, ev);
     if (this._massDirty && !this.dead) this._updateMass(true);
+    const st = this.structure;
+    if (st) { if (st.pending && !this.dead) this._breakJoints(ev); else if (this.landed) st.rest(dt); }
   }
 
   _stepFlight(dt, ut, ev) {
@@ -1837,6 +1888,9 @@ export class Vessel {
       }
     }
     const thrFx = Fx, thrFy = Fy, thrFz = Fz;
+    // structural loads: every force below is also booked to the part it acts on (wrench about the centre of mass)
+    const st = this.structure, SW = st ? st.wrench : null;
+    if (st) st.begin();
 
     // --- parachute state machine
     if (this._chutes.length) this._updateChutes(dt, rho, pAtm, speed, alt - this._baseH, ev);
@@ -1862,6 +1916,7 @@ export class Vessel {
         const vx = ux + (w.y * rz - w.z * ry), vy = uy + (w.z * rx - w.x * rz), vz = uz + (w.x * ry - w.y * rx);
         const v2 = vx * vx + vy * vy + vz * vz;
         if (v2 < 1e-6) continue;
+        const Ax0 = Ax, Ay0 = Ay, Az0 = Az, ATx0 = ATx, ATy0 = ATy, ATz0 = ATz;
         const sp = Math.sqrt(v2), qd = 0.5 * rho * v2, qdm = qd * mf;
         let fx = 0, fy = 0, fz = 0;
         if (p._stack) {
@@ -1930,6 +1985,7 @@ export class Vessel {
           Ax += fx; Ay += fy; Az += fz;
           ATx += py * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - py * fx;
         }
+        if (SW) { const k = i * 6; SW[k] = Ax - Ax0; SW[k + 1] = Ay - Ay0; SW[k + 2] = Az - Az0; SW[k + 3] = ATx - ATx0; SW[k + 4] = ATy - ATy0; SW[k + 5] = ATz - ATz0; }
         if (heating) {
           let ex;
           if (p._stack) {
@@ -1952,7 +2008,7 @@ export class Vessel {
       }
       // keep explicit drag stable for flimsy debris: never remove more than half the speed in one step
       const fm = Math.sqrt(Ax * Ax + Ay * Ay + Az * Az);
-      if (fm * dt > 0.5 * m * speed) { const s = 0.5 * m * speed / (fm * dt); Ax *= s; Ay *= s; Az *= s; ATx *= s; ATy *= s; ATz *= s; }
+      if (fm * dt > 0.5 * m * speed) { const s = 0.5 * m * speed / (fm * dt); Ax *= s; Ay *= s; Az *= s; ATx *= s; ATy *= s; ATz *= s; if (SW) for (let k = 0; k < SW.length; k++) SW[k] *= s; }
       Fx += Ax; Fy += Ay; Fz += Az; Tx += ATx; Ty += ATy; Tz += ATz;
     }
     if (heating) { this._hot = true; this.maxTempRatio = maxRatio; }
@@ -1995,6 +2051,14 @@ export class Vessel {
       // a vehicle that drives off has started its mission too (a rover never leaves the ground): 'rollout', not 'liftoff'
       this._rollT = (this._rollT || 0) + dt;
       if (this._rollT > 6) { this.launched = true; this.launchUt = ut; ev.push({ type: 'rollout', vessel: this }); }
+    }
+
+    // --- structure: what every joint carries for the vessel to move as these forces make it move
+    if (st) {
+      st.addLumped(thrFx - (this._thrFx || 0), thrFy - thrust, thrFz - (this._thrFz || 0));
+      const u = st.solve(dt, Fx, Fy, Fz, Tx, Ty, Tz, m, this.inertia, w, TUNING.STRUCT_FAIL);
+      if (u > STRUCT.WARN) { if (!st.warned) { st.warned = true; ev.push({ type: 'stress', vessel: this, util: u }); } }
+      else if (u < STRUCT.WARN_RESET) st.warned = false;
     }
 
     // --- integrate translation: kick-drift-kick with gravity re-evaluated
@@ -2224,6 +2288,7 @@ export class Vessel {
         }
       }
     } else if (this._reliefKey && this._reliefKey.n !== -1) { this._reliefKey.n = -1; for (let i = 0; i < pts.length; i++) pts[i].dh = 0; }
+    const SW = this.structure ? this.structure.wrench : null;      // structural loads: forces are booked to their parts too
     let fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
     let nPen = 0, support = 0, slipping = false, floating = false, wet = 0;
     for (let i = 0; i < list.length; i++) { const p = list[i]; p._tcP = p._tc; p._tc = false; p._wetP = p._wet; p._wet = false; p._hit = 0; p._hitN = -1; }
@@ -2416,7 +2481,7 @@ export class Vessel {
       }
       if (px || py || pz) {
         fx += px; fy += py; fz += pz;
-        tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;
+        tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;        if (SW) { const k = c.p._si * 6, mx = c.ry * pz - c.rz * py, my = c.rz * px - c.rx * pz, mz = c.rx * py - c.ry * px; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += mx; SW[k + 4] += my; SW[k + 5] += mz; }
       }
     }
     // --- landing legs: one spring and damper per leg, a hard stop at the end of the stroke, friction under the foot
@@ -2467,6 +2532,7 @@ export class Vessel {
         }
         fx += px; fy += py; fz += pz;
         tx += ry * pz - rz * py; ty += rz * px - rx * pz; tz += rx * py - ry * px;
+        if (SW) { const k = p._si * 6; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += ry * pz - rz * py; SW[k + 4] += rz * px - rx * pz; SW[k + 5] += rx * py - ry * px; }
       }
       this._legLoad = true;
       this._legsOn = legsOn;
@@ -2487,6 +2553,7 @@ export class Vessel {
         const px = B * upx - kd * c.vx, py = B * upy - kd * c.vy, pz = B * upz - kd * c.vz;
         fx += px; fy += py; fz += pz;
         tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;
+        if (SW) { const k = c.p._si * 6; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += c.ry * pz - c.rz * py; SW[k + 4] += c.rz * px - c.rx * pz; SW[k + 5] += c.rx * py - c.ry * px; }
         floating = true;
         support += B;
       }
@@ -2585,6 +2652,7 @@ export class Vessel {
         const px = N * nx + Flong * dx + Flat * lx, py = N * ny + Flong * dy + Flat * ly, pz = N * nz + Flong * dz + Flat * lz;
         fx += px; fy += py; fz += pz;
         tx += ry * pz - rz * py; ty += rz * px - rx * pz; tz += rx * py - ry * px;
+        if (SW) { const k = p._si * 6; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += ry * pz - rz * py; SW[k + 4] += rz * px - rx * pz; SW[k + 5] += rx * py - ry * px; }
       }
       if (ecUse > 0) this._drain('elec', ecUse * dt);
     }

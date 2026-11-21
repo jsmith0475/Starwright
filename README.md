@@ -300,8 +300,10 @@ what the game does today, and what building it involves.
    **Built.** Each leg is a spring and damper: a lander compresses, settles, bottoms out or
    breaks its legs if you come in too fast, and tips over if you come in crooked.
    [How it works and what was checked.](docs/LANDING_LEGS.md)
-2. **[Structural dynamics.](docs/ROADMAP.md#2-structural-dynamics)** Joints that flex under
-   load, show stress, and break when a rocket is too tall, too thin or flown too hard.
+2. **[Structural dynamics.](docs/ROADMAP.md#2-structural-dynamics)** **Built.** Every joint
+   carries a computed load, bends, and breaks when a rocket is too tall, too thin or flown too
+   hard. The assembly building shows which joint is closest to its limit.
+   [How it works and what was checked.](docs/STRUCTURE.md)
 3. **[Higher-fidelity worlds.](docs/ROADMAP.md#3-higher-fidelity-worlds)** Sharper terrain,
    richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
 4. **[Reusable boosters.](docs/ROADMAP.md#4-reusable-boosters)** Flip, boost back, steer on the

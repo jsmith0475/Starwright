@@ -44,23 +44,29 @@ for, and a landing you walk away from feels earned.
 
 ## 2. Structural dynamics
 
-**What it is.** The joints between parts become real. They flex under load, carry stress you
-can see, and fail when you ask too much: a tall thin rocket wobbles, a heavy payload on a small
-separator sags, and a hard turn at maximum dynamic pressure snaps the stack in two.
+**Status: built.** How it works, what was checked against what, and what is still open are in
+[STRUCTURE.md](STRUCTURE.md).
+
+**What it is.** The joints between parts are real. Each one carries a load the game works out
+every physics step, has a strength set by the size of the parts it joins, bends a little, and
+breaks when it is asked for too much: a long thin stack snaps when it is turned hard at maximum
+dynamic pressure, a heavy payload overloads a small separator, and a side booster tears off a
+clamp that is too small for it. Brace struts now do real work.
 
 **Why it matters.** Structure is half of rocket design. Struts, wide stages and gentle steering
 through max Q only mean something if a rocket can fail without them. It also makes failures
-readable: you watch the joint give way, and you know what to fix.
+readable: the assembly building tells you which joint is closest to its limit and in which
+moment of the flight, and in flight you can watch the load rise before it gives way.
 
-**Today.** Parts are welded into one rigid body. Things break from impact speed and from heat,
-not from bending or tension. Staging and docking already split and join vessels, so the code
-for a vessel coming apart exists.
+**Still open, for anyone who wants it.**
 
-**Building it.** Compute the force and bending moment across each joint from thrust, drag,
-gravity and rotation. Give every joint a strength from the size of the parts it connects. Show
-load in the assembly building and in flight, break joints that exceed their limit, and later
-add visible flex. The hard part is doing it cheaply and stably at 60 frames a second and under
-physics warp.
+- Let the bend feed back into the flight. Today a bent stack is drawn bent but still thrusts
+  straight, so a wobbly rocket is not yet harder to steer.
+- Struts between any two points, placed by hand in the assembly building. Today a brace strut
+  works when its tip reaches another part, which covers side boosters.
+- Loads on a vessel standing on the ground (a rocket on the pad, a lander on a slope).
+- Wings that carry their load along the span, so a hard pull-up can fold one.
+- Per-part materials: a strength and stiffness for each part instead of one for each size.
 
 ## 3. Higher-fidelity worlds
 
