@@ -164,7 +164,9 @@ centre. For a capsule on a short stack the vessel's inertia is up to 9 % too lar
 M-400 tank, Sparrow engine: 10 396 against 9 467 kg·m²); for a large rocket it is under 1 %.
 It has been so since the first version. It means such a craft turns slightly more slowly than
 it should, and that the joint loads, which use the true mass points, do not quite close at the
-root: the leftover moment is up to 3 % of the largest joint load in a tumbling burn.
+root: on that small ship the leftover moment is 3 % of the largest joint load in a tumbling
+burn and a third of it when falling broadside through air (where the loads themselves are
+small: 923 N·m); on Ember Twin it is 0.3 %.
 
 Correcting it is one line, and was tried here. It changes how every landing is flown: with
 the corrected inertia the stock lander of the "Under the Giant" scenario tips over on
