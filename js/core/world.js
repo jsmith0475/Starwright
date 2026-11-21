@@ -196,7 +196,12 @@ export class World {
       // frame by the HUD, and pinning a rover in the first instant of its drive, before its wheels have taken the
       // weight, left it standing for good at 60 frames a second)
       const driving = a._driven > 0 && Math.abs(a.driveInput()) > 0.01;
-      if (a.groundSpeed > 0.3 || driving || !a.pinToGround(this.ut)) { this._limitReason = 'moving on the ground'; return PHYSICS_WARP_MAX; }
+      // Only a vehicle on its wheels is parked from here. Anything else comes to rest by the vessel's own rule
+      // (Vessel._stepFlight: quiet, carried by the ground, its legs done moving, on a footprint and not a knife
+      // edge). This question is asked every frame, and pinning a lander the instant it was slower than 0.3 m/s
+      // froze it at the bottom of its touchdown, legs closed or feet in the ground, or in the middle of a rock
+      // with feet in the air.
+      if (a.groundSpeed > 0.3 || driving || !a._onWheels || !a.pinToGround(this.ut)) { this._limitReason = 'moving on the ground'; return PHYSICS_WARP_MAX; }
       return top;
     }
     const body = a.body;

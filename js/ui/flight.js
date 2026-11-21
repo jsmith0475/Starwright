@@ -85,6 +85,7 @@ export function createFlightScreen(app) {
   let speedMode = 'surface', aboveLine = null, lastVesselId = null;
   let launchSnap = null, resumeSnap = null, quick = null, assist = null, assistKind = '';
   let caAcc = 1, caKey = '', lastTarget = null, targetLostAt = -1;
+  let legToastAt = -1e9, legToastType = '';
   let tickAcc = 0, lostInfo = null, lostCrew = [], shiftHeld = 0, shiftBlocked = false;
   let lastSimDt = 0, lastToast = { text: '', t: 0 };
   let hintAcc = 1, hintCur = null, hintHold = 0;
@@ -176,6 +177,15 @@ export function createFlightScreen(app) {
         break;
       case 'landed':
         if (mine) { app.audio.play('land'); toast('Touchdown at ' + fmt.num(p.speed || 0, 1) + ' m/s', 'good'); if (hud) hud.cheer(5); if (cam) cam.kick(Math.min(1, (p.speed || 0) / 8)); }
+        break;
+      case 'legBottom':
+      case 'legBroke':
+        // one message for the craft, not one a leg
+        if (mine && !(performance.now() - legToastAt < 2500 && legToastType === type)) {
+          legToastAt = performance.now(); legToastType = type;
+          if (type === 'legBroke') toast('Too hard: the landing legs bottomed out and collapsed', 'bad');
+          else { toast('Hard landing: the legs ran out of travel', 'warn'); if (cam) cam.kick(0.8); }
+        }
         break;
       case 'splashed':
         if (mine) { app.audio.play('splash'); toast('Splashdown!', 'good'); if (hud) hud.cheer(5); }

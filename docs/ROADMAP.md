@@ -23,24 +23,24 @@ which one you want, and read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 
 ## 1. Landing legs that work like legs
 
-**What it is.** Each leg becomes its own spring and damper with real travel. A lander compresses
-its legs on touchdown, rebounds a little, rocks, and settles. Come in too fast and a leg
-bottoms out and breaks. Come in sideways or on a slope and the lander can tip over.
+**Status: built.** How it works, what was checked against what, and what is still open are in
+[LANDING_LEGS.md](LANDING_LEGS.md).
+
+**What it is.** Each leg is its own spring and damper with real travel. A lander compresses its
+legs on touchdown, comes back up, and settles. Come in too fast and the legs bottom out; faster
+still and they break. Come in sideways or leaning and the lander can tip over.
 
 **Why it matters.** The last two metres of a landing are the most tense part of the whole
-flight, and right now they end with a click. With real legs, a wide stance and a slow, level
-descent are things you design and fly for, and a landing you walk away from feels earned.
+flight. With real legs, a wide stance and a slow, level descent are things you design and fly
+for, and a landing you walk away from feels earned.
 
-**Today.** A vessel is one rigid body. Ground contact is a single set of stiff, heavily damped
-contact springs for the whole vessel (`GROUND_W` and `GROUND_ZETA` in `js/core/vessel.js`), so
-there is no visible flex and no bounce. Legs deploy and have their own friction, and every part
-has an impact speed it survives. Rover wheels already have per-wheel suspension, which is the
-pattern to follow.
+**Still open, for anyone who wants it.**
 
-**Building it.** Give each leg a contact point with its own stroke, spring rate, damping and
-bottoming-out limit, sized from the mass it carries. Animate the strut in `js/render/` from the
-compression the physics reports. Tune it on low-gravity moons, where bounce lasts longest. Add
-tests that drop landers at known speeds and angles and check sag, rebound and the tipping point.
+- Give each leg part its own fixed spring rate, so legs too small for a craft sag and bottom out
+  under its weight. Today the spring is sized to the craft.
+- Let the foot pad swivel to lie flat on a slope, and let the strut close along its hinge.
+- Make legs unfold at the speed they are drawn unfolding when the craft is already on the ground.
+- A read-out of leg travel used on the last landing.
 
 ## 2. Structural dynamics
 

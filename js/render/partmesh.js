@@ -29,6 +29,7 @@
 //     control    -1..1 control-surface deflection (elevons, rudders, steering vanes, canards, grid fins)
 //     steer      radians, wheel steering angle;  spin: radians, absolute wheel roll angle
 //     compress   suspension compression in units of wheelGeometry().travel (0..1 nominal, up to 3 under load)
+//                for a landing leg: metres the strut has closed (the foot comes up the craft's axis by that much)
 //     light      true/false (or 0..1) switches spotlight lenses on
 //     throttle   also lights ion grids, jet afterburners and aerospikes
 //   nozzleExits(def)                         → [{ x, y, z, r }] every nozzle of a (multi-bell) engine
@@ -309,7 +310,7 @@ function applyAnim(g, def, initial = false) {
   if (s === 'leg' && r.legPivot) {
     const k = smooth(u.deployK || 0), { h, rw } = def, L = def.legs, { px, py, s: sc } = legGeometry(def);
     // stowed: foot tucked at the bottom of the housing; deployed: foot at (spread, -reach)
-    const sx = px + 0.07 * sc, sy = -h / 2 + 0.04 * sc, dx = L.spread, dy = -L.reach + 0.07 * sc;   // the pad's sole, 7 cm under its hinge, is what stands at `reach`
+    const sx = px + 0.07 * sc, sy = -h / 2 + 0.04 * sc, dx = L.spread, dy = -L.reach + 0.07 * sc + k * Math.min(u.compress || 0, L.stroke || 0.3 * L.reach);   // the pad's sole, 7 cm under its hinge, is what stands at `reach`
     const fx = sx + (dx - sx) * k, fy = sy + (dy - sy) * k;
     const vx = fx - px, vy = fy - py, len = Math.hypot(vx, vy), ang = Math.atan2(vx, -vy);
     r.legPivot.rotation.z = ang;

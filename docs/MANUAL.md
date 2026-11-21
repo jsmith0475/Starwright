@@ -70,6 +70,25 @@ Click a part in the catalogue, then click on the rocket to attach it. `X` cycles
 6. In the map, click your orbit near the apoapsis to add a maneuver node, drag the prograde handle
    until the periapsis is above 72 km, then burn at the node. You are in orbit.
 
+## Landing on legs
+
+Press G to let the legs down before you land. Each leg is a spring and a damper with a fixed
+amount of travel, and how fast you touch down decides what happens:
+
+| Touchdown speed | Lander Strut (32 cm of travel) |
+| --- | --- |
+| up to about 4 m/s | A clean landing. |
+| about 5 to 6 m/s | The legs run out of travel. A hard jolt and a warning, nothing breaks. |
+| about 7 m/s and up | The legs collapse. |
+
+The Stilt Heavy Leg has 55 cm of travel and takes 2 to 3 m/s more; the Sprig has 18 cm and less
+margin. Land level and slow across the ground: a lander leaning past the line of its feet, or
+arriving sideways, goes over. A wide stance and a low centre of mass stand steeper.
+
+Once you are standing on the ground with the throttle closed, the attitude hold (T) lets go so
+the craft can settle onto all its feet. Your own stick input still works. The full description
+of the model is in [LANDING_LEGS.md](LANDING_LEGS.md).
+
 ## Targeting, rendezvous and docking
 
 Two stock craft are made for this: **Latch Target** (an uncrewed station core) and **Latch

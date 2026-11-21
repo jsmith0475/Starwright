@@ -156,7 +156,7 @@ const defs = [
     drag: { top: 0.3, bottom: 0.9, side: 0.5 },
     desc: 'Joins medium parts to small ones.' },
   { id: 'legs', name: 'Lander Strut', cat: 'ground', tech: 'landing', cost: 340, mass: 0.05,
-    shape: 'leg', h: 1.2, rw: 0.3, t: 0.2, attach: RADIAL, legs: { reach: 1.1, spread: 0.9 }, tolerance: 14, maxTemp: 1500,
+    shape: 'leg', h: 1.2, rw: 0.3, t: 0.2, attach: RADIAL, legs: { reach: 1.1, spread: 0.9, stroke: 0.32 }, tolerance: 14, maxTemp: 1500,
     desc: 'Folding landing leg. Toggle with G.' },
 
   // ---------- Aero ----------
@@ -629,10 +629,10 @@ const defs = [
 
   // ---------- Ground ----------
   { id: 'leg_sprig', name: 'Sprig Landing Leg', cat: 'ground', tech: 'landing', cost: 190, mass: 0.02,
-    shape: 'leg', variant: 'small', h: 0.7, rw: 0.2, t: 0.14, attach: RADIAL, legs: { reach: 0.6, spread: 0.5 }, tolerance: 12, maxTemp: 1500,
+    shape: 'leg', variant: 'small', h: 0.7, rw: 0.2, t: 0.14, attach: RADIAL, legs: { reach: 0.6, spread: 0.5, stroke: 0.18 }, tolerance: 12, maxTemp: 1500,
     desc: 'A spindly leg for probes and small landers. Toggle with G.' },
   { id: 'leg_stilt', name: 'Stilt Heavy Leg', cat: 'ground', tech: 'heavy', cost: 780, mass: 0.2,
-    shape: 'leg', variant: 'heavy', h: 2.2, rw: 0.5, t: 0.36, attach: RADIAL, legs: { reach: 2.1, spread: 1.7 }, tolerance: 18, maxTemp: 1600,
+    shape: 'leg', variant: 'heavy', h: 2.2, rw: 0.5, t: 0.36, attach: RADIAL, legs: { reach: 2.1, spread: 1.7, stroke: 0.55 }, tolerance: 18, maxTemp: 1600,
     desc: 'A braced leg with a wide footpad for heavy landers. Toggle with G.' },
   { id: 'wheel_scamper', name: 'Scamper Rover Wheel', cat: 'ground', tech: 'ground_ops', cost: 320, mass: 0.04,
     shape: 'wheel', h: 0.7, rw: 0.5, t: 0.6, attach: RADIAL,
