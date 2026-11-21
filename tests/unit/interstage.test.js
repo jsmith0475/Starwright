@@ -109,7 +109,7 @@ test('interstage: staging takes it away with the lower stage, and nothing is lef
   const top = debris.parts.get(dec.id).pos.y + partDef('dec_m').h / 2 + 0.9;
   assert.ok(debris._cp.some(q => q.p.id === dec.id && Math.abs(q.y - top) < 1e-9 && Math.abs(q.r - 0.625) < 1e-9), 'bounding contact at the rim');
   const rim = debris._pts.filter(q => q.p.id === dec.id && Math.abs(q.y - top) < 1e-9);
-  assert.equal(rim.length, 8, 'a ring of contact samples around the rim');
+  assert.equal(rim.length, 16, 'a ring of contact samples around the rim');
   for (const q of rim) near(Math.hypot(q.x - debris.parts.get(dec.id).pos.x, q.z - debris.parts.get(dec.id).pos.z), 0.625, 1e-9);
   // ... and while the stack was whole there was no such extra ring (the engine mount / tank rim is the contact there)
   const whole = Vessel.fromCraft(c);

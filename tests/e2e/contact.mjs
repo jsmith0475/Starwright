@@ -583,7 +583,11 @@ async function worldsSection() {
       const extras = k === 0;
       await E(() => window.__ct.stall(true));
       const placed = await placeSite({ body, dir: site.dir, extras, hulk: HULK });
-      const rest = await ff(extras ? 90 : 60, 'w.vessels.every(x => x.dead || x.landed || (x.grounded && x.groundSpeed < 0.05))');
+      // At rest means pinned. "On the ground and slow" is also true of a lander at the top of a fall: on the steep site
+      // at home it was measured twice on its way over, at 35° and at 63°, in the instant its hull struck the ground.
+      // (Slow and unpinned is still accepted after that wait: debris that rolls downhill for minutes.)
+      const rest = await ff(extras ? 90 : 60, 'w.vessels.every(x => x.dead || x.landed)')
+        || await ff(30, 'w.vessels.every(x => x.dead || x.landed || (x.grounded && x.groundSpeed < 0.05))');
       await ff(1.5);
       if (extras) {
         // a Pip steps out and plants a flag

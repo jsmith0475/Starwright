@@ -315,7 +315,9 @@ function cloneGroups(g) {
   if (g && typeof g === 'object') for (const k in g) if (Array.isArray(g[k])) out[k] = g[k].filter(a => a && a.part !== undefined).map(a => ({ part: a.part, action: a.action || 'toggle' }));
   return out;
 }
-const RING_N = 8;
+// 16 points to a ring: between two of them the true circle is 2 % of its radius further out (8 points: 8 %, and a
+// craft lying on its side on a slope had 5 cm of a 1.25 m hull in the ground before anything touched).
+const RING_N = 16;
 const RING_COS = [], RING_SIN = [];
 for (let i = 0; i < RING_N; i++) { RING_COS.push(Math.cos(i * TAU / RING_N)); RING_SIN.push(Math.sin(i * TAU / RING_N)); }
 
@@ -699,7 +701,7 @@ export class Vessel {
         const rho = Math.max(d.h / (2 * levels.length), 0.12);
         for (const ly of levels) {
           const r = 0.8 * (d.rBottom + (d.rTop - d.rBottom) * ((p.flip ? -ly : ly) / d.h + 0.5));
-          for (let i = 0; i < 4; i++) bp.push({ p, x: p.pos.x + r * RING_COS[i * 2], y: p.pos.y + ly, z: p.pos.z + r * RING_SIN[i * 2], rho, share: 1 / (4 * levels.length) });
+          for (let i = 0; i < 4; i++) bp.push({ p, x: p.pos.x + r * RING_COS[i * RING_N / 4], y: p.pos.y + ly, z: p.pos.z + r * RING_SIN[i * RING_N / 4], rho, share: 1 / (4 * levels.length) });
         }
         const rr = Math.max(d.rTop, d.rBottom);
         p._vol = Math.PI * d.h / 3 * (d.rTop * d.rTop + d.rTop * d.rBottom + d.rBottom * d.rBottom) || Math.PI * rr * rr * d.h;
@@ -729,6 +731,15 @@ export class Vessel {
         if (!((p._covB || 0) > rB + 1e-6)) ring(p.pos.y - h2, rB);
         if (!((p._covT || 0) >= rT - 1e-6)) ring(p.pos.y + h2, rT);
         else if ((p._covB || 0) > rB + 1e-6) add(p.pos.x, p.pos.y, p.pos.z, 0);
+        // A separator is drawn with a collar and bolt heads 4 cm proud of the stack (render/parts/shapes_stack.js
+        // decoupler), and both its rings are hidden in its neighbours: lying on its side it was the deepest thing in the ground.
+        if (d.shape === 'decoupler' && !tub) {
+          ring(p.pos.y, rB + 0.04);
+          // Between two parts of the stack the blow of a fall is theirs, as it was when a ring was eight points and the
+          // separator's seldom reached the ground first: it is the weakest part of any stack (9 m/s), and with sixteen
+          // points every lander that fell over at home snapped in two at it.
+          if (p._hasT && p._hasB) for (let i = pts.length - 1; i >= 0 && pts[i].p === p; i--) pts[i].skin = true;
+        }
         // An interstage truss stands on this part and reaches the height of the engine it wrapped. While that engine
         // is still there its own mount ring (or the tank on it) is the contact; once the stack has split the open
         // rim of the lattice is the first thing to touch the ground.
@@ -780,6 +791,12 @@ export class Vessel {
           const ls = d.h / 1.2, fr = (d.variant === 'heavy' ? 0.26 : 0.2) * ls, ry = fy + 0.025 * ls * (p.flip ? -1 : 1);
           add(fx + p._ox * fr, ry, fz + p._oz * fr, 1); add(fx - p._ox * fr, ry, fz - p._oz * fr, 1);
           add(fx - p._oz * fr, ry, fz + p._ox * fr, 1); add(fx + p._oz * fr, ry, fz - p._ox * fr, 1);
+          // (and the four points between: a square in a round pad leaves 29 % of its radius outside, 6 cm of the pad
+          // of a craft lying on its legs)
+          { const q = fr * Math.SQRT1_2, ax = p._ox, az = p._oz;
+            add(fx + (ax - az) * q, ry, fz + (az + ax) * q, 1); add(fx + (ax + az) * q, ry, fz + (az - ax) * q, 1);
+            add(fx - (ax - az) * q, ry, fz - (az + ax) * q, 1); add(fx - (ax + az) * q, ry, fz - (az - ax) * q, 1); }
+          p._lpN = pts.length - p._lp0;
           for (let i = p._lp0; i < pts.length; i++) pts[i].leg = true;
         } else if (d.legs) { p._comp = 0; p._pen = 0; p._x = 0; }
       }
@@ -2387,7 +2404,7 @@ export class Vessel {
       if (hp < 0 && !c.leg) {
         nPen++;
         const p = c.p;
-        if (!p._tcP && !p._tc) {
+        if (!p._tcP && !p._tc && !c.skin) {
           let hit = Math.sqrt(vx * vx + vy * vy + vz * vz);
           if (rolling) {       // a vehicle rolling on its wheels that brushes the ground scrapes: the sink rate counts in full, the slide for a third
             const vn = vx * nx + vy * ny + vz * nz;
@@ -2444,7 +2461,7 @@ export class Vessel {
       if (!p.deployed || p._lp0 === undefined) continue;
       nLdown++;
       let pen = 0, at = -1;
-      for (let j = p._lp0; j < p._lp0 + 5; j++) { const h = -pts[j].hp; if (h > pen) { pen = h; at = j; } }
+      for (let j = p._lp0, je = p._lp0 + p._lpN; j < je; j++) { const h = -pts[j].hp; if (h > pen) { pen = h; at = j; } }
       const penP = p._pen || 0;
       p._pen = pen; p._at = at;
       if (at < 0) { p._comp = 0; p._x = 0; continue; }
@@ -2598,7 +2615,9 @@ export class Vessel {
         support += N;
         p._load = N;
         legsOn++;
-        sDamp += Math.abs(N - kL * comp);
+        // (what the damper carries. Not N − k x: a leg on its stop, as every leg of a craft lying on its side is,
+        // is held by the stop for good, and such a craft was never at rest: it crept downhill unpinned for ever)
+        sDamp += Math.abs(cL * vs);
         { const u = rx * t1x + ry * t1y + rz * t1z, v = rx * t2x + ry * t2y + rz * t2z; sN++; sU += u; sV += v; sUU += u * u; sVV += v * v; sUV += u * v; }
         let px = N * nx, py = N * ny, pz = N * nz;
         const tvx = c.vx - vn * nx, tvy = c.vy - vn * ny, tvz = c.vz - vn * nz;
