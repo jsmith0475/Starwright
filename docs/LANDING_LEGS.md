@@ -68,6 +68,18 @@ landers:
    the craft dead and was safer than arriving at 12. A leg now takes only what it can take at the
    end of its stroke.
 
+4. *The flight display froze landers.* This is the fault behind the old "legs in the ground"
+   reports, and it was found by landing in a real browser, not by the tests. The flight display
+   asks every frame how far time may be sped up. For a craft touching the ground with less than
+   0.3 m/s of sideways speed that question pinned the craft where it was, as a side effect. A
+   lander was therefore frozen within one frame of touching, wherever its feet happened to be. The
+   question no longer pins anything except a parked vehicle on wheels. The tests now ask it every
+   step, as the display does, so they see what the player sees.
+
+Rules 1 and 2 apply to a craft on its legs. A craft standing on its hull, for example a stage
+landed on its engine bell, is pinned as before and keeps its attitude hold. The bell is a single
+point in this model, and a tall stack balanced on a point would fall over while it waited.
+
 One more rule exists to keep the springs honest: a strut can only be closed by something that
 drove it closed. If you unfold the legs under a craft that is standing on its engine, the feet
 start below the ground. They take up the load at 0.15 m/s and lift the craft onto its legs at
@@ -75,7 +87,7 @@ walking pace. Released as compressed springs they would throw it off a small moo
 
 ## What was checked
 
-`tests/unit/landing_legs.test.js`, 26 tests, run with `npm test`.
+`tests/unit/landing_legs.test.js`, 27 tests, run with `npm test`.
 
 - **Every world with ground** (16 of them, from Verda at 9.6 m/s² to Wend at 0.03): a lander set
   down at 1.5 m/s comes to rest upright, nothing breaks, no foot is in the ground, at least three

@@ -74,7 +74,7 @@ const leanOf = v => new Vector3(0, 1, 0).applyQuaternion(v.q).angleTo(v.pos) * D
  * Put a craft just above the ground (its lowest point `gap` up), legs down, moving at `speed` down and `side` along
  * the ground, leaning by `tilt` (rad, about its X axis: over the line through two of four feet), and let it go.
  */
-function drop(b, dir, craft, { speed = 1, tilt = 0, side = 0, gap = 0.03, sas = true, legs = true, maxT = 200, settle = 0, step = 0.02 } = {}) {
+function drop(b, dir, craft, { speed = 1, tilt = 0, side = 0, gap = 0.03, sas = true, legs = true, maxT = 200, settle = 0, step = 0.02, hud = true } = {}) {
   const w = new World();
   const v = w.launch(craft, { crew: ['Ada'] });
   const up = b.surfaceDirToInertial(dir, w.ut, new Vector3()).normalize();
@@ -95,6 +95,7 @@ function drop(b, dir, craft, { speed = 1, tilt = 0, side = 0, gap = 0.03, sas = 
   let maxComp = 0, meanComp = 0, touched = false, hop = 0, t = 0, maxLean = 0, maxG = 0;
   for (; t < maxT && !v.landed && !v.dead; t += step) {
     w.step(step);
+    if (hud) w.maxWarpIndex();      // the flight screen asks this every frame (it used to pin a lander the moment it was slow)
     const c = Math.max(0, ...v.legParts.map(p => p._comp || 0));
     if (c > maxComp) maxComp = c;
     if (v.legParts.length) meanComp = Math.max(meanComp, v.legParts.reduce((a, p) => a + (p._comp || 0), 0) / v.legParts.length);
@@ -265,6 +266,19 @@ test('a lander is not left frozen on one or two feet: with the attitude hold on,
     assert.ok(down >= 3, `${id}: ${down} of 4 feet on the ground when it is pinned (clearances ${feet.map(h => (h * 100).toFixed(1)).join(', ')} cm)`);
     assert.ok(Math.min(...feet) > -0.015, `${id}: no foot in the ground`);
   }
+});
+
+test('the flight screen does not freeze a lander at the bottom of its touchdown', () => {
+  // World.maxWarpIndex() is asked every frame by the HUD, and pinned the active vessel as soon as it moved slower
+  // than 0.3 m/s over the ground: a lander coming straight down was frozen where it first touched, struts closed
+  // (or, with the old stiff contact, feet in the ground). Every drop in this file asks it each step, as the game does.
+  const b = SYSTEM.byId.pell, s = flatSite(b);
+  const g = b.surfaceG, sag = g / (TUNING.LEG_W * TUNING.LEG_W);
+  const r = drop(b, s.dir, lander(), { speed: 3, hud: true, settle: 2 });
+  assert.ok(r.meanComp > 0.15, `it closed its legs ${(r.meanComp * 100).toFixed(0)} cm on the way in`);
+  const rest = r.v.legParts.reduce((a, p) => a + p._comp, 0) / 4;
+  assert.ok(r.v.landed && Math.abs(rest - sag) < 0.004, `and is pinned once it has come back up to its sag: ${(rest * 100).toFixed(1)} cm (the weight asks ${(sag * 100).toFixed(1)} cm)`);
+  assert.ok(r.t > 2, `not in the first instant (${r.t.toFixed(1)} s)`);
 });
 
 // ---------------------------------------------------------------------------------------------------- tipping

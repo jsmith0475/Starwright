@@ -1731,7 +1731,8 @@ export class Vessel {
       // Standing on its feet (or its hull) with the engines shut down, the attitude hold lets go. Reaction wheels
       // strong enough to turn a lander in space hold it up on one foot where gravity is weak: it then stood, and
       // was pinned, with three feet 10 to 30 cm in the air (Dray, Nym, Wend). The pilot's own stick still works.
-      const standing = this.grounded && this._groundT > TUNING.GROUND_SIT_TIME && !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(c.throttle > 0) && !eva;
+      const standing = this.grounded && this._groundT > TUNING.GROUND_SIT_TIME && !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(c.throttle > 0) && !eva
+        && (this._legsOn > 0 || this._stance > TUNING.STANCE_MIN);      // balanced on an engine bell it keeps its hold
       if (standing) { if (this._groundT > 2) this.sasTarget = null; }      // (a bounce is flown with the hold it came down with)
       else if (c.sas) {
         const w = this.w;
@@ -2058,7 +2059,10 @@ export class Vessel {
       // Where gravity is weak everything is slow: a lander rocking from one pair of feet to the other on a small moon
       // never moves faster than "quiet" at home. Without the scale it was pinned in the middle of a rock, with feet
       // 10 to 30 cm in the air (Pell, Slate, Dray, Nym, Wend). Speeds on a rock go with the square root of gravity.
-      const gs = this._onWheels || this._floating ? 1 : clamp(Math.sqrt(gm / (R2 * R2) / TUNING.SLEEP_G_REF), 0.04, 1);
+      // (All of this is for a craft on its legs. One standing on its hull, an engine bell say, is pinned as it always was:
+      // the bell is one point here, and a tall stack balanced on a point would fall over while it waited.)
+      const onLegs = this._legsOn > 0;
+      const gs = this._onWheels || this._floating || !onLegs ? 1 : clamp(Math.sqrt(gm / (R2 * R2) / TUNING.SLEEP_G_REF), 0.04, 1);
       const calm = this._onWheels ? 0.06 : (this._floating ? 0.12 : TUNING.SLEEP_SPEED * gs);
       if (sp2 < calm && w.length() < TUNING.SLEEP_SPIN * (this._floating ? 0.4 : 1) * gs && !this._slipping && this._supported && !this._legMoving && !this._wantsAwake(thrust, null)) {
         this._sleepT += dt;
@@ -2066,7 +2070,7 @@ export class Vessel {
         // dead level stands on such a line exactly, and nothing in a computer disturbs it; nature would. Once a
         // second it gets the smallest of pushes about that line, and falls onto its other feet as a real one does.
         // (After STANCE_WAIT of this it is pinned anyway: something round that can find no footprint.)
-        const edge = !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(this._stance > TUNING.STANCE_MIN);
+        const edge = onLegs && !this._onWheels && !(this._wheelSpan > 0) && !this._floating && !(this._stance > TUNING.STANCE_MIN);
         if (edge) {
           this._edgeT = (this._edgeT || 0) + dt;
           if (this._edgeT > (this._nudgeT || 0) && this._rockAxis) { this._nudgeT = this._edgeT + 1; w.addScaledVector(this._rockAxis, TUNING.STANCE_NUDGE * Math.sqrt(gs)); }
@@ -2419,7 +2423,7 @@ export class Vessel {
     if (nLt) {
       const Wl = TUNING.LEG_W, kL = m * Wl * Wl / nLdown, cIn = 2 * TUNING.LEG_ZETA * Wl * m / nLdown, cOut = 2 * TUNING.LEG_ZETA_REBOUND * Wl * m / nLdown;
       const invL = 1 / nLt;
-      let sDamp = 0;
+      let sDamp = 0, legsOn = 0;
       for (let i = 0; i < legs.length; i++) {
         const p = legs[i];
         if (!p.deployed || !(p._pen > 0) || p._at < 0) { if (p._comp) p._comp = 0; continue; }
@@ -2447,6 +2451,7 @@ export class Vessel {
         if (N > cap) N = cap;
         support += N;
         p._load = N;
+        legsOn++;
         sDamp += Math.abs(N - kL * comp);
         { const u = rx * t1x + ry * t1y + rz * t1z, v = rx * t2x + ry * t2y + rz * t2z; sN++; sU += u; sV += v; sUU += u * u; sVV += v * v; sUV += u * v; }
         let px = N * nx, py = N * ny, pz = N * nz;
@@ -2464,9 +2469,10 @@ export class Vessel {
         tx += ry * pz - rz * py; ty += rz * px - rx * pz; tz += rx * py - ry * px;
       }
       this._legLoad = true;
+      this._legsOn = legsOn;
       // still creeping up (or down) on its dampers: the springs do not yet carry what the ground does
       this._legMoving = sDamp > 0.03 * m * (gLoc > 3 ? gLoc : 3);      // (3 m/s²: on the smallest moons the slow rocking of a craft at rest is more than 3 % of its weight)
-    } else this._legMoving = false;
+    } else { this._legMoving = false; this._legsOn = 0; }
     // --- buoyancy and water drag
     if (g.water && wet > 0) {
       for (let i = 0; i < bpts.length; i++) {
