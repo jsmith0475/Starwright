@@ -87,7 +87,7 @@ walking pace. Released as compressed springs they would throw it off a small moo
 
 ## What was checked
 
-`tests/unit/landing_legs.test.js`, 27 tests, run with `npm test`.
+`tests/unit/landing_legs.test.js`, 30 tests, run with `npm test`.
 
 - **Every world with ground** (16 of them, from Verda at 9.6 m/s² to Wend at 0.03): a lander set
   down at 1.5 m/s comes to rest upright, nothing breaks, no foot is in the ground, at least three
@@ -139,10 +139,24 @@ slopes on Verda, Pell, Rusk and Sear.
   moment of touching, which was the fault. A hull lying on its side rests on a few rings of contact
   points, and the ground can rise between them.
 
+### A lander that has gone over
+
+The two failures above were followed up. Three things were wrong with a craft lying on its side:
+
+- A ring of the hull was 8 contact points. Between two of them the round hull is 8 % of its radius
+  further out, 5 cm on a 1.25 m stack. It is now 16 points (2 %).
+- A separator is drawn with a collar and bolt heads 4 cm proud of the stack, and had no contact
+  points of its own. A foot pad was a square of four points in a round rim. Both now have theirs.
+- **It never came to rest.** A leg lying sideways is on its stop, and the rule "a craft whose legs
+  are still moving is not pinned" read that as a leg still moving, for ever. The craft crept
+  downhill at about 1 cm/s and was never pinned. The rule now looks only at what the damper carries.
+
+`tests/unit/landing_legs.test.js` lets the contact-suite lander fall over on Verda, Pell and Rusk
+and compares its round outline (96 points to a circle, the separator collar and the pad rims
+included) with the ground: within 2.5 cm, and it comes to rest.
+
 ## What was not checked, and what is left
 
-- **A fallen craft can lie up to 14 cm inside the ground** on a steep slope (above). The hull needs
-  more contact points along its length.
 - **Steep slopes are now hard.** The contact-test lander goes over when dropped on 17 to 20°. That
   is what its stance predicts, but it is a change: before, it was frozen standing.
 

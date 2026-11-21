@@ -355,3 +355,55 @@ test('the struts open again on the way up, and how far they are closed survives 
   assert.ok(v.radarAlt >= 5, 'it lifts off (radar altitude ' + v.radarAlt.toFixed(1) + ' m)');
   assert.ok(v.legParts.every(p => p._comp === 0), 'in the air the struts hang at full length');
 });
+
+// ---------------------------------------------------------------------------------------------------- lying on its side
+/** The contact-suite lander: pod, separator, tank, engine, four struts (tests/e2e/contact.mjs LANDER). */
+function fallenLander() {
+  const c = new Craft('Dustfoot');
+  const pod = c.setRoot('pod_acorn')[0];
+  const dec = c.attachStack('dec_m', pod.id, 'bottom')[0];
+  const tank = c.attachStack('tank_m400', dec.id, 'bottom')[0];
+  c.attachStack('eng_sparrow', tank.id, 'bottom');
+  c.attachRadial('legs', tank.id, tank.pos.y - 1.85, Math.PI / 4, 4);
+  c.autoStage();
+  return c;
+}
+/**
+ * Lowest point of the craft's round outline above the ground, sampled 96 to a circle (the contact model has 16):
+ * both rims of every stack part, the collar of a separator (drawn 4 cm proud) and the rim of every foot pad.
+ */
+function outlineClearance(w, v, b) {
+  let low = Infinity, at = '';
+  const circle = (p, cx, cy, cz, r, name) => {
+    for (let i = 0; i < 96; i++) {
+      const a = i * Math.PI / 48, h = clearance(w, v, b, cx + r * Math.cos(a), cy, cz + r * Math.sin(a));
+      if (h < low) { low = h; at = name; }
+    }
+  };
+  for (const p of v.parts.values()) {
+    const d = p.def;
+    if (p._stack) {
+      circle(p, p.pos.x, p.pos.y - d.h / 2, p.pos.z, p._rB ?? d.rBottom, d.id + ' bottom rim');
+      circle(p, p.pos.x, p.pos.y + d.h / 2, p.pos.z, p._rT ?? d.rTop, d.id + ' top rim');
+      if (d.shape === 'decoupler') circle(p, p.pos.x, p.pos.y, p.pos.z, d.rBottom + 0.04, d.id + ' collar');
+    } else if (d.legs && p.deployed) {
+      const L = d.legs, sg = p.flip ? -1 : 1, ls = d.h / 1.2, fr = (d.variant === 'heavy' ? 0.26 : 0.2) * ls;
+      circle(p, p.pos.x + p._ox * L.spread, p.pos.y - (L.reach - (p._comp || 0) - 0.025 * ls) * sg, p.pos.z + p._oz * L.spread, fr, d.id + ' pad rim');
+    }
+  }
+  return { low, at };
+}
+for (const id of ['verda', 'pell', 'rusk']) {
+  test(`${id}: a lander that has gone over lies on the ground, not in it (round hull, separator collar and foot pads within 2.5 cm)`, () => {
+    const b = SYSTEM.byId[id], s = flatSite(b);
+    for (const tilt of [75, 100]) {
+      const r = drop(b, s.dir, fallenLander(), { speed: 0.5, tilt: tilt / DEG, sas: false, settle: 2, maxT: 600 });
+      const { w, v } = r;
+      assert.ok(v.landed && !v.dead, `${id}, let go at ${tilt}°: it came to rest (${r.t.toFixed(0)} s)`);
+      assert.ok(r.lean > 50, `${id}, let go at ${tilt}°: it lies on its side (lean ${r.lean.toFixed(0)}°)`);
+      const o = outlineClearance(w, v, b);
+      assert.ok(o.low > -(0.025 + s.dev), `${id}, let go at ${tilt}°, lean ${r.lean.toFixed(0)}°: the ${o.at} is ${(-o.low * 100).toFixed(1)} cm inside the ground`);
+      assert.ok(o.low < 0.06 + s.dev, `${id}, let go at ${tilt}°: and it is not floating (${(o.low * 100).toFixed(1)} cm up at the ${o.at})`);
+    }
+  });
+}
