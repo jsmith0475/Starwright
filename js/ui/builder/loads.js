@@ -42,6 +42,7 @@ export function loadWords(j) {
   return pull ? 'pulled apart' : 'pushed together';
 }
 
+const nth = k => k + (k % 100 >= 11 && k % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][k % 10] || 'th');
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
 const CASE_WORDS = { 'ignition': 'at ignition', 'steering': 'under full steering', 'max Q': 'at max Q', 'burn-out': 'at burn-out' };
 /**
@@ -89,7 +90,7 @@ export function jointWhere(craft, j) {
     return pair ? `${nameOf(craft, pair[0].id)} on ${nameOf(craft, pair[1].id)}` : `${nb} on ${na}`;
   }
   if (j.kind === 'dock') return `${nb} docked to ${na}`;
-  if (na === nb) return `${na} to ${nb} joint`;
+  if (na === nb) return `${na} to ${nb}`;
   // a stack joint: the lower part hangs under the upper one (+Y is the nose)
   const aLow = a && b ? a.pos.y < b.pos.y : false;
   return aLow ? `${na} under ${nb}` : `${nb} under ${na}`;
@@ -160,7 +161,7 @@ export function loadReport(craft, result, { top = 5, maxWarnings = 3, nose = 'to
   for (const row of all) { if (row.kind !== 'stack') continue; if (!same.has(row.where)) same.set(row.where, []); same.get(row.where).push(row); }
   for (const list of same.values()) {
     if (list.length < 2) continue;
-    list.slice().sort((p, q) => q.pos.y - p.pos.y).forEach((row, i) => { row.where += i === 0 ? `, the ${nose}most` : `, ${ORDINAL[i] || (i + 1) + 'th'} from the ${nose}`; });
+    list.slice().sort((p, q) => q.pos.y - p.pos.y).forEach((row, i) => { row.where += `, ${nth(i + 1)} from the ${nose}`; });
   }
   for (const row of all) {
     row.text = `${row.where}${row.n > 1 ? ' ×' + row.n : ''}: ${row.words} ${row.when}, ${row.percent}` + (row.braced ? ', braced' : '') + (row.verdict ? ' – ' + row.verdict : '');

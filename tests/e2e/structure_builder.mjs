@@ -1,5 +1,5 @@
 // End-to-end check of the structure report and load overlay of the assembly building (roadmap item 2).
-//   NODE_PATH=/opt/node-tools/node_modules node tests/e2e/structure_builder.mjs [out=<dir>]
+//   NODE_PATH=/opt/node-tools/node_modules node tests/e2e/structure_builder.mjs [quick] [out=<dir>] [hangar-shot=<file.png>]
 // Opens the building with a stock rocket (sane percentage, overlay on and off), then with a deliberately weak
 // design (a heavy capsule on a long thin stack: the report goes red, names the joint, a warning appears).
 // Screenshots: builder-structure-*.png in tests/out (or out=<dir>).
@@ -135,6 +135,7 @@ try {
   await B(() => { const b = [...document.querySelectorAll('.sw-modal .sw-btn')].find(n => /Keep building/.test(n.textContent)); if (b) b.click(); });
   await frames(3);
 
+  if (process.argv.includes('quick')) throw { quick: true };      // (the report, the overlay and the screenshots only)
   // ---------------------------------------------------------------- edits: never while a part is in the hand; empty designs
   console.log('editing');
   const before = await state();
@@ -175,11 +176,12 @@ try {
     const h = await state(), hl = await line();
     ok(!h.empty && h.count === plane.parts.length - 1 && /^\d+ %$/.test(hl.pct), `the hangar reports on a plane too (${hl.pct}, “${h.worst.text}”)`);
     ok(h.overlay.on && h.overlay.visible && h.overlay.rings === h.count, 'and the overlay stays on from one building to the next');
-    if (process.argv.includes('hangar-shot')) await shot('hangar');
+    const hs = (process.argv.find(a => a.startsWith('hangar-shot=')) || '').slice(12);       // an extra screenshot for review
+    if (hs) { await B(() => { const b = window.__sw.app.builder; b.setCamera({ dist: b.camera.dist * 0.75 }); }); await settle(); await page.waitForTimeout(300); await page.screenshot({ path: hs, timeout: 240000 }); }
   }
   console.log(`  (last analysis took ${s.ms.toFixed(1)} ms; ${s.runs} analyses in this session)`);
 } catch (err) {
-  problems.push('script error: ' + (err.stack || err.message));
+  if (!err || !err.quick) problems.push('script error: ' + (err.stack || err.message));
 } finally {
   await browser.close();
   await server.close();

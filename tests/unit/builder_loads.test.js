@@ -83,7 +83,7 @@ test('a joint is named by its two parts: the lower one hangs under the upper one
   assert.equal(jointWhere(c, J({ a: pod.id, b: dec.id })), 'Stack Separator S under Hearth Command Module');
   assert.equal(jointWhere(c, J({ a: dec.id, b: pod.id })), 'Stack Separator S under Hearth Command Module', 'whichever side is the root');
   assert.equal(jointWhere(c, J({ a: t2.id, b: eng.id })), 'Wren Booster Engine under Flask S-200');
-  assert.equal(jointWhere(c, J({ a: t1.id, b: t2.id })), 'Flask S-200 to Flask S-200 joint');
+  assert.equal(jointWhere(c, J({ a: t1.id, b: t2.id })), 'Flask S-200 to Flask S-200');
   assert.equal(jointWhere(c, J({ a: pod.id, b: 999 })), 'part #999 under Hearth Command Module', 'a part that is gone does not throw');
   const b = boosted();
   assert.equal(jointWhere(b.c, J({ kind: 'radial', a: b.tank.id, b: b.clamps[0].id })), 'Radial Release Clamp on Canister M-800');
@@ -152,8 +152,8 @@ test('report of a synthetic result: order, top five, folding of symmetric copies
   assert.equal(loadReport(c, many).breaking, 3); assert.equal(rep.breaking, 1);
   // a run of identical joints is told apart by counting from the nose
   const run = loadReport(c, { cases: result.cases, joints: [J({ a: id(3), b: id(4), util: 0.3, pos: { x: 0, y: -5, z: 0 } }), J({ a: id(2), b: id(3), util: 0.2, pos: { x: 0, y: -3, z: 0 } }), J({ a: id(4), b: id(5), util: 0.6, pos: { x: 0, y: -7, z: 0 } })] });
-  assert.deepEqual(run.rows.map(r => r.where), ['Flask S-200 to Flask S-200 joint, third from the top', 'Flask S-200 to Flask S-200 joint, second from the top', 'Flask S-200 to Flask S-200 joint, the topmost']);
-  assert.match(loadReport(c, { cases: [], joints: [J({ a: id(3), b: id(4), pos: { x: 0, y: -5, z: 0 } }), J({ a: id(2), b: id(3), util: 0.2 })] }, { nose: 'nose' }).rows[0].where, /second from the nose$/);
+  assert.deepEqual(run.rows.map(r => r.where), ['Flask S-200 to Flask S-200, 3rd from the top', 'Flask S-200 to Flask S-200, 2nd from the top', 'Flask S-200 to Flask S-200, 1st from the top']);
+  assert.match(loadReport(c, { cases: [], joints: [J({ a: id(3), b: id(4), pos: { x: 0, y: -5, z: 0 } }), J({ a: id(2), b: id(3), util: 0.2 })] }, { nose: 'nose' }).rows[0].where, /^Flask S-200 to Flask S-200, 2nd from the nose$/);
 
   // symmetric copies share a row
   const b = boosted();

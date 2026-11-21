@@ -58,7 +58,8 @@ on vessels that can use them. Messages at the top of the screen queue up: two sh
 ### Assembly Hangar
 Click a part in the catalogue, then click on the rocket to attach it. `X` cycles symmetry
 (Shift+X backwards), `Delete` removes the part under the mouse, `Esc` drops the held part,
-`Cmd+Z` / `Shift+Cmd+Z` undo and redo.
+`Cmd+Z` / `Shift+Cmd+Z` undo and redo. `L` shows the load on every joint; the Structure line at
+the bottom names the joint that works hardest, and a click on it lists the five most loaded.
 
 ## A first flight
 

@@ -464,7 +464,8 @@ export function createBuilderScreen(app) {
   function setLoadFocus(row, { pin = false, force = false } = {}) {
     if (!row) {
       if (loads.pinned && !force && !pin) return;
-      loads.focus = null; loads.pinned = false; highlightIds = null;
+      if (loads.focus) highlightIds = null;            // (only our own highlight: the staging chips have theirs)
+      loads.focus = null; loads.pinned = false;
       if (loadFx) loadFx.focus(null);
       return;
     }

@@ -9,7 +9,7 @@ import { Vector3, Quaternion } from '../lib/three.module.min.js';
 import { Vessel, TUNING } from './vessel.js';
 import { STRUCT } from './structure.js';
 import { SYSTEM } from './bodies.js';
-import { G0 } from './parts.js';
+import { G0, PARTS } from './parts.js';
 
 /** Reference conditions of the cases. */
 export const LOADCASE = {
@@ -144,7 +144,7 @@ export function analyzeCraft(craft, { body = SYSTEM.home } = {}) {
   for (const r of out.joints) if (r.util < 0) r.util = 0;
   out.joints.sort((p, q) => q.util - p.util);
   out.worst = out.joints[0] || null;
-  const name = id => { const p = craft.getPart ? craft.getPart(id) : craft.parts.find(x => x.id === id); return p ? (p.def ? p.def.name : p.type) : '#' + id; };
+  const name = id => { const p = craft.getPart ? craft.getPart(id) : craft.parts.find(x => x.id === id); return p ? (p.def ? p.def.name : (PARTS[p.type] ? PARTS[p.type].name : p.type)) : '#' + id; };
   for (const r of out.joints) {
     if (r.util >= 1) out.warnings.push(`The joint between ${name(r.a)} and ${name(r.b)} will break (${Math.round(r.util * 100)} % of its strength, ${r.case}, ${r.mode}).`);
     else if (r.util >= STRUCT.WARN) out.warnings.push(`The joint between ${name(r.a)} and ${name(r.b)} is close to its limit (${Math.round(r.util * 100)} %, ${r.case}, ${r.mode}).`);

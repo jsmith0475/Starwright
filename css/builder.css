@@ -252,7 +252,7 @@
 .bld-struct-more svg { width: 13px; height: 13px; transition: transform 0.15s; }
 .bld-struct.open .bld-struct-more svg { transform: rotate(180deg); }
 /* (narrow and to the left: the craft in the middle of the hall stays in view while a row points at a joint) */
-.bld-loads { right: auto; width: min(440px, calc(100% - var(--bl) - var(--br) - 4 * var(--gap))); max-height: 60%; }
+.bld-loads { right: auto; width: min(480px, calc(100% - var(--bl) - var(--br) - 4 * var(--gap))); max-height: 60%; }
 .bld-loads .bld-report-head { gap: 6px; }
 .bld-loads-switch { height: 22px !important; padding: 0 8px !important; font-size: 11px !important; gap: 5px; }
 .bld-loads-switch svg { width: 13px; height: 13px; }

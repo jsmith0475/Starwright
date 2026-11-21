@@ -428,7 +428,7 @@ export function createPanels(ed) {
     dom.loadsPanel.classList.toggle('stale', !!ed.loadsStale);
     if (!rep || rep.empty) { dom.loadsBody.appendChild(el('div', { class: 'sw-empty', text: 'No joints to report on yet.' })); return; }
     const rows = rep.rows.map(r => {
-      const row = el('button', { class: 'bld-ld-row ' + r.level + (ed.loadFocus === r ? ' pinned' : ''), attrs: { type: 'button', 'data-level': r.level, 'aria-label': r.text },
+      const row = el('button', { class: 'bld-ld-row ' + r.level + (ed.loadFocus === r ? ' pinned' : ''), attrs: { type: 'button', 'data-level': r.level, 'aria-label': r.text }, tip: r.text,
         on: { mouseenter: focusOn.enter(r), mouseleave: focusOn.leave,
           click: () => { ed.setLoadFocus(r, { pin: true }); rows.forEach((n, i) => n.classList.toggle('pinned', ed.loadFocus === rep.rows[i])); } } },
         loadBar(r), el('b', { class: 'bld-struct-pct', text: r.percent }),
@@ -438,7 +438,7 @@ export function createPanels(ed) {
       return row;
     });
     dom.loadsBody.append(...rows);
-    dom.loadsBody.appendChild(el('p', { class: 'bld-report-note', text: `Each joint at the worst moment of a reference climb from ${SYSTEM.home.name}: lift-off, full steering, 8° to the airflow at max Q, burn-out, and the same after every staging. At 100 % a joint is at its strength; above that it breaks. Hover a row to see the joint, click to look at it.` }));
+    dom.loadsBody.appendChild(el('p', { class: 'bld-report-note', text: `Each joint at the worst moment of a reference climb from ${SYSTEM.home.name}: lift-off, full steering, a hard turn at 15° to the airflow at max Q, burn-out, and the same after every staging. At 100 % a joint is at its strength; above that it breaks. Hover a row to see the joint, click to look at it.` }));
   }
   function toggleLoadsList(on = !loadsOpen) {
     if (on && (!ed.loads || ed.loads.empty)) on = false;
