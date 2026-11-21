@@ -32,6 +32,7 @@ The key names are for a Mac keyboard. On Windows and Linux, `Cmd` is `Ctrl`.
 | . / , | Time warp faster / slower |
 | / | Stop time warp |
 | V | Camera mode |
+| ; | Stress overlay: a coloured band at every joint of the vessel (see *Structure* below) |
 | C | Speed readout: surface / orbit / relative to the target (when one is set) |
 | Y | Target the nearest vessel; press again for the next one |
 | Shift+Y | Clear the target |
@@ -69,6 +70,46 @@ Click a part in the catalogue, then click on the rocket to attach it. `X` cycles
    apoapsis is about 80 km, then cut with `X`.
 6. In the map, click your orbit near the apoapsis to add a maneuver node, drag the prograde handle
    until the periapsis is above 72 km, then burn at the node. You are in orbit.
+
+## Structure: what holds a rocket together
+
+A rocket is parts joined end to end and side to side, and every joint has a limit. The game works out, all
+the time, how hard each joint is being pushed, pulled, bent and sheared. A joint that is asked for more
+than it can take for longer than an instant breaks, and the rocket comes apart there.
+
+**The Structure read-out** sits under the Δv line of the Resources panel (top right). It shows the load
+on the most strained joint as a share of what that joint can take, with a small bar: **teal** below
+50 %, **amber** from 50 %, **red** from 90 %. At 100 % the joint is at its limit. On the ground and at
+high time warp there is nothing to measure, and it reads `--`. Hover over it (it opens by itself from
+amber up) to see which joint it is and what is loading it, for example
+"Stack Separator M / Taper Adapter L-M: bending, 82 %". The hull groans and the read-out flashes amber
+when a joint passes 75 %.
+
+**The stress overlay** (the `;` key, or a click on the read-out) puts a band around every joint of the
+vessel, in the same three colours, so you can see where the load is. Grey bands mean "no reading".
+
+What breaks a rocket:
+
+- **Hard turns in thick air.** Flying sideways into the airstream at high speed bends the whole stack.
+  The worst moment is around maximum dynamic pressure (the "Q" figure beside the altimeter, highest
+  some way into the climb). Letting go of SAS and pulling hard there can snap a rocket in two.
+- **Thin joints under heavy loads.** A joint is as strong as the smaller of the two parts it joins. A
+  heavy upper stage on a narrow adapter or a small separator is a weak neck.
+- **Long thin stacks.** The longer and thinner the rocket, the more it bends for the same sideways push.
+- Separators, Latch Rings and side mounts are weaker than a plain tank-to-tank joint.
+
+What helps:
+
+- **Steer gently through the dense air.** Tip over early and a little at a time, then follow the
+  prograde marker until the air thins out. Throttling back around maximum Q lowers the loads too.
+- **Wider parts** at the joints that carry the most, and **shorter stacks**: put fuel in side boosters
+  instead of making the core taller.
+- **Brace Struts.** A Brace Strut whose tip reaches another part shares the load of the joints between
+  the two. Run them from the core to the side boosters.
+- The Assembly Hangar checks the design for the usual load cases before you fly.
+
+If you would rather not lose rockets this way, switch **Structural failures** off in Settings (Esc →
+Settings in flight). The loads are still measured and shown; nothing breaks.
 
 ## Landing on legs
 

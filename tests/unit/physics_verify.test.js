@@ -21,6 +21,7 @@ for (const [title, only, skip] of [
   ['burns: rocket equation, mass flow, thrust, staging, delta-v readout, maneuver nodes', ['2'], null],
   ['multi-body: ephemeris, SOI continuity, map prediction, Pell transfer, flyby, rendezvous, rotation', ['3'], ['3c']],
   ['atmosphere and surface: density, drag, heating, gravity, ballistic hops', ['4'], null],
+  ['structure: joint loads against an independent multibody solver, closed forms, thin-ring strength, live closure, failure', ['7'], null],
 ]) {
   test(`physics verification, ${title}`, async () => {
     const S = await runAll({ fast: true, only, skip });

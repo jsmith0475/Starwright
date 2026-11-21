@@ -19,7 +19,8 @@
 //   hud.showCenter({title, text, calm, buttons:[{label, kind, onClick}]}) / hud.hideCenter()
 //   hud.togglePanel('crew'|'science'|'target'|'dock'|'fuel'|'groups'|'guide'), hud.closePanels(), hud.refreshPanels()
 //   hud.values  → last displayed numbers (for tests)       hud.insets() → space the HUD takes at each edge (for the map)
-import { el, clear, fmt, uiScale } from './dom.js';
+import { el, clear, fmt, uiScale, tooltip } from './dom.js';
+import { stressLevel, stressPercent, describeJoint } from './stress.js';
 import { SYSTEM } from '../core/bodies.js';
 import { EXPERIMENTS, SITUATION_NAMES, situationOf, programProgress } from '../core/career.js';
 import { objectiveProgress, VERDA_DAY } from '../core/contracts.js';
@@ -373,6 +374,16 @@ export function createHud(app, act) {
     el('span', { class: 'sw-label', text: 'Resources' }), el('span', { class: 'caret', text: '▾' }));
   const resBox = el('div', { class: 'fl-inst fl-res' + (store('resFolded') === '1' ? ' folded' : ''), data: { hud: 'resources' } }, resHead, resBody,
     el('div', { class: 'fl-dv', tip: 'Δv the engines can still deliver in vacuum (rocket equation, all stages). The push of separators (about 1 m/s per staging) is not counted.' }, el('span', { class: 'sw-label', text: 'Δv' }), nDvStage, nDv));
+  // structure: the load on the most strained joint as a share of what it can take (vessel.structure, docs/STRUCTURE.md).
+  // Teal below 50 %, amber from 50 %, red from 90 %; "--" while there is nothing to read (on the ground, on rails).
+  // The line under it names the joint and the cause; it opens on hover, with the stress overlay, and from amber up.
+  const stFill = el('i'), nStPct = el('span', { class: 'amt', text: '--' }), nStWhy = el('div', { class: 'fl-struct-why' });
+  const structBox = el('button', { class: 'fl-struct', attrs: { type: 'button', 'data-hud': 'structure', 'data-action': 'stress-overlay', 'aria-label': 'Structure: load on the most strained joint' }, on: { click: blurClick(() => act.toggleStress()) } },
+    el('div', { class: 'fl-res-row' }, el('span', { class: 'nm', text: 'Structure' }), el('div', { class: 'sw-bar' }, stFill), nStPct), nStWhy);
+  tooltip(structBox, () => 'Structure: the load on the most strained joint, as a share of what it can take. ' + (stWhy ? stWhy + '. ' : '') + 'Click (or press ' + (act.keyLabel ? act.keyLabel('stress') : ';') + ') to mark every joint on the vessel.');
+  let stShown = 0, stPct = -1, stWhy = '', stFlash = 0, stStamp = -1, stWhyPct = -1;
+  setCls(structBox, 'sw-hidden', true); setCls(structBox, 'idle', true);
+  resBox.appendChild(structBox);
 
   const tool = (key, label, kbd, tip, fn, cls = '') => {
     const b = el('button', { class: 'fl-tool ' + cls, tip: label + (kbd ? '  [' + kbd + ']' : '') + (tip ? ' — ' + tip : ''), attrs: { type: 'button', 'data-tool': key, 'aria-label': label }, on: { click: blurClick(fn) } });
@@ -1011,6 +1022,29 @@ export function createHud(app, act) {
     setH(gFill, g / 9);
     if (gMark._b !== Math.round(clamp01(g / 9) * 200)) { gMark._b = Math.round(clamp01(g / 9) * 200); gMark.style.bottom = (gMark._b / 2) + '%'; }
     values.g = g;
+    // ---- structure read-out
+    {
+      const st = v.structure || null, live = !!st && st.valid;
+      setCls(structBox, 'sw-hidden', !st); setCls(structBox, 'idle', !live);
+      if (live) {
+        // rises at once, falls back over a moment: a one-frame spike stays readable
+        if (stStamp !== v.structureStamp) { stStamp = v.structureStamp; stShown = 0; }      // other joints now (staging, a break): start again
+        const u = st.maxUtil; stShown = u > stShown ? u : Math.max(u, stShown - dt * 2.5);
+        const pct = stressPercent(stShown);
+        if (pct !== stPct) { stPct = pct; setText(nStPct, pct + '%'); }
+        setW(stFill, stShown);
+        const lvl = stressLevel(stShown);
+        setCls(structBox, 'warn', lvl === 'warn'); setCls(structBox, 'bad', lvl === 'bad');
+        if (tick || pct !== stWhyPct) { stWhyPct = pct; stWhy = describeJoint(st.worst, stShown); setText(nStWhy, stWhy); }
+        values.structure = stShown;
+      } else if (stPct !== -1 || tick) {
+        stShown = 0; stPct = -1; setText(nStPct, '--'); setW(stFill, 0); setCls(structBox, 'warn', false); setCls(structBox, 'bad', false);
+        stWhy = ''; if (st) setText(nStWhy, v.landed ? 'No load to read on the ground' : 'No reading at this time warp');
+        values.structure = null;
+      }
+      values.structureText = stWhy;
+      if (stFlash > 0) { stFlash -= dt; if (stFlash <= 0) setCls(structBox, 'flash', false); }
+    }
     if (tick) {
       const q = v.dynamicPressure || 0;
       // static pressure in atmospheres, plus the dynamic pressure ("Q") while it matters
@@ -1068,6 +1102,7 @@ export function createHud(app, act) {
       if (state.fine) list.push(['info', 'Fine controls']);
       if (v.dynamicPressure > 30000) list.push(['', 'High air pressure']);
       if (v.isHot && v.maxTempRatio > 0.85) list.push(['bad', 'Overheating']); else if (v.isHot && v.maxTempRatio > 0.6) list.push(['', 'Heating']);
+      if (v.structure && v.structure.valid && stShown >= 0.75) list.push(stShown >= 0.9 ? ['bad', 'Structure at its limit'] : ['', 'Structure straining']);
       if (v.type !== 'eva' && !v.controllable) list.push(['bad', 'No control']);
       const el2 = v.resources && v.resources.elec;
       if (v.type !== 'eva' && el2 && el2.max > 0 && el2.amount / el2.max < 0.08) list.push([el2.amount <= 0.01 ? 'bad' : '', el2.amount <= 0.01 ? 'Out of charge' : 'Low charge']);
@@ -1172,6 +1207,11 @@ export function createHud(app, act) {
     setMapOpen(on) { root.classList.toggle('map-open', !!on); ballRectCache = null; },
     setHidden(on) { hiddenNow = !!on; root.classList.toggle('hud-off', hiddenNow); ballRectCache = null; },
     get hidden() { return hiddenNow; },
+    /** The structure read-out flashes amber (the `stress` world event: a joint has passed its warning level). */
+    flashStress(seconds = 1.6) { stFlash = seconds; structBox.classList.remove('flash'); void structBox.offsetWidth; structBox._cflash = true; structBox.classList.add('flash'); },
+    /** The read-out shows whether the stress overlay is on (and keeps its detail line open while it is). */
+    setStressOverlay(on) { setCls(structBox, 'on', !!on); },
+    get structNode() { return structBox; },
     /** A moment of joy on the portraits (liftoff, orbit, touchdown). */
     cheer(seconds = 4) { joyUntil = clock + seconds; },
     /** spec = null | { id, items: [[keyLabel|null, text], …] }  — one chip per item, key caps first. */

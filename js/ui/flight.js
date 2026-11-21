@@ -26,6 +26,7 @@ import { engineKind } from '../render/fx.js';
 import { createFlightCamera, MODE_LABEL } from './flightcam.js';
 import { createNavball } from './navball.js';
 import { createHud, injectFlightCss } from './hud.js';
+import { stressCause, breakMessage } from './stress.js';
 
 const QUICK_KEY = 'starwright.quicksave.v1';
 // a scenario game (js/core/scenarios.js) keeps its quicksave apart from the player's own program
@@ -57,6 +58,7 @@ export const DEFAULT_KEYS = {
   screenshot: 'F1', hideHud: 'F2', quicksave: 'F5', quickload: 'F9',
   rcsForward: 'KeyH', rcsBack: 'KeyN', rcsUp: 'KeyI', rcsDown: 'KeyK', rcsLeft: 'KeyJ', rcsRight: 'KeyL',
   board: 'KeyF', flag: 'KeyP',
+  stress: 'Semicolon',
 };
 const KEY_HELP = [
   ['Flying', [['pitchDown', 'Pitch down (wheels: drive forward)'], ['pitchUp', 'Pitch up (wheels: reverse)'], ['yawLeft', 'Yaw left (wheels: steer)'], ['yawRight', 'Yaw right (wheels: steer)'], ['rollLeft', 'Roll left'], ['rollRight', 'Roll right'],
@@ -65,7 +67,7 @@ const KEY_HELP = [
   ['RCS translation', [['rcsForward', 'Forward'], ['rcsBack', 'Back'], ['rcsUp', 'Up'], ['rcsDown', 'Down'], ['rcsLeft', 'Left'], ['rcsRight', 'Right']]],
   ['Navigation', [['map', 'Orbital map'], ['missions', 'Missions: program and contracts'], ['speedMode', 'Speed read-out: surface / orbit / target'], ['target', 'Next target (with Shift: clear)'], ['nextVessel', 'Next vessel'], ['prevVessel', 'Previous vessel']]],
   ['Time', [['warpUp', 'Warp faster'], ['warpDown', 'Warp slower'], ['warpStop', 'Stop warp'], [null, 'Physics warp (engines may run)', ['Alt', '.']], ['quicksave', 'Quicksave (or Shift+K)'], ['quickload', 'Load quicksave (or Shift+L)']]],
-  ['View', [['camera', 'Camera: orbital / chase / free / locked'], ['hideHud', 'Hide the instruments'], ['screenshot', 'Save a screenshot'], [null, 'Orbit the camera', ['Right-drag']], [null, 'Zoom', ['Wheel']], [null, 'Pause menu', ['Esc']]]],
+  ['View', [['camera', 'Camera: orbital / chase / free / locked'], ['stress', 'Stress overlay: mark the load on every joint'], ['hideHud', 'Hide the instruments'], ['screenshot', 'Save a screenshot'], [null, 'Orbit the camera', ['Right-drag']], [null, 'Zoom', ['Wheel']], [null, 'Pause menu', ['Esc']]]],
   ['On a spacewalk', [[null, 'Walk / fly', ['W', 'A', 'S', 'D']], [null, 'Jump, or jetpack up', ['Space']], [null, 'Jetpack up / down', ['Shift', 'Ctrl']], ['rcs', 'Jetpack on / off'], ['board', 'Grab a hatch and board'], ['flag', 'Plant a flag']]],
 ];
 const KEY_LABEL = { Space: 'Space', Period: '.', Comma: ',', Slash: '/', BracketLeft: '[', BracketRight: ']', Backspace: '⌫', Backquote: '`', Minus: '−', Equal: '=', Semicolon: ';', Quote: "'", Backslash: '\\', Enter: 'Return', Tab: 'Tab', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
@@ -92,6 +94,11 @@ export function createFlightScreen(app) {
   let fine = false, brakeHeld = false, brakeLock = false, warnAcc = 0, lastSit = '', beepAcc = 0;
   const hintGone = new Set();   // hint ids the player closed during this flight
   let controlled = null;      // the vessel the player was flying most recently
+  // structure: the overlay switch (kept from flight to flight), and what was loading each strained joint when it was
+  // last looked at (part id pair → cause), so that the message for a break can say why
+  let stressOn = false, sepUt = -1;
+  const strain = new Map();
+  const strainKey = (a, b) => a * 1048576 + b;
   const state = { speedMode: 'surface', paused: false, assist: null, assistKind: '', mapOpen: false, heading: 0, pitch: 90, approach: null, fine: false, danger: 0, rumble: 0, buffet: 0, roll: 0 };
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion();
   const markerDirs = { prograde: new THREE.Vector3(), retrograde: new THREE.Vector3(), normal: new THREE.Vector3(), antinormal: new THREE.Vector3(), radialOut: new THREE.Vector3(), radialIn: new THREE.Vector3(), maneuver: new THREE.Vector3(), target: new THREE.Vector3(), antiTarget: new THREE.Vector3() };
@@ -114,6 +121,7 @@ export function createFlightScreen(app) {
     unsub = w.on('*', (data, type) => onWorldEvent(type, data || {}));
     assist = null; assistKind = ''; lostInfo = null; lostCrew = []; aboveLine = null; lastVesselId = null;
     lastTarget = null; state.approach = null; caKey = ''; caAcc = 1;
+    strain.clear(); sepUt = -1;
     if (!active()) { const next = w.vessels.find(flyable); if (next) w.switchTo(next); }
     controlled = active();
     if (app.flight) app.flight.world = w;
@@ -158,7 +166,26 @@ export function createFlightScreen(app) {
         if (mine && hud) hud.invalidate();
         break;
       case 'decouple':
-        if (mine) { app.audio.play('decouple'); if (cam) cam.kick(0.35); }
+        // (the piece a broken joint lets go arrives here too, with no part, in the same step as its `structure` event,
+        // which has its own sound: a separation without a part waits until the step is over to find out which it was)
+        if (mine && p.part == null) sepUt = world.ut;
+        else if (mine) { app.audio.play('decouple'); if (cam) cam.kick(0.35); }
+        break;
+      case 'structure':
+        // a joint broke: say where and why in plain words (the sparks are the scene's, flightscene.onWorldEvent)
+        if (mine) {
+          if (sepUt === world.ut) sepUt = -1;
+          const j = p.joint || {};
+          app.toast(breakMessage(p, strain.get(strainKey(j.a, j.b))), 'bad', 7000);
+          app.audio.play('snap');
+          if (cam) cam.kick(0.7);
+          if (hud) { hud.invalidate(); hud.flashStress(); }
+          refreshHint(true);
+        }
+        break;
+      case 'stress':
+        // the most loaded joint has passed its warning level: the hull groans and the read-out flashes
+        if (mine) { app.audio.play('creak', { volume: 0.9 }); if (hud) hud.flashStress(); }
         break;
       case 'liftoff':
         if (mine) { toast(p.vessel.launchSite === 'runway' && (p.vessel.wheelParts || []).length >= 2 ? 'Airborne!' : 'Liftoff!', 'good'); refreshHint(true); if (hud) hud.cheer(5); }
@@ -463,6 +490,19 @@ export function createFlightScreen(app) {
     },
     toggleSas() { const v = active(); if (!v) return; v.ctrl.sas = !v.ctrl.sas; if (v.ctrl.sas && (v.ctrl.sasMode === 'direction' || (TARGET_MODES.has(v.ctrl.sasMode) && !v.targetInfo))) v.ctrl.sasMode = 'hold'; },
     toggleRcs() { const v = active(); if (!v) return; v.ctrl.rcs = !v.ctrl.rcs; },
+    /** Stress overlay: a band at every joint of the vessels in view, coloured by its load. → the new state. */
+    toggleStress(force) {
+      stressOn = force !== undefined ? !!force : !stressOn;
+      if (scene && scene.setStressOverlay) scene.setStressOverlay(stressOn);
+      if (hud) hud.setStressOverlay(stressOn);
+      app.audio.play('switch');
+      const v = active();
+      toast(!stressOn ? 'Stress overlay off' : v && !v.structure ? 'Stress overlay on (this vessel is a single part: no joints)' : 'Stress overlay on: teal is easy, amber is working hard, red is close to breaking');
+      return stressOn;
+    },
+    get stressOverlay() { return stressOn; },
+    /** The key cap of a remappable action, as the controls dialog shows it. */
+    keyLabel(name) { return keyLabel(K(name)); },
     /** G: landing legs and retractable wheels together. */
     toggleLegs() {
       const v = active(); if (!v) return;
@@ -1345,6 +1385,7 @@ export function createFlightScreen(app) {
     if (hit('map')) toggleMap();
     if (hit('missions') && !shift && !ctrlKey && !alt) hud.togglePanel('missions');
     if (hit('hideHud')) hud.setHidden(!hud.hidden);
+    if (hit('stress') && !mapOpen && !inp.mods.meta) actions.toggleStress();
     if (hit('screenshot')) shot();
     if (hit('warpUp')) { if (alt) physicsWarp(1); else actions.warpDelta(1); }
     if (hit('warpDown')) { if (alt) physicsWarp(-1); else actions.warpDelta(-1); }
@@ -1628,6 +1669,8 @@ export function createFlightScreen(app) {
     ball = createNavball();
     hud = createHud(app, actions);
     hud.mount();
+    if (scene.setStressOverlay) scene.setStressOverlay(stressOn);
+    hud.setStressOverlay(stressOn);
     cam.attach();
     offs = [app.input.on('mousedown', e => { if (e.button === 3 && !isModalOpen()) toggleMap(); })];
     app.flight = {
@@ -1709,6 +1752,7 @@ export function createFlightScreen(app) {
       }
     }
     perf.end();
+    if (sepUt >= 0) { sepUt = -1; app.audio.play('decouple'); if (cam) cam.kick(0.35); }      // a separation that was not a broken joint
     lastSimDt = world.ut - utBefore;
     v = active();
     if (v && v !== controlled) { controlled = v; lastTarget = world.getTarget(v); hud.invalidate(); cam.frame(v, { keepAngles: true }); aboveLine = null; }
@@ -1747,6 +1791,10 @@ export function createFlightScreen(app) {
       else state.burnTime = undefined;
     }
     hud.update(world, v, state, dt);
+    // what is loading each strained joint, kept for the message if it breaks
+    { const st = v && v.structure;
+      if (st && st.valid && st.maxUtil > 0.75) { const js = st.joints; for (let i = 0; i < js.length; i++) { const j = js[i]; if (j.util > 0.75) strain.set(strainKey(j.a.id, j.b.id), stressCause(j)); } }
+      else if (strain.size > 64) strain.clear(); }
     hintAcc += dt; if (hintHold > 0) hintHold -= dt;
     if (hintAcc >= 0.5) refreshHint();
     perf.end();

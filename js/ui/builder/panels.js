@@ -44,6 +44,8 @@ const BICONS = {
   action: `<rect ${S} x="3.500" y="4" width="7" height="7" rx="1.500"/><rect ${S} x="13.500" y="4" width="7" height="7" rx="1.500"/><rect ${S} x="3.500" y="14" width="7" height="6.500" rx="1.500"/><path ${S} d="M17 13.500v7M13.500 17h7"/>`,
   root: `<circle ${S} cx="12" cy="5.500" r="2.500"/><path ${S} d="M12 8v5M12 13l-6 3.500M12 13l6 3.500M6 16.500v3M18 16.500v3M12 13v6.500"/>`,
   snap: `<path ${S} d="M4 20V5M4 20h15M4 11a9 9 0 0 1 9 9M4 15.500a4.500 4.500 0 0 1 4.500 4.500"/>`,
+  loads: `<path ${S} d="M8 8.500V4.500a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4M8 15.500v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-4"/><ellipse ${S} stroke-width="2.400" cx="12" cy="12" rx="8.500" ry="3"/>`,
+  chevron: `<path ${S} d="M6 14.500l6-6 6 6"/>`,
   mirror: `<path ${S} d="M12 3v18M9 7 4 17h5zM15 7l5 10h-5z" stroke-dasharray="0"/>`,
   radial: `<circle ${S} cx="12" cy="12" r="3"/><circle cx="12" cy="3.500" r="1.800" fill="currentColor"/><circle cx="19.400" cy="16.200" r="1.800" fill="currentColor"/><circle cx="4.600" cy="16.200" r="1.800" fill="currentColor"/>`,
   // stage kinds
@@ -134,7 +136,7 @@ export function partStatRows(d) {
 export function createPanels(ed) {
   const app = ed.app;
   const dom = {};
-  let reportOpen = false, statusKey = null, hintGone = false;
+  let reportOpen = false, loadsOpen = false, statusKey = null, hintGone = false;
   let thumbQueue = [], spin = null;
   const thumbStore = new Map();       // def id → canvas (cached render)
   let disposed = false;
@@ -392,6 +394,60 @@ export function createPanels(ed) {
     }
     if (dom.funds) { dom.funds.textContent = fmt.num(career().funds); dom.fundsWrap.classList.toggle('short', !afford); }
     if (reportOpen) refreshReport(s);
+    refreshLoads();
+  }
+  // ---- structure: the worst joint of the design, and the list of the five most loaded (builder/loads.js)
+  function loadBar(row) {
+    return el('span', { class: 'bld-ld-bar ' + (row ? row.level : '') + (row && row.util >= 1 ? ' over' : '') }, el('i', { style: { width: ((row ? row.fill : 0) * 100).toFixed(1) + '%' } }));
+  }
+  const focusOn = { enter: row => () => ed.setLoadFocus(row), leave: () => ed.setLoadFocus(null) };
+  function refreshLoads() {
+    if (!dom.struct) return;
+    const rep = ed.loads, c = craft(), stale = ed.loadsStale, w = rep && !rep.empty && !c.isEmpty ? rep.worst : null;
+    clear(dom.struct);
+    dom.struct.className = 'bld-struct ' + (w ? w.level : 'none') + (stale ? ' stale' : '') + (loadsOpen ? ' open' : '');
+    dom.struct.dataset.level = w ? w.level : '';
+    dom.struct.disabled = !w;
+    dom.struct.append(el('span', { class: 'sw-label', text: 'Structure' }), loadBar(w));
+    if (!w) {
+      dom.struct.append(el('b', { class: 'bld-struct-pct', text: '--' }),
+        el('span', { class: 'bld-struct-text', text: c.isEmpty ? '' : c.parts.length < 2 ? 'Joint loads show here once two parts are joined' : 'No joint loads to report' }));
+      if (loadsOpen) toggleLoadsList(false);
+    } else {
+      dom.struct.append(el('b', { class: 'bld-struct-pct', text: w.percent }),
+        el('span', { class: 'bld-struct-text' }, el('span', { text: w.where + (w.n > 1 ? ' ×' + w.n : '') + ': ' }), `${w.words} ${w.when}`,
+          w.braced ? el('em', { class: 'bld-braced', text: 'braced' }) : null,
+          w.verdict ? el('strong', { text: ' – ' + w.verdict }) : null),
+        el('span', { class: 'bld-struct-more' }, `${rep.count} joint${rep.count === 1 ? '' : 's'}`, bicon('chevron')));
+    }
+    if (loadsOpen) refreshLoadsList();
+  }
+  function refreshLoadsList() {
+    const rep = ed.loads;
+    clear(dom.loadsBody);
+    dom.loadsPanel.classList.toggle('stale', !!ed.loadsStale);
+    if (!rep || rep.empty) { dom.loadsBody.appendChild(el('div', { class: 'sw-empty', text: 'No joints to report on yet.' })); return; }
+    const rows = rep.rows.map(r => {
+      const row = el('button', { class: 'bld-ld-row ' + r.level + (ed.loadFocus === r ? ' pinned' : ''), attrs: { type: 'button', 'data-level': r.level, 'aria-label': r.text },
+        on: { mouseenter: focusOn.enter(r), mouseleave: focusOn.leave,
+          click: () => { ed.setLoadFocus(r, { pin: true }); rows.forEach((n, i) => n.classList.toggle('pinned', ed.loadFocus === rep.rows[i])); } } },
+        loadBar(r), el('b', { class: 'bld-struct-pct', text: r.percent }),
+        el('span', { class: 'bld-ld-text' },
+          el('span', { class: 'bld-ld-where' }, r.where + (r.n > 1 ? ' ×' + r.n : ''), r.braced ? el('em', { class: 'bld-braced', tip: 'A brace strut shares the load of this joint', text: 'braced' }) : null),
+          el('small', {}, `${r.words} ${r.when}`, r.verdict ? el('strong', { text: ' – ' + r.verdict }) : null)));
+      return row;
+    });
+    dom.loadsBody.append(...rows);
+    dom.loadsBody.appendChild(el('p', { class: 'bld-report-note', text: `Each joint at the worst moment of a reference climb from ${SYSTEM.home.name}: lift-off, full steering, 8° to the airflow at max Q, burn-out, and the same after every staging. At 100 % a joint is at its strength; above that it breaks. Hover a row to see the joint, click to look at it.` }));
+  }
+  function toggleLoadsList(on = !loadsOpen) {
+    if (on && (!ed.loads || ed.loads.empty)) on = false;
+    loadsOpen = on;
+    if (on && reportOpen) toggleReport(false);
+    dom.loadsPanel.classList.toggle('sw-hidden', !on);
+    dom.struct.classList.toggle('open', on);
+    dom.struct.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (on) refreshLoadsList(); else ed.setLoadFocus(null, { force: true });
   }
   function refreshReport(s = summary()) {
     clear(dom.reportBody);
@@ -418,6 +474,7 @@ export function createPanels(ed) {
   }
   function toggleReport(on = !reportOpen) {
     reportOpen = on;
+    if (on && loadsOpen) toggleLoadsList(false);
     dom.report.classList.toggle('sw-hidden', !on);
     dom.reportBtn.classList.toggle('active', on);
     if (on) refreshReport();
@@ -430,6 +487,8 @@ export function createPanels(ed) {
     dom.sym.dataset.count = st.symmetry; dom.sym.dataset.mode = st.symMode;
     clear(dom.symMode); dom.symMode.append(bicon(mirror ? 'mirror' : 'radial')); dom.symMode.classList.toggle('active', mirror); dom.symMode.dataset.mode = st.symMode;
     dom.snap.classList.toggle('active', st.snap); dom.snap.dataset.on = st.snap ? '1' : '0';
+    dom.loadsBtn.classList.toggle('active', !!st.show.loads); dom.loadsBtn.dataset.on = st.show.loads ? '1' : '0';
+    if (dom.loadsSwitch) dom.loadsSwitch.classList.toggle('active', !!st.show.loads);
     for (const b of dom.tools.querySelectorAll('[data-tool]')) b.classList.toggle('active', b.dataset.tool === st.tool);
     if (dom.right) dom.right.classList.toggle('acting', st.tool === 'action');
     for (const b of dom.markers.querySelectorAll('[data-marker]')) b.classList.toggle('active', !!st.show[b.dataset.marker]);
@@ -555,7 +614,7 @@ export function createPanels(ed) {
     const c = craft();
     if (c.isEmpty) { ed.toast('Build something first: pick a part from the bin.', 'warn'); return null; }
     c.name = (dom.name.value || '').trim() || c.name || 'Untitled Craft';
-    const v = ed.checkCraft(), s = summary();
+    const v = ed.checkCraft({ fresh: true }), s = summary();
     const errors = [...v.errors];
     if (!career().canAfford(s.cost)) errors.push(`Costs ${fmt.funds(s.cost)} but only ${fmt.funds(career().funds)} is available.`);
     const pods = c.parts.map(p => ({ p, d: partDef(p.type) })).filter(x => x.d.command === 'crew' && x.d.crew > 0);
@@ -656,9 +715,10 @@ export function createPanels(ed) {
     on: { click: e => ed.cycleSymmetry(e.shiftKey ? -1 : 1), contextmenu: e => { e.preventDefault(); ed.cycleSymmetry(-1); } } });
   dom.symMode = el('button', { class: 'bld-tool', attrs: { type: 'button', 'data-action': 'sym-mode', 'aria-label': 'Symmetry mode' }, tip: 'Radial or mirror symmetry (R)', on: { click: () => ed.toggleMirror() } });
   dom.snap = el('button', { class: 'bld-tool', attrs: { type: 'button', 'data-action': 'snap', 'aria-label': 'Angle snap' }, tip: 'Angle snap: 15° steps and tidy heights (C)', on: { click: () => ed.toggleSnap() } }, bicon('snap'), el('i', { text: 'C' }));
+  dom.loadsBtn = el('button', { class: 'bld-tool bld-loads-btn', attrs: { type: 'button', 'data-action': 'loads', 'aria-label': 'Load overlay' }, tip: 'Load overlay: a band on every joint, coloured by how much of its strength it uses (L)', on: { click: () => ed.toggleLoads() } }, bicon('loads'), el('i', { text: 'L' }));
   dom.tools = el('div', { class: 'bld-tools', attrs: { role: 'toolbar', 'aria-label': 'Assembly tools' } },
     toolBtn('place', 'place', 'Place and pick up', '1'), toolBtn('move', 'move', 'Move / offset', '2'), toolBtn('rotate', 'rotate', 'Rotate', '3'), toolBtn('root', 'root', 'Re-root', '4'), toolBtn('action', 'action', 'Action groups', '5'),
-    el('span', { class: 'bld-tools-sep' }), dom.sym, dom.symMode, dom.snap);
+    el('span', { class: 'bld-tools-sep' }), dom.sym, dom.symMode, dom.snap, el('span', { class: 'bld-tools-sep' }), dom.loadsBtn);
 
   // left: parts bin
   dom.search = el('input', { class: 'sw-input bld-search', attrs: { type: 'search', placeholder: 'Search parts', spellcheck: 'false', 'aria-label': 'Search parts' },
@@ -712,7 +772,15 @@ export function createPanels(ed) {
   const markerBtn = (id, label, tip) => el('button', { class: 'bld-marker ' + id, attrs: { type: 'button', 'data-marker': id, 'aria-label': tip }, tip, on: { click: () => ed.toggleMarker(id) } }, el('i'), label);
   dom.markers = el('div', { class: 'bld-markers' }, markerBtn('com', 'CoM', 'Show the centre of mass'), markerBtn('cot', 'CoT', 'Show the centre of thrust'), markerBtn('col', 'CoL', 'Show the centre of lift (wings and fins)'));
   dom.reportBtn = el('button', { class: 'sw-btn small bld-report-btn', attrs: { type: 'button', 'data-action': 'report' }, tip: 'Engineer’s report: per-stage numbers', on: { click: () => toggleReport() } }, bicon('report'), el('span', { text: 'Report' }));
-  dom.info = el('div', { class: 'sw-panel glass pad-0 bld-info' }, dom.infoStats, dom.markers, dom.check, dom.reportBtn);
+  dom.struct = el('button', { class: 'bld-struct none', attrs: { type: 'button', 'data-action': 'structure', 'aria-expanded': 'false' }, tip: 'Structure: the most loaded joint of this design. Click for the five most loaded.',
+    on: { click: () => toggleLoadsList(), mouseenter: () => { const r = ed.loads; if (r && r.worst && !loadsOpen) ed.setLoadFocus(r.worst); }, mouseleave: () => { if (!loadsOpen) ed.setLoadFocus(null); } } });
+  dom.info = el('div', { class: 'sw-panel glass pad-0 bld-info' }, dom.infoStats, dom.markers, dom.check, dom.reportBtn, dom.struct);
+  dom.loadsBody = el('div', { class: 'bld-loads-body sw-scroll' });
+  dom.loadsSwitch = el('button', { class: 'sw-btn small bld-loads-switch', attrs: { type: 'button', 'data-action': 'loads-overlay' }, tip: 'Show a band on every joint in the hall (L)', on: { click: () => ed.toggleLoads() } }, bicon('loads'), el('span', { text: 'Show on craft' }), key('L'));
+  dom.loadsPanel = el('div', { class: 'sw-panel glass pad-0 bld-report bld-loads sw-hidden', data: { panel: 'loads' } },
+    el('div', { class: 'bld-report-head' }, el('span', { class: 'sw-title', text: 'Most loaded joints' }), el('span', { class: 'sw-grow' }), dom.loadsSwitch,
+      el('button', { class: 'sw-modal-x', text: '×', attrs: { type: 'button', 'aria-label': 'Close the list' }, on: { click: () => toggleLoadsList(false) } })),
+    dom.loadsBody);
   dom.reportBody = el('div', { class: 'bld-report-body sw-scroll' });
   dom.report = el('div', { class: 'sw-panel glass pad-0 bld-report sw-hidden' },
     el('div', { class: 'bld-report-head' }, el('span', { class: 'sw-title', text: 'Engineer’s report' }), el('span', { class: 'sw-grow' }),
@@ -729,6 +797,7 @@ export function createPanels(ed) {
         el('li', {}, 'Fins, wings and other surface parts stick anywhere on a ', el('b', { text: 'side' }), '. ', key('X'), ' steps symmetry, ', key('R'), ' switches radial / mirror, ', key('C'), ' toggles angle snap, ', key('Alt'), ' snaps to nodes only.'),
         el('li', {}, el('b', { text: 'Click a placed part' }), ' to pull it off with everything attached to it. Drop it on another node, or in mid-air to park it. ', key('Q'), key('E'), ' turn and ', key('W'), key('S'), ' flip or tilt the held part (', key('⇧'), ' for 5° steps).'),
         el('li', {}, key('1'), ' place · ', key('2'), ' move · ', key('3'), ' rotate · ', key('4'), ' re-root · ', key('5'), ' action groups. ', key('⌘'), key('Z'), ' undo, ', key('⌫'), ' delete, ', key('Esc'), ' cancel.'),
+        el('li', {}, 'The ', el('b', { text: 'Structure' }), ' line at the bottom names the joint that works hardest; ', key('L'), ' paints every joint by its load.'),
         el('li', {}, el('b', { text: 'Right-drag' }), ' orbits, the ', el('b', { text: 'wheel' }), ' scrolls along the craft, ', key('⇧'), '+wheel zooms, ', el('b', { text: 'middle-drag' }), ' pans, double-click focuses a part, ', key('F'), ' frames the craft.')),
       el('div', { class: 'bld-hint-foot' },
         el('button', { class: 'sw-btn small ghost', text: 'Don’t show again', attrs: { type: 'button', 'data-action': 'hint-never' }, on: { click: () => { dismissHint(true); app.save(); } } }),
@@ -736,7 +805,7 @@ export function createPanels(ed) {
   }
 
   const root = el('div', { class: 'bld' + (plane ? ' bld-plane' : ''), data: { screen: 'builder', site: ed.site } }, top,
-    el('div', { class: 'bld-mid' }, left, dom.tools, right, dom.status, dom.report, dom.info, dom.hint || null));
+    el('div', { class: 'bld-mid' }, left, dom.tools, right, dom.status, dom.report, dom.loadsPanel, dom.info, dom.hint || null));
   app.uiRoot.appendChild(root);
   if (!ed.state.category || !cats().some(c => c.id === ed.state.category)) ed.state.category = (cats()[0] || { id: 'command' }).id;
   refreshCatalogue(); refreshStaging(); refreshInfo(); refreshToolbar(); refreshToolbarMeta(); refreshActions();
@@ -744,7 +813,8 @@ export function createPanels(ed) {
   return {
     root, dom,
     refreshCatalogue, refreshCatalogueSelection, refreshStaging, refreshInfo, refreshToolbar, refreshMeta: refreshToolbarMeta,
-    refreshActions,
+    refreshActions, refreshLoads, toggleLoadsList,
+    get loadsOpen() { return loadsOpen; },
     refreshAll() { refreshStaging(); refreshInfo(); refreshToolbar(); refreshToolbarMeta(); refreshActions(); },
     setName(n) { if (dom.name) dom.name.value = n; },
     get name() { return dom.name ? dom.name.value.trim() : ''; },
