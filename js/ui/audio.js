@@ -10,6 +10,7 @@
 //   audio.setReentry(level)                 the deep roar and buffet of re-entry plasma, level 0..1
 //   audio.play(name, {volume})              'stage' | 'decouple' | 'explosion' | 'click' | 'switch' | 'gear' | 'chute' | 'alarm' |
 //                                           'beep' | 'warning' | 'master' | 'shutter' | 'success' | 'splash' | 'land' | 'warp'
+//                                           'creak' (the structure groans under load) | 'snap' (a joint breaks)
 //   audio.setVolume({sfx, music})           0..1 each
 //   audio.setAmbient(on, mood)              calm generative score: mood 'centre' (menus, the space centre; the default)
 //                                           or 'space' (sparse and slow, for coasting in orbit)
@@ -261,6 +262,24 @@ export function createAudio() {
     shutter(t, v) {
       burst(t, 0.02, 0.35 * v, 'highpass', 2500, 4000, 0.7, 0.001);
       burst(t + 0.07, 0.03, 0.3 * v, 'bandpass', 1800, 900, 1.2, 0.001);
+    },
+    creak(t, v) {
+      // Structure under strain: two slow metal groans (a rough low reed rising, then sagging) with a thin squeal on top.
+      tone('sawtooth', 62, 84, t, 0.55, 0.16 * v);
+      tone('sawtooth', 93, 127, t + 0.02, 0.5, 0.07 * v);
+      burst(t + 0.05, 0.45, 0.2 * v, 'bandpass', 520, 760, 9, 0.12);
+      tone('sawtooth', 88, 58, t + 0.62, 0.7, 0.15 * v);
+      tone('sawtooth', 131, 87, t + 0.64, 0.6, 0.06 * v);
+      burst(t + 0.66, 0.55, 0.16 * v, 'bandpass', 900, 430, 11, 0.15);
+    },
+    snap(t, v) {
+      // A joint lets go: a hard crack, the torn ring singing for a moment, and the thud through the hull.
+      burst(t, 0.03, 0.9 * v, 'highpass', 2400, 1200, 0.8, 0.001);
+      burst(t + 0.01, 0.12, 0.6 * v, 'bandpass', 1300, 500, 1.6, 0.002);
+      tone('triangle', 742, 690, t + 0.01, 0.5, 0.09 * v);
+      tone('triangle', 1187, 1120, t + 0.01, 0.34, 0.05 * v);
+      tone('sine', 120, 38, t, 0.4, 0.8 * v);
+      burst(t + 0.1, 0.6, 0.18 * v, 'highpass', 2000, 800, 0.4, 0.04);     // bits rattling away
     },
     warp(t, v) {
       tone('sine', 320, 960, t, 0.24, 0.12 * v);

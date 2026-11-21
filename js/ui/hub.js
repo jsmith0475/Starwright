@@ -123,7 +123,8 @@ export function settingsRows(app, h = settingsControls(app)) {
     })(),
     el('h4', { text: 'Game' }),
     h.toggle('invertPitch', 'Invert pitch', 'Swap W and S, for those who fly "pull back to climb" the other way'),
-    h.toggle('showHints', 'Show hints', 'Friendly tips from the ground crew'));
+    h.toggle('showHints', 'Show hints', 'Friendly tips from the ground crew'),
+    h.toggle('structFail', 'Structural failures', 'Overloaded joints break and the rocket comes apart. Off: loads are still shown, nothing breaks'));
 }
 function settingsControls(app) {
   const s = app.settings;

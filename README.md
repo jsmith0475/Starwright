@@ -101,6 +101,12 @@ And around the flying:
   station, on final descent to a moon, or falling from 120 km in a bare capsule.
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
+- **Rockets that bend and break.** Every joint between two parts carries a computed load. Tall
+  thin stacks wobble, and a hard turn in thick air snaps them. A read-out and a stress overlay
+  (the `;` key) show the load in flight, and the assembly building tells you which joint will
+  give way before you launch (the `L` key). Wider parts, shorter stacks and brace struts are the
+  cure. A switch in Settings turns the breaking off.
+- **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
 
 <p align="center">
@@ -231,6 +237,12 @@ Starwright does not fake its orbits, and it shows its work.
   same cases and compares: **861 checks, 0 failures.** Read the method, the numbers and the
   bugs it found in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it
   yourself with `npm run verify`.
+- **Structures from first principles.** The vessel flies as one rigid body, and each step the
+  game works out what every joint must carry for it to move that way: Newton's second law on
+  the piece beyond the joint, compared with the strength of a thin bolted ring. A separately
+  written multibody reference and closed-form cases check it: **300 more checks, 0 failures**,
+  agreeing to about one part in 10¹⁴. The model, its numbers, its limits and one defect the
+  checks found are in [docs/STRUCTURE.md](docs/STRUCTURE.md).
 - **Honest about its limits.** No n-body gravity, so no Lagrange points and no halo orbits.
   Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
@@ -270,7 +282,7 @@ media/               trailer and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 349 tests, including scripted flights flown by the autopilot
+npm test            # 417 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
@@ -292,7 +304,7 @@ Starwright is version 0.1: playable from the first launch to the outer planets, 
 
 ## Roadmap
 
-The next ten upgrades, in the order we plan to take them. There are no dates: each one ships when
+The next eleven upgrades, in the order we plan to take them. There are no dates: each one ships when
 it is good. **[Read the full roadmap](docs/ROADMAP.md)** for what each one is, why it matters,
 what the game does today, and what building it involves.
 
@@ -300,23 +312,27 @@ what the game does today, and what building it involves.
    **Built.** Each leg is a spring and damper: a lander compresses, settles, bottoms out or
    breaks its legs if you come in too fast, and tips over if you come in crooked.
    [How it works and what was checked.](docs/LANDING_LEGS.md)
-2. **[Structural dynamics.](docs/ROADMAP.md#2-structural-dynamics)** Joints that flex under
-   load, show stress, and break when a rocket is too tall, too thin or flown too hard.
-3. **[Higher-fidelity worlds.](docs/ROADMAP.md#3-higher-fidelity-worlds)** Sharper terrain,
+2. **[Structural dynamics.](docs/ROADMAP.md#2-structural-dynamics)** **Built.** Every joint
+   carries a computed load, bends, and breaks when a rocket is too tall, too thin or flown too
+   hard. The assembly building shows which joint is closest to its limit.
+   [How it works and what was checked.](docs/STRUCTURE.md)
+3. **[Aerodynamic breakup.](docs/ROADMAP.md#3-aerodynamic-breakup)** A rocket that flips or
+   tumbles in thick air sheds its fins, panels and boosters and breaks into pieces.
+4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** Sharper terrain,
    richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
-4. **[Reusable boosters.](docs/ROADMAP.md#4-reusable-boosters)** Flip, boost back, steer on the
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the
    grid fins and land the first stage on its legs while the upper stage flies on to orbit.
-5. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#5-deeper-aerodynamics-and-re-entry)**
+6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
-6. **[Optional n-body gravity.](docs/ROADMAP.md#6-optional-n-body-gravity)** Lagrange points,
+7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,
    halo orbits and low-energy transfers, starting as an overlay in the map.
-7. **[Stations and surface bases.](docs/ROADMAP.md#7-stations-and-surface-bases)** Mine a moon,
+8. **[Stations and surface bases.](docs/ROADMAP.md#8-stations-and-surface-bases)** Mine a moon,
    refine propellant, and refuel ships far from home.
-8. **[A deeper career.](docs/ROADMAP.md#8-a-deeper-career)** More missions, more science at
+9. **[A deeper career.](docs/ROADMAP.md#9-a-deeper-career)** More missions, more science at
    every world, and crew who train into specialists.
-9. **[Sharing.](docs/ROADMAP.md#9-sharing)** Trade craft with other players, and add
+10. **[Sharing.](docs/ROADMAP.md#10-sharing)** Trade craft with other players, and add
    community-made parts and scenarios.
-10. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#10-a-desktop-app-and-a-seat-in-the-cockpit)**
+11. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#11-a-desktop-app-and-a-seat-in-the-cockpit)**
     A double-click app for Mac and Windows, a view from inside the capsule, and fuller sound.
 
 Want one of these to happen sooner? Pick it and help build it. See the next section.

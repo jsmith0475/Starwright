@@ -507,7 +507,7 @@ const defs = [
     desc: 'A longer pylon that holds an engine nacelle clear of the fuselage, or under a wing.' },
   { id: 'strut', name: 'Brace Strut', cat: 'structure', tech: 'general_construction', cost: 40, mass: 0.004,
     shape: 'strut', h: 0.16, rw: 0.9, t: 0.16, attach: RADIAL, tolerance: 12, maxTemp: 1800,
-    desc: 'A cosmetic bracing strut. Makes wobbly rockets look less wobbly.' },
+    desc: 'A bracing strut. Mount it so its tip reaches a side booster and it shares the load of the clamp.' },
   { id: 'fuel_line', name: 'Sip Fuel Line', cat: 'structure', tech: 'fuel_systems', cost: 80, mass: 0.004,
     shape: 'fuelline', h: 0.2, rw: 0.7, t: 0.14, attach: RADIAL, tolerance: 12, maxTemp: 1500,
     desc: 'A braided yellow hose with fittings. Decorative, but very convincing.' },

@@ -12,7 +12,8 @@
 // (the launch cost is charged and the crew marked 'assigned' here first, mirroring app.launch in main.js).
 //
 // Files: builder/asm.js (pure assembly maths: nodes, detach / attach, symmetry, re-root, balance),
-//        builder/hall.js (the two interiors), builder/gfx.js (markers, gizmos, thumbnails), builder/panels.js (HUD).
+//        builder/hall.js (the two interiors), builder/gfx.js (markers, gizmos, thumbnails), builder/panels.js (HUD),
+//        builder/loads.js (structural loads in plain words: pure), builder/loadfx.js (the load overlay).
 //
 // How building works
 //   · The first part is the ROOT. It hangs where you put it (the crane holds it); nothing is grounded.
@@ -21,7 +22,7 @@
 //   · Clicking a placed part pulls it off with its whole subtree. Drop it on another node, or in mid-air, where it
 //     stays as a translucent loose piece (not part of the craft) until picked up again.
 //   Keys: 1 place · 2 move · 3 rotate · 4 re-root · 5 action groups · X / Shift+X symmetry · R radial ↔ mirror ·
-//         C angle snap · Alt = nodes only (no surface attach) · F frame · Delete · Esc · ⌘Z / ⇧⌘Z.
+//         C angle snap · Alt = nodes only (no surface attach) · F frame · L load overlay · Delete · Esc · ⌘Z / ⇧⌘Z.
 //         Turning what you hold: stack parts  Q/E (also A/D) turn about the axis (90° steps, Shift = 5°), W/S flip
 //         end for end; surface parts  W/S pitch away from the mount, Q/E (also A/D) roll about the outward axis
 //         (15° steps, Shift = 5°).
@@ -40,6 +41,9 @@ import * as A from './builder/asm.js';
 import { buildHall } from './builder/hall.js';
 import * as G from './builder/gfx.js';
 import { createPanels } from './builder/panels.js';
+import { analyzeCraft } from '../core/loadcases.js';
+import { loadReport, loadSignature } from './builder/loads.js';
+import { createLoadOverlay } from './builder/loadfx.js';
 
 const { COL } = G;
 const SYM_STEPS = [1, 2, 3, 4, 6, 8];
@@ -129,7 +133,7 @@ export function createBuilderScreen(app) {
   const meta = { desc: '' };
   let panels = null;
   let scene = null, camera = null, hall = null, craftGroup = null, heldLayer = null, looseLayer = null;
-  let nodeFx = null, cursorFx = null, gizmo = null, balanceFx = null, thumbs = null;
+  let nodeFx = null, cursorFx = null, gizmo = null, balanceFx = null, thumbs = null, loadFx = null;
   const raycaster = new THREE.Raycaster();
   const partObjs = new Map();          // part id → THREE.Group
   let looseObjs = [];                  // THREE.Group per loose piece
@@ -144,7 +148,7 @@ export function createBuilderScreen(app) {
   const _db = new THREE.Vector2();
 
   // editor state
-  const state = { tool: 'place', symmetry: 1, symMode: 'radial', snap: true, show: { com: false, cot: false, col: false }, body: 'verda', atmo: false, category: 'command', search: '', sort: '' };
+  const state = { tool: 'place', symmetry: 1, symMode: 'radial', snap: true, show: { com: false, cot: false, col: false, loads: false }, body: 'verda', atmo: false, category: 'command', search: '', sort: '' };
   let held = null;                     // { asm, turn, source: 'bin'|'craft'|'loose', obj, ghosts: [], undoAtPickup }
   let hoverId = null, hoverLoose = -1, placement = null;
   let selected = null, gizmoDrag = null, gizmoHover = null;
@@ -158,6 +162,9 @@ export function createBuilderScreen(app) {
   let actionGroup = '1';               // the group being edited in the action-groups tool
   let clash = null;                    // ids the move gizmo is currently pushing into each other
   let lastMarkers = [];
+  // structural loads (js/core/loadcases.js): worked out again a moment after the design or its staging changed
+  const LOADS_DELAY = 0.25;            // s of quiet after the last edit
+  const loads = { report: loadReport(null, null), raw: null, sig: null, dirty: false, due: 0, ms: 0, runs: 0, focus: null, pinned: false, warned: false };
 
   const isCareer = () => !!(career && career.usesFunds);
   const unlocked = id => !career || career.isPartUnlocked(id);
@@ -195,6 +202,7 @@ export function createBuilderScreen(app) {
     remember();
     if (selected != null && !craft.getPart(selected)) selected = null;
     syncMeshes(); syncLoose(); syncBalance();
+    markLoads();
     if (panels) { if (name) panels.setName(craft.name); panels.refreshAll(); }
     clampFocus();
     if (frame) frameCraft(); else keepInView();
@@ -405,6 +413,68 @@ export function createBuilderScreen(app) {
     if (held && placement && placement.action && placement.action.target != null) lit.set(placement.action.target, COL.teal);
     for (const [id, g] of partObjs) G.tintPartObject(meshApi, g, lit.has(id) ? lit.get(id) : null);
     looseObjs.forEach((g, i) => G.tintAssembly(meshApi, g, !held && i === hoverLoose ? COL.amber : COL.neutral));
+  }
+
+  // ------------------------------------------------------------------ structural loads
+  /** The design or its staging may have changed: work the loads out again once the edits have stopped. */
+  function markLoads() {
+    const sig = loadSignature(craft);
+    if (sig === loads.sig) { if (loads.dirty) { loads.dirty = false; showLoads(); } return; }     // (an undo back to what was analysed)
+    loads.dirty = true; loads.due = clock + LOADS_DELAY;
+    setLoadFocus(null, { force: true });
+    showLoads();
+  }
+  /** Never mid-drag: a part in the hand (the craft is missing it) or a gizmo being pulled. */
+  const loadsBusy = () => !!gizmoDrag || !!(held && held.source !== 'bin');
+  function computeLoads() {
+    const sig = loadSignature(craft);
+    loads.dirty = false;
+    if (sig !== loads.sig) {
+      const t0 = performance.now();
+      let raw = null;
+      try { raw = analyzeCraft(craft); }
+      catch (err) { if (!loads.warned) { loads.warned = true; console.warn('[builder] structural analysis failed:', err && err.message); } }
+      loads.raw = raw; loads.sig = sig; loads.report = loadReport(craft, raw, { nose: horizontal() ? 'nose' : 'top' });
+      loads.ms = performance.now() - t0; loads.runs++;
+      if (loadFx) loadFx.set(loads.report.marks);
+    }
+    if (loadFx) loadFx.setVisible(state.show.loads && !loadsBusy());
+    if (panels) panels.refreshInfo();
+  }
+  /** The overlay is drawn when it is switched on and what it shows still belongs to the craft in the hall. */
+  function showLoads() {
+    if (loadFx) loadFx.setVisible(state.show.loads && !loads.dirty && !loadsBusy());
+    if (panels) panels.refreshLoads();
+  }
+  function updateLoads() {
+    if (loads.dirty && clock >= loads.due && !loadsBusy() && !isModalOpen()) computeLoads();
+    if (loadFx) {
+      const want = state.show.loads && !loads.dirty && !loadsBusy();
+      if (loadFx.visible !== (want && loadFx.count > 0)) loadFx.setVisible(want);
+      loadFx.update(clock);
+    }
+  }
+  function toggleLoads(on = !state.show.loads) {
+    state.show.loads = !!on;
+    if (state.show.loads && loads.dirty && !loadsBusy()) computeLoads(); else showLoads();
+    if (panels) panels.refreshToolbar();
+    return state.show.loads;
+  }
+  /** Point out the joints of one row of the Structure list (loads.report.rows) in the hall; `pin` keeps it and looks at it. */
+  function setLoadFocus(row, { pin = false, force = false } = {}) {
+    if (!row) {
+      if (loads.pinned && !force && !pin) return;
+      if (loads.focus) highlightIds = null;            // (only our own highlight: the staging chips have theirs)
+      loads.focus = null; loads.pinned = false;
+      if (loadFx) loadFx.focus(null);
+      return;
+    }
+    if (loads.dirty) return;
+    if (pin && loads.pinned && loads.focus === row) { setLoadFocus(null, { force: true }); return; }
+    loads.focus = row; loads.pinned = pin;
+    highlightIds = row.ids;
+    if (loadFx) loadFx.focus(row.marks);
+    if (pin) focusOn(row.pos);
   }
 
   // ------------------------------------------------------------------ picking
@@ -942,7 +1012,7 @@ export function createBuilderScreen(app) {
   function onKeyDown(e) {
     if (isModalOpen() || e.repeat) return;
     const cmd = e.meta || e.ctrl;
-    if (e.code === 'Escape') { if (!cancelHeld()) { if (selected != null) { selected = null; if (panels) panels.refreshActions(); } else if (state.tool !== 'place') setTool('place'); else if (panels.reportOpen) panels.toggleReport(false); } }
+    if (e.code === 'Escape') { if (!cancelHeld()) { if (selected != null) { selected = null; if (panels) panels.refreshActions(); } else if (state.tool !== 'place') setTool('place'); else if (panels.loadsOpen) panels.toggleLoadsList(false); else if (panels.reportOpen) panels.toggleReport(false); } }
     else if (e.code === 'KeyZ' && cmd) { if (!(e.shift ? redo() : undo())) sfx('click'); if (e.original) e.original.preventDefault(); }
     else if (e.code === 'KeyY' && cmd) { redo(); if (e.original) e.original.preventDefault(); }
     else if (cmd) return;
@@ -960,6 +1030,7 @@ export function createBuilderScreen(app) {
     else if (e.code === 'KeyS') flipHeld(-1, e.shift);
     else if (e.code === 'Delete' || e.code === 'Backspace') { if (held) deleteHeld(); else if (selected != null) deletePart(selected); else if (hoverId != null) deletePart(hoverId); else if (hoverLoose >= 0) { pushUndo(); loose.splice(hoverLoose, 1); hoverLoose = -1; changed({}); } }
     else if (e.code === 'KeyF') frameCraft();
+    else if (e.code === 'KeyL') { toggleLoads(); sfx('click'); }
   }
 
   // ------------------------------------------------------------------ staging actions (used by the panel)
@@ -1015,7 +1086,9 @@ export function createBuilderScreen(app) {
 
   // ------------------------------------------------------------------ checks, save, launch
   function lockedParts() { return [...new Set(craft.parts.filter(p => !unlocked(p.type)).map(p => partDef(p.type).name))]; }
-  function checkCraft() {
+  /** `fresh`: work the loads out now if an edit is still waiting for its turn (the launch dialog must not show old news). */
+  function checkCraft({ fresh = false } = {}) {
+    if (fresh && loads.dirty && !loadsBusy()) computeLoads();
     let v; try { v = craft.validate(SYSTEM.home); } catch { v = { errors: [], warnings: [] }; }
     const n = craft.stages.length;
     const fix = t => t.replace(/^Stage (\d+) is empty\.$/, (_, k) => `Stage ${n - Number(k)} is empty.`);
@@ -1023,6 +1096,9 @@ export function createBuilderScreen(app) {
     const locked = lockedParts();
     if (locked.length) errors.push('Uses parts that are not researched yet: ' + locked.join(', ') + '.');
     if (loose.length) warnings.push(`${loose.length} loose piece${loose.length > 1 ? 's are' : ' is'} not attached and will stay in the hall.`);
+    // joints at or near their limit: warnings, never errors (the player may launch a rocket that will break)
+    // (those that will break go first: the info bar shows the first warning)
+    if (!craft.isEmpty && !(loads.dirty && loadsBusy())) { const w = loads.report.warnings, k = loads.report.breaking; warnings.unshift(...w.slice(0, k)); warnings.push(...w.slice(k)); }
     return { ok: errors.length === 0, errors, warnings };
   }
   function craftSize() { const b = craft.bounds(); return { len: b.maxY - b.minY, wide: b.maxR * 2 }; }
@@ -1074,6 +1150,10 @@ export function createBuilderScreen(app) {
     toggleMirror: () => setSymMode(state.symMode === 'mirror' ? 'radial' : 'mirror'),
     toggleSnap: () => { state.snap = !state.snap; panels.refreshToolbar(); },
     toggleMarker: k => { state.show[k] = !state.show[k]; panels.refreshToolbar(); },
+    // structural loads: the report (builder/loads.js loadReport), whether it is waiting to be worked out again, the overlay
+    get loads() { return loads.report; }, get loadsStale() { return loads.dirty; },
+    toggleLoads, setLoadFocus,
+    get loadFocus() { return loads.pinned ? loads.focus : null; },
     setHighlight: ids => { highlightIds = ids; },
     stageMove, stageReorder, stageAdd, stageRemove, stageReset,
     loadCraft: json => setCraft(json),
@@ -1121,6 +1201,7 @@ export function createBuilderScreen(app) {
     cursorFx = G.createCursorFx(craftGroup);
     gizmo = G.createGizmo(craftGroup);
     balanceFx = G.createBalanceMarkers(craftGroup);
+    loadFx = createLoadOverlay(craftGroup);
     thumbs = G.createThumbs(r, meshApi, hall.envMap);
   }
 
@@ -1248,6 +1329,8 @@ export function createBuilderScreen(app) {
 
       buildScene();
       originT.copy(mem && mem.origin ? new THREE.Vector3(...mem.origin) : defaultOrigin()); origin.copy(originT);
+      loads.sig = null; loads.focus = null; loads.pinned = false;
+      computeLoads();                    // the report is there when the panels open
       panels = createPanels(ed);
       syncMeshes(); syncLoose(); syncBalance();
       Object.assign(cam, horizontal() ? { tyaw: 0.72, tpitch: 0.3 } : { tyaw: 0.55, tpitch: 0.16 });
@@ -1299,11 +1382,11 @@ export function createBuilderScreen(app) {
       partObjs.clear();
       for (const g of looseObjs) G.freeAssemblyObject(meshApi, g);
       looseObjs = [];
-      for (const fx of [nodeFx, cursorFx, gizmo, balanceFx, thumbs]) { try { fx && fx.dispose(); } catch { /* ignore */ } }
+      for (const fx of [nodeFx, cursorFx, gizmo, balanceFx, thumbs, loadFx]) { try { fx && fx.dispose(); } catch { /* ignore */ } }
       if (hall) hall.dispose();
       if (post) { post.dispose(); post = null; }
       if (renderState && app.renderer) { const r = app.renderer; r.shadowMap.enabled = renderState.shadow; r.shadowMap.type = renderState.shadowType; r.toneMapping = renderState.tone; r.toneMappingExposure = renderState.exposure; }
-      scene = camera = hall = craftGroup = heldLayer = looseLayer = nodeFx = cursorFx = gizmo = balanceFx = thumbs = null;
+      scene = camera = hall = craftGroup = heldLayer = looseLayer = nodeFx = cursorFx = gizmo = balanceFx = thumbs = loadFx = null;
       if (panels) panels.dispose();
       panels = null;
       if (app.canvas) app.canvas.style.cursor = '';
@@ -1317,6 +1400,7 @@ export function createBuilderScreen(app) {
       updateCamera(Math.min(1, dt * 12));
       updateEditing(dt);
       updateSettle(dt);
+      updateLoads();
       // the crane hook waits above the craft; the key light follows it
       const b = craft.bounds();
       const top = craft.isEmpty ? null : (horizontal() ? v3.set(0, 0, 0).applyMatrix4(craftGroup.matrixWorld).setY(origin.y + A.extentAlong(craft.parts, 'z').hi + 3) : v3.set(0, b.maxY, 0).applyMatrix4(craftGroup.matrixWorld));
@@ -1443,6 +1527,11 @@ export function createBuilderScreen(app) {
     get scene() { return scene; }, get three() { return THREE; }, get quality() { return quality; },
     get info() { const r = app.renderer; return r ? { calls: r.info.render.calls, triangles: r.info.render.triangles } : null; },
     checkCraft,
+    /** Structural loads: the report the panel shows, the raw analyzeCraft() result, and the 3D overlay. */
+    get loads() { return loads.report; }, get loadsRaw() { return loads.raw; },
+    get loadsPending() { return loads.dirty; }, get loadsRuns() { return loads.runs; }, get loadsMs() { return loads.ms; },
+    get loadOverlay() { return loadFx ? { on: state.show.loads, visible: loadFx.visible, rings: loadFx.count, breaking: loadFx.hot, focused: loadFx.focused } : null; },
+    setLoadOverlay: on => toggleLoads(!!on), focusLoad: (i, pin = false) => setLoadFocus(loads.report.rows[i] || null, { pin, force: true }),
     openLoadDialog: () => panels.openLoadDialog(), openLaunchDialog: () => panels.openLaunchDialog(), saveCraft, toggleReport: on => panels.toggleReport(on),
   };
 

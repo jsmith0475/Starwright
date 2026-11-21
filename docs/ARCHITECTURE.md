@@ -1267,3 +1267,10 @@ asset files were added. Nothing in `js/core` changed.
 Shallow sea seen from several kilometres up shows the sandy bed inside the fine-terrain radius and the baked blue map
 outside it (a stepped ring); it was there before this pass. Frame rate and final look on a real GPU are unmeasured:
 every check ran on the software rasteriser.
+
+## Additions (structural dynamics)
+
+`js/core/structure.js` (joint loads, strength, failure, flex; `vessel.structure`) and
+`js/core/loadcases.js` (`analyzeCraft`, the assembly building's reference load cases). World events
+`structure` and `stress`. UI: `js/ui/stress.js`, `js/ui/builder/loads.js`, `js/ui/builder/loadfx.js`.
+The contract is [STRUCTURE.md](STRUCTURE.md).
