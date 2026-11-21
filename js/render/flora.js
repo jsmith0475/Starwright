@@ -39,7 +39,7 @@ const LEAF_GAIN = 1.65;        // the painted leaves are dark (they are painted 
 const BARK_GAIN_PHOTO = 0.9;
 // Scanned leaves are photographed lit from the front on a white bed: far brighter and yellower than a leaf's own
 // colour in a crown. These bring each species to its colour in the field (pine and palm cells are still painted).
-const PHOTO_TINT = { oak: [0.52, 0.54, 0.46], maple: [0.74, 0.62, 0.6], birch: [0.6, 0.63, 0.46], spruce: [0.72, 0.8, 0.74], bush: [0.66, 0.62, 0.5], pine: [1.5, 1.45, 1.3], palm: [1.5, 1.5, 1.1] };
+const PHOTO_TINT = { oak: [0.52, 0.54, 0.46], maple: [0.74, 0.62, 0.6], birch: [0.6, 0.63, 0.46], spruce: [0.72, 0.8, 0.74], bush: [0.66, 0.62, 0.5], pine: [1.85, 1.8, 1.55], palm: [1.5, 1.5, 1.1] };
 const leafTint = (sp, id, atlas) => (atlas.userData.photo && PHOTO_TINT[id] ? new THREE.Vector3(...PHOTO_TINT[id]) : new THREE.Vector3(...sp.leafTint).multiplyScalar(LEAF_GAIN));
 const barkTint = (sp, bark) => (bark.photo ? new THREE.Vector3(BARK_GAIN_PHOTO, BARK_GAIN_PHOTO, BARK_GAIN_PHOTO) : new THREE.Vector3(...sp.barkTint));
 const IMP = { yaws: 8, rows: 3, els: [0.14, 0.62, 1.13] };       // impostor views: 8 round, at 8°, 35° and 65° above the horizon
