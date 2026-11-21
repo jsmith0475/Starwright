@@ -18,7 +18,14 @@ export const STRUCT = {
   },
   MOUNT_FACTOR: {          // ... and of a side mount, by the mounted part: booster clamps are thrust fittings
     radialdec: 6.5, pylon: 3.5, clamp: 9,
+    // lifting surfaces are bolted on along a thin root (see `rootSection`): a rocket fin as built, a wing or a tail
+    // fin with a spar carried through the body, an elevon hung on a hinge line along its whole span
+    fin: 0.7, wing: 3, tailfin: 3, elevon: 4,
   },
+  AIR_FAIL_TIME: 0.25,     // s: a part 100 % over its air rating (parts.js AIR_RATING) is torn off after this long
+  DEBRIS_SPIN: 2.5,        // rad/s: spin a light piece is given as it tears away (less for heavy ones) ...
+  DEBRIS_PUSH: 1.2,        // m/s: ... and how fast it is pushed clear (shared with what it left, by mass)
+  DEBRIS_PUSH_MAX: 1500,   // N·s: no break pushes harder than this
   MIN_R: 0.08,             // m: no joint ring is smaller than this
   FAIL_TIME: 0.12,         // s: damage grows at (u − 1) / FAIL_TIME per second while a joint is over its limit ...
   HEAL_TIME: 0.6,          // s: ... and heals fully in this time once it is back under it
@@ -89,16 +96,27 @@ export function solveJointLoads(bodies, joints, motion) {
  * Thin-ring utilisation of a joint. F, M: what the parent side exerts on the child side (M about the joint point);
  * n: unit axis from parent to child; r: ring radius (m); capT/capC/capS: allowable line loads (N/m).
  */
-export function jointUtilisation(F, M, n, r, capT, capC, capS) {
+export function jointUtilisation(F, M, n, r, capT, capC, capS, root = null) {
   const fn = F[0] * n[0] + F[1] * n[1] + F[2] * n[2];
   const mn = M[0] * n[0] + M[1] * n[1] + M[2] * n[2];
   const axial = -fn;
   const shear = Math.hypot(F[0] - fn * n[0], F[1] - fn * n[1], F[2] - fn * n[2]);
-  const bending = Math.hypot(M[0] - mn * n[0], M[1] - mn * n[1], M[2] - mn * n[2]);
+  const bx = M[0] - mn * n[0], by = M[1] - mn * n[1], bz = M[2] - mn * n[2];
+  const bending = Math.hypot(bx, by, bz);
   const torsion = Math.abs(mn);
-  const nb = bending / (PI * r * r), na = axial / (2 * PI * r);
+  let nb, na, q;
+  if (root) {
+    // a thin rectangular root, `root.h` long along the unit vector `root.c` and `root.t` across: see rootSection
+    const c = root.c, sec = rootSection(root.h, root.t);
+    const mc = bx * c[0] + by * c[1] + bz * c[2];                       // bending about the long side: across the thin way
+    const mt = Math.hypot(bx - mc * c[0], by - mc * c[1], bz - mc * c[2]);   // ... and about the short side
+    nb = Math.abs(mc) / sec.zFlap + mt / sec.zEdge; na = axial / sec.perimeter;
+    q = 2 * shear / sec.perimeter + torsion / (2 * sec.area);
+  } else {
+    nb = bending / (PI * r * r); na = axial / (2 * PI * r);
+    q = shear / (PI * r) + torsion / (2 * PI * r * r);
+  }
   const nT = Math.max(0, na + nb), nC = Math.max(0, nb - na);
-  const q = shear / (PI * r) + torsion / (2 * PI * r * r);
   const uT = nT / capT, uC = nC / capC, uS = q / capS;
   let util = uT, mode = 'tension';
   if (uC > util) { util = uC; mode = 'compression'; }
@@ -114,13 +132,31 @@ function strengthFactor(def) {
   return f === undefined ? 1 : f;
 }
 function mountFactor(a, b) {
-  const fa = isStack(a) ? undefined : STRUCT.MOUNT_FACTOR[a.def.shape], fb = isStack(b) ? undefined : STRUCT.MOUNT_FACTOR[b.def.shape];
-  return Math.max(fa || 1, fb || 1);
+  // `m` is the mounted part, as in jointGeometry. A host's own factor counts when it is a fitting (a booster on its
+  // clamp, a pod on its pylon), not when it is a wing that something else is hung on.
+  const m = isStack(a) ? b : isStack(b) ? a : b, host = m === b ? a : b;
+  const fm = isStack(m) ? undefined : STRUCT.MOUNT_FACTOR[m.def.shape];
+  const fh = isStack(host) || host.def.fin || host.def.wing ? undefined : STRUCT.MOUNT_FACTOR[host.def.shape];
+  const f = fm === undefined ? 1 : fm;
+  return fh === undefined ? f : Math.max(f, fh);
 }
 const isStack = p => !!(p.def.attach && p.def.attach.stack);
 const faceTop = p => (p.flip ? p.def.rBottom : p.def.rTop) ?? p.def.r ?? 0.3;
 const faceBot = p => (p.flip ? p.def.rTop : p.def.rBottom) ?? p.def.r ?? 0.3;
 const footprint = d => Math.max(STRUCT.MIN_R, ((d.h || 0.2) + (d.t || 0.2)) / PI);
+/** Is this part bolted on along a thin root (a fin, a wing, a tail fin, an elevon)? */
+const thinRoot = d => !!(d.fin || d.wing);
+
+/**
+ * Section of a thin rectangular root: a line of fasteners around a rectangle `h` long and `t` across (m).
+ * → { perimeter (m), area (m², enclosed), zFlap, zEdge (m²) }: with an allowable line load n (N/m) the root carries
+ *   a pull of n × perimeter, a bending moment of n × zFlap about its long side (the fin bent flat-wise, across the
+ *   thin way) and n × zEdge about its short side (edge-wise), and a twist of n × 2 × area.
+ * (Second moment of a line rectangle about its long centre line: 2 h (t/2)² + 2 t³/12; divided by t/2.)
+ */
+export function rootSection(h, t) {
+  return { perimeter: 2 * (h + t), area: h * t, zFlap: h * t + t * t / 3, zEdge: h * t + h * h / 3 };
+}
 
 /**
  * Where two linked parts meet. → { kind, x, y, z (joint point, craft coords), nx, ny, nz (unit, from a toward b), r, len }
@@ -154,8 +190,11 @@ export function jointGeometry(a, b) {
   const outer = isStack(host) && !!(md.attach && md.attach.outer) && (host.pos.x - m.pos.x) * ox + (host.pos.z - m.pos.z) * oz > 1e-6;
   const s = outer ? 1 : -1;
   const sign = (m === b) !== outer ? 1 : -1;      // the axis runs from a toward b
-  return { kind: outer ? 'outer' : 'radial', x: m.pos.x + s * ox * half, y: m.pos.y, z: m.pos.z + s * oz * half,
+  const g = { kind: outer ? 'outer' : 'radial', x: m.pos.x + s * ox * half, y: m.pos.y, z: m.pos.z + s * oz * half,
     nx: sign * ox, ny: 0, nz: sign * oz, r: footprint(md), len: Math.max(md.rw || 0.2, 0.3) };
+  // a lifting surface is held along its root chord, which is long and thin: strong edge-wise, weak flat-wise
+  if (!outer && thinRoot(md)) { g.rh = Math.max(md.h || 0.2, 0.05); g.rt = Math.max(md.t || 0.05, 0.02); }
+  return g;
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -207,6 +246,7 @@ export class Structure {
           const j = {
             a, b, kind: g.kind, px: g.x, py: g.y, pz: g.z, nx: g.nx, ny: g.ny, nz: g.nz, r: g.r, len: g.len,
             capT: STRUCT.LINE_T * k, capC: STRUCT.LINE_C * k, capS: STRUCT.LINE_S * k,
+            rh: g.rh || 0, rt: g.rt || 0,          // thin root (fins, wings): length along the stack axis and thickness, else 0
             relB: 1, relF: 1, braces: 0,           // load shares left to the joint once brace struts take theirs
             fx: 0, fy: 0, fz: 0, mx: 0, my: 0, mz: 0,
             axial: 0, shear: 0, bending: 0, torsion: 0, util: 0, mode: 'tension',
@@ -216,7 +256,7 @@ export class Structure {
             kb: 1, wn: STRUCT.FLEX_W_MAX,
           };
           const slender = Math.min(STRUCT.FLEX_SLENDER_MAX, Math.max(STRUCT.FLEX_SLENDER_MIN, g.len / (2 * g.r)));
-          j.kb = j.capT * PI * g.r * g.r / (STRUCT.FLEX_AT_LIMIT * slender);
+          j.kb = j.capT * (g.rh > 0 ? rootSection(g.rh, g.rt).zFlap : PI * g.r * g.r) / (STRUCT.FLEX_AT_LIMIT * slender);
           b._sj = j;
           this.joints.push(j);
         }
@@ -269,6 +309,14 @@ export class Structure {
         j.kb = capM / (STRUCT.FLEX_AT_LIMIT * slender) / j.relB;
       }
     }
+  }
+
+  /** The joint a part would be torn off at: the one that holds it to the rest (toward the root), else the one it holds. */
+  jointOf(part) {
+    if (part._sj) return part._sj;
+    let only = null;
+    for (const j of this.joints) if (j.a === part) { if (only) return null; only = j; }
+    return only;
   }
 
   /** Start of a physics step: forget the forces of the last one. */
@@ -418,8 +466,18 @@ export class Structure {
       const bx = Mx - mn * j.nx, by = My - mn * j.ny, bz = Mz - mn * j.nz;
       const shear = Math.sqrt(sx * sx + sy * sy + sz * sz), bending = Math.sqrt(bx * bx + by * by + bz * bz), torsion = Math.abs(mn);
       j.axial = -fn; j.shear = shear; j.bending = bending; j.torsion = torsion;
-      const r = j.r, nb = bending * j.relB / (PI * r * r), na = -fn * j.relF / (2 * PI * r);
-      const uT = (na + nb) / j.capT, uC = (nb - na) / j.capC, uS = (shear * j.relF / (PI * r) + torsion * j.relB / (2 * PI * r * r)) / j.capS;
+      const r = j.r;
+      let nb, na, qs;
+      if (j.rh > 0) {      // thin root: the chord runs along the stack axis (jointUtilisation, rootSection)
+        const h = j.rh, t = j.rt, per = 2 * (h + t);
+        nb = (Math.abs(by) / (h * t + t * t / 3) + Math.sqrt(bx * bx + bz * bz) / (h * t + h * h / 3)) * j.relB;
+        na = -fn * j.relF / per;
+        qs = 2 * shear * j.relF / per + torsion * j.relB / (2 * h * t);
+      } else {
+        nb = bending * j.relB / (PI * r * r); na = -fn * j.relF / (2 * PI * r);
+        qs = shear * j.relF / (PI * r) + torsion * j.relB / (2 * PI * r * r);
+      }
+      const uT = (na + nb) / j.capT, uC = (nb - na) / j.capC, uS = qs / j.capS;
       let u = uT, mode = 'tension';
       if (uC > u) { u = uC; mode = 'compression'; }
       if (uS > u) { u = uS; mode = 'shear'; }
@@ -542,7 +600,7 @@ export class Structure {
       id: p.id, m: this._ms[i], r: [mp[i * 3], mp[i * 3 + 1], mp[i * 3 + 2]], I: [p._io || 0, p._iy || 0, p._io || 0],
       F: [W[i * 6], W[i * 6 + 1], W[i * 6 + 2]], T: [W[i * 6 + 3], W[i * 6 + 4], W[i * 6 + 5]],
     }));
-    const joints = this.joints.map(j => ({ parent: j.a._si, child: j.b._si, a: j.a.id, b: j.b.id, kind: j.kind, p: [j.px - com.x, j.py - com.y, j.pz - com.z], n: [j.nx, j.ny, j.nz], r: j.r, capT: j.capT, capC: j.capC, capS: j.capS, relB: j.relB, relF: j.relF }));
+    const joints = this.joints.map(j => ({ parent: j.a._si, child: j.b._si, a: j.a.id, b: j.b.id, kind: j.kind, p: [j.px - com.x, j.py - com.y, j.pz - com.z], n: [j.nx, j.ny, j.nz], r: j.r, root: j.rh > 0 ? { h: j.rh, t: j.rt, c: [0, 1, 0] } : null, capT: j.capT, capC: j.capC, capS: j.capS, relB: j.relB, relF: j.relF }));
     const mo = this._motion;
     const loads = this.joints.map(j => ({ F: [j.fx, j.fy, j.fz], M: [j.mx, j.my, j.mz], axial: j.axial, shear: j.shear, bending: j.bending, torsion: j.torsion, util: j.util, mode: j.mode, damage: j.damage }));
     return { valid: this.valid, mass: this._mass || v.mass, inertia: [v.inertia.x, v.inertia.y, v.inertia.z], bodies, joints, motion: { w: mo.w.slice(), alpha: mo.alpha.slice(), f: mo.f.slice() }, loads, residual: { F: this.resF || 0, M: this.resM || 0 } };

@@ -6,7 +6,7 @@
 // in LOCAL axes. A part's world position is  pos + q·(part.pos − com).
 // Torque command axes (local): x = pitch, y = roll, z = −yaw.
 import { Vector3, Quaternion } from '../lib/three.module.min.js';
-import { partDef, currentPartId, engineThrust, engineIsp, G0 } from './parts.js';
+import { partDef, currentPartId, engineThrust, engineIsp, G0, airRating } from './parts.js';
 import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
 import { maneuverBasis } from './trajectory.js';
@@ -118,6 +118,7 @@ export const TUNING = {
   LADDER_REACH: 1.6,         // m: how close a Pip must be to grab a ladder
   LADDER_SPEED: 0.9,         // m/s climbing
   STRUCT_FAIL: true,         // joints break when overloaded (docs/STRUCTURE.md); false = loads are still worked out and shown
+  AERO_FAIL: true,           // parts over their air rating are torn off (docs/AERO_BREAKUP.md); needs STRUCT_FAIL too
 };
 
 export const SAS_MODES = ['hold', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut',
@@ -588,6 +589,13 @@ export class Vessel {
       }
       p._stack = !!d.attach.stack;
       p._ox = Math.cos(p.rot); p._oz = -Math.sin(p.rot);
+      // air rating (parts.js airRating): the dynamic pressure this part stands, across it or, opened out, from anywhere
+      const ar = airRating(d);
+      p._rq = ar ? ar.q : 0; p._rqOpen = !!(ar && ar.flow === 'open');
+      if (p._ad === undefined) p._ad = 0;
+      // an opened solar panel is a flat plate standing out from the hull, in the plane of the stack axis
+      p._pA = d.solar && !d.solar.fixed && d.solar.span > 0 ? d.solar.span * d.h : 0;
+      p._pArm = p._pA > 0 ? ((d.rw || 0) + d.solar.span) / 2 : 0;
       // tilted parts (pitch / roll set in the builder): own +Y axis `_a*`, wing normal `_n*` and span `_s*` in craft axes
       p._tilt = !!(p.pitch || p.roll);
       if (p._tilt) {
@@ -1278,6 +1286,17 @@ export class Vessel {
     this.estimateDeltaV();
   }
 
+  /**
+   * Air ratings of this vessel's parts as of the last flight step (docs/AERO_BREAKUP.md):
+   * [{ part, name, q (Pa: the airflow the rating is judged on), rated (Pa), open (true: all of the flow, while deployed),
+   *    util (q / rated), damage (0…1, torn off at 1) }]. Parts without a rating are left out.
+   */
+  airLoads() {
+    const out = [];
+    for (const p of this._list) if (p._rq > 0) out.push({ part: p.id, name: p.def.name, q: p._aq || 0, rated: p._rq, open: p._rqOpen, util: (p._aq || 0) / p._rq, damage: p._ad || 0 });
+    return out;
+  }
+
   /** Joints that gave way this step (structure.js): cut their links; whatever is no longer attached leaves. */
   _breakJoints(events) {
     const st = this.structure, broken = st.pending;
@@ -1292,8 +1311,8 @@ export class Vessel {
       if (a.dockedTo === b.id) a.dockedTo = null;
       if (b.dockedTo === a.id) b.dockedTo = null;
       _a.set(j.px, j.py, j.pz).sub(this.com).applyQuaternion(this.q).add(this.pos);
-      info.push({ a: a.id, b: b.id, kind: j.kind, mode: j.mode, util: j.util, aName: a.def.name, bName: b.def.name, pos: _a.clone(),
-        loads: { r: j.r, capT: j.capT, capC: j.capC, capS: j.capS, axial: j.axial, shear: j.shear, bending: j.bending, torsion: j.torsion, relB: j.relB, relF: j.relF, mode: j.mode } });
+      info.push({ a: a.id, b: b.id, kind: j.kind, mode: j.mode, util: j.util, aName: a.def.name, bName: b.def.name, pos: _a.clone(), air: j.air || null,
+        loads: { r: j.r, capT: j.capT, capC: j.capC, capS: j.capS, rh: j.rh, rt: j.rt, axial: j.axial, shear: j.shear, bending: j.bending, torsion: j.torsion, relB: j.relB, relF: j.relF, mode: j.mode } });
     }
     if (!info.length) return;
     const pieces = [], seen = new Set();
@@ -1313,9 +1332,24 @@ export class Vessel {
       events.push({ type: 'decouple', vessel: this, debris, part: null });
     }
     if (!left.length) { this._rebuild(); this._updateMass(true); }      // still held some other way (a docked ring)
+    // A piece that breaks away is pushed clear and set turning: a little for a light one, next to nothing for half
+    // a rocket. The push is shared with what it left, so momentum is kept.
+    for (const d of left) {
+      const md = d.mass, mm = this.mass;
+      if (!(md > 0) || !(mm > 0) || this.landed) continue;
+      _a.copy(d.pos).sub(this.pos);
+      const sep = _a.length();
+      if (sep < 1e-6) continue;
+      _a.multiplyScalar(1 / sep);
+      const dv = Math.min(STRUCT.DEBRIS_PUSH, STRUCT.DEBRIS_PUSH_MAX / md);
+      d.vel.addScaledVector(_a, dv * mm / (md + mm));
+      this.vel.addScaledVector(_a, -dv * md / (md + mm));
+      const seed = (d._list[0] && d._list[0].id) | 0, k = STRUCT.DEBRIS_SPIN / Math.max(1, Math.sqrt(Math.max(d.inertia.x, d.inertia.z) / 40));
+      d.w.x += hash3(seed, 7, 1) * k; d.w.y += hash3(seed, 7, 2) * k * 0.5; d.w.z += hash3(seed, 7, 3) * k;
+    }
     for (const i of info) {
       const debris = left.find(d => d.parts.has(i.a) || d.parts.has(i.b)) || null;
-      events.push({ type: 'structure', vessel: this, debris, joint: { a: i.a, b: i.b, kind: i.kind, aName: i.aName, bName: i.bName }, mode: i.mode, util: i.util, loads: i.loads, pos: i.pos, body: this.body });
+      events.push({ type: 'structure', vessel: this, debris, joint: { a: i.a, b: i.b, kind: i.kind, aName: i.aName, bName: i.bName }, mode: i.mode, util: i.util, loads: i.loads, air: i.air, pos: i.pos, body: this.body });
     }
     this.estimateDeltaV();
   }
@@ -1908,7 +1942,14 @@ export class Vessel {
     this.heatFlux = flux;
     const heating = flux > TUNING.HEAT_MIN_FLUX;
     let overheated = null, maxRatio = 0;
+    let airU = 0, airWorst = null, torn = null;
+    if (!(rho > 1e-10 && speed2 > 0.01) && this._airSeen) {      // out of the air: nothing presses, and what was strained recovers
+      let any = false;
+      for (const p of this._list) if (p._rq > 0) { p._aq = 0; if (p._ad > 0) { p._ad = Math.max(0, p._ad - dt / STRUCT.HEAL_TIME); any = true; } }
+      this._airSeen = any;
+    }
     if (rho > 1e-10 && speed2 > 0.01) {
+      this._airSeen = true;
       const list = this._list, n = list.length;
       const cxm = com.x, cym = com.y, czm = com.z;
       const uAx = uy / speed;
@@ -1983,6 +2024,26 @@ export class Vessel {
           fx = -k * vx; fy = -k * vy; fz = -k * vz;
           Ax += fx; Ay += fy; Az += fz;
           ATx += ry * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - ry * fx;
+          if (p._pA > 0 && p.deployed) {
+            // an open panel: the flat-plate force of the flow through its face, at the middle of its span
+            const nx = p._oz, nz = -p._ox, vn = vx * nx + vz * nz;
+            const f = -0.5 * rho * mf * TUNING.WING_PLATE_CD * p._pA * vn * Math.abs(vn);
+            const pfx = f * nx, pfz = f * nz, ax = rx + p._ox * p._pArm, az = rz + p._oz * p._pArm;
+            Ax += pfx; Az += pfz;
+            ATx += ry * pfz; ATy += az * pfx - ax * pfz; ATz -= ry * pfx;
+          }
+        }
+        if (p._rq > 0 && !(p._rqOpen || p.links.length > 1 || !d.decoupler)) p._aq = 0;      // (a clamp that holds nothing has nothing to sway)
+        else if (p._rq > 0) {
+          // air rating: the dynamic pressure of the flow across the part's own axis (or all of it, on an open panel)
+          let qx = 0;
+          if (p._rqOpen) { if (p.deployed) qx = qd; }
+          else { const va = p._tilt ? vx * p._ax + vy * p._ay + vz * p._az : vy; qx = 0.5 * rho * Math.max(0, v2 - va * va); }
+          const ru = qx / p._rq;
+          p._aq = qx;
+          if (ru > airU) { airU = ru; airWorst = p; }
+          if (ru > 1) { p._ad += (ru - 1) * dt / STRUCT.AIR_FAIL_TIME; if (p._ad >= 1) { p._ad = 1; (torn || (torn = [])).push(p); } }
+          else if (p._ad > 0) p._ad = Math.max(0, p._ad - dt / STRUCT.HEAL_TIME);
         }
         if (d.chute && (p.deployed === 'semi' || p.deployed === 'full')) {
           const area = p.deployed === 'semi' ? d.chute.semiArea * p.deployT : d.chute.semiArea + (d.chute.area - d.chute.semiArea) * p.deployT;
@@ -2066,7 +2127,20 @@ export class Vessel {
       const u = st.solve(dt, Fx, Fy, Fz, Tx, Ty, Tz, m, this.inertia, w, TUNING.STRUCT_FAIL);
       if (u > STRUCT.WARN) { if (!st.warned) { st.warned = true; ev.push({ type: 'stress', vessel: this, util: u }); } }
       else if (u < STRUCT.WARN_RESET) st.warned = false;
+      // parts the airflow has had for too long come away at the joint that holds them
+      if (torn && TUNING.STRUCT_FAIL && TUNING.AERO_FAIL) {
+        for (const p of torn) {
+          const j = st.jointOf(p);
+          p._ad = 0;
+          if (!j || (st.pending && st.pending.includes(j))) continue;
+          j.mode = 'airflow'; j.util = p._aq / p._rq; j.air = { part: p.id, name: p.def.name, q: p._aq, rated: p._rq, open: p._rqOpen };
+          (st.pending || (st.pending = [])).push(j);
+        }
+      }
     }
+    this.airUtil = airU; this.airWorst = airWorst;
+    if (airU > STRUCT.WARN) { if (!this._airWarned) { this._airWarned = true; ev.push({ type: 'stress', vessel: this, util: airU, air: true }); } }
+    else if (airU < STRUCT.WARN_RESET) this._airWarned = false;
 
     // --- integrate translation: kick-drift-kick with gravity re-evaluated
     // The propellant of this step has already left the tanks but `m` is still the mass at its start. Dividing the

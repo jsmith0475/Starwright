@@ -777,6 +777,29 @@ export const RENAMED_PARTS = Object.freeze({ srb_hammer: 'srb_maul', srb_spark: 
 export function currentPartId(id) { return !PARTS[id] && RENAMED_PARTS[id] ? RENAMED_PARTS[id] : id; }
 export function partDef(id) { const d = PARTS[id]; if (!d) throw new Error('Unknown part ' + id); return d; }
 
+// ---------------------------------------------------------------------- air ratings (docs/AERO_BREAKUP.md)
+// Some parts fail in an airflow in ways a rigid-body load cannot show: thin panels flutter, thin shells buckle,
+// the sway braces of a side booster give when core and booster bend differently. Those parts carry a rated
+// dynamic pressure, as they carry a rated temperature and a rated impact speed. `flow`:
+//   'cross'  the rating is on the part of the airflow that crosses the part's own axis (0 flying straight)
+//   'open'   the rating is on the whole airflow, and applies only while the part is deployed
+export const AIR_RATING = {
+  solar: { q: 3000, flow: 'open' },          // an open Sunfoil panel (fixed tiles have nothing to snap off)
+  solar_wing: { q: 2500, flow: 'open' }, solar_grand: { q: 2000, flow: 'open' },
+  antenna: { q: 12000, flow: 'cross' },      // a whip
+  antenna_dish: { q: 10000, flow: 'cross' }, antenna_bigdish: { q: 8000, flow: 'cross' },
+  nose: { q: 15000, flow: 'cross' },         // a thin cone, made to meet the air point first
+  fairing: { q: 12000, flow: 'cross' },      // a taller, thinner shell
+  radialdec: { q: 12000, flow: 'cross' },    // the sway braces of a booster clamp (the clamp itself carries the thrust)
+};
+/** Air rating of a part definition: { q (Pa), flow: 'cross' | 'open' }, or null when the part has none. */
+export function airRating(def) {
+  if (!def) return null;
+  if (def.air !== undefined) return def.air || null;
+  if (def.solar && (def.solar.fixed || !(def.solar.span > 0))) return null;
+  return (def.variant && AIR_RATING[def.shape + '_' + def.variant]) || AIR_RATING[def.shape] || null;
+}
+
 // ---------------------------------------------------------------------- interstage trusses
 export const INTERSTAGE = { kgPerM2: 12, minKg: 3, name: 'Interstage truss' };
 /** Does a part stacked on this engine's nozzle end need a truss around the engine? (Rocket engines with a bell that

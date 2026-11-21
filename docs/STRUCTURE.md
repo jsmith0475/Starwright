@@ -70,6 +70,10 @@ Joint radius: a coaxial stack joint uses the smaller of the two faces that meet 
 engine with an interstage truss, the truss: the load runs rim to rim around the bell). A radial
 or surface mount uses the ring with the same perimeter as its footprint, `(h + t) / pi`.
 
+Fins and wings are the exception: they sit on a thin rectangular root, weak across its
+thickness, with its own section formulas. That, and the air ratings that tear thin parts off in
+a cross-flow, are in [AERO_BREAKUP.md](AERO_BREAKUP.md).
+
 What that gives, for a plain joint:
 
 | size | radius | pull apart | crush | bend |
@@ -152,7 +156,8 @@ it sideways through the atmosphere.
 - Gravity is taken as uniform across the vessel (the tidal stretch of a 50 m ship in low orbit
   is about a newton).
 - A side mount is treated as a ring with the perimeter of its footprint. That is fair for
-  clamps, legs and fins and generous for long wings.
+  clamps and legs. Fins and wings use a thin root instead (AERO_BREAKUP.md), still at the root
+  only: a wing does not fold in the middle.
 - The vessel's rotation uses a diagonal inertia, as the flight model always has. The joint
   loads are those of the motion the game actually produces.
 
@@ -183,7 +188,8 @@ solveJointLoads(bodies, joints, motion) → [{ F:[x,y,z], M:[x,y,z] }]     // on
 //   bodies: [{ m, r:[x,y,z], I:[Ixx,Iyy,Izz], F:[x,y,z], T:[x,y,z] }]
 //   joints: [{ parent, child, p:[x,y,z], n:[x,y,z] }]   indices into bodies; a tree; any order
 //   motion: { w:[x,y,z], alpha:[x,y,z], f:[x,y,z] }
-jointUtilisation(F, M, n, r, capT, capC, capS) → { axial, shear, bending, torsion, nT, nC, q, util, mode }
+jointUtilisation(F, M, n, r, capT, capC, capS, root = null) → { axial, shear, bending, torsion, nT, nC, q, util, mode }
+//   root: { h, t, c } for the thin root of a fin or wing (AERO_BREAKUP.md); null for a ring
 //   mode: 'tension' | 'compression' | 'shear'
 
 // Live, one per vessel (vessel.structure; null for a one-part vessel):

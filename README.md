@@ -106,6 +106,9 @@ And around the flying:
   (the `;` key) show the load in flight, and the assembly building tells you which joint will
   give way before you launch (the `L` key). Wider parts, shorter stacks and brace struts are the
   cure. A switch in Settings turns the breaking off.
+- **Rockets that come apart in the air.** Flip or tumble in thick air and the side boosters are
+  ripped from their clamps, antennas and open solar panels are stripped, nose cones go, and
+  the pieces fly on as debris. A clean climb loses nothing.
 - **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
 
@@ -243,6 +246,11 @@ Starwright does not fake its orbits, and it shows its work.
   written multibody reference and closed-form cases check it: **300 more checks, 0 failures**,
   agreeing to about one part in 10¹⁴. The model, its numbers, its limits and one defect the
   checks found are in [docs/STRUCTURE.md](docs/STRUCTURE.md).
+- **Breakup with its assumptions stated.** Fins and wings fail at a thin root under the lift
+  they really carry. Antennas, open panels, nose cones and booster clamps carry a rated dynamic
+  pressure, like a temperature limit, because flutter and buckling are not things a rigid-body
+  load can show. **113 more checks, 0 failures**, on the airflow each part sees, the step on
+  which it goes, and what a tear-off conserves: [docs/AERO_BREAKUP.md](docs/AERO_BREAKUP.md).
 - **Honest about its limits.** No n-body gravity, so no Lagrange points and no halo orbits.
   Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
@@ -316,8 +324,10 @@ what the game does today, and what building it involves.
    carries a computed load, bends, and breaks when a rocket is too tall, too thin or flown too
    hard. The assembly building shows which joint is closest to its limit.
    [How it works and what was checked.](docs/STRUCTURE.md)
-3. **[Aerodynamic breakup.](docs/ROADMAP.md#3-aerodynamic-breakup)** A rocket that flips or
-   tumbles in thick air sheds its fins, panels and boosters and breaks into pieces.
+3. **[Aerodynamic breakup.](docs/ROADMAP.md#3-aerodynamic-breakup)** **Built.** A rocket that
+   flips or tumbles in thick air has its side boosters, antennas, open panels and nose cones
+   torn off, and the pieces fly on as debris. A clean climb loses nothing.
+   [How it works and what was checked.](docs/AERO_BREAKUP.md)
 4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** Sharper terrain,
    richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
 5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the

@@ -101,6 +101,18 @@ reference to about 1e-14. The checks also found that the vessel's moment of iner
 part centres and not mass points (up to 9 % too large on small capsule ships), which is reported
 and not yet fixed. Model, results and that defect: [STRUCTURE.md](STRUCTURE.md).
 
+### Aerodynamic breakup (chapter 8 of the checks)
+
+`tests/verify/checks_breakup.mjs`: the thin roots of fins and wings against line loads integrated
+round the rectangle; the dynamic pressure the game reads on every rated part against the vessel's
+state, the body's rotation and its atmosphere; the force of an open solar panel against a flat
+plate; which part is torn off and on which physics step against the damage rule replayed from the
+state; conservation of mass, momentum and mass centre across a tear-off; stock rockets on a clean
+climb and in a flip at max Q; the limit on loose pieces. 113 checks pass, 0 fail. The air ratings
+themselves are stated limits, like a part's maximum temperature, and the checks verify that the
+game applies them as documented, not that they are the right numbers for a real antenna.
+Model and results: [AERO_BREAKUP.md](AERO_BREAKUP.md).
+
 ## 4. Model honesty: patched conics against n-body gravity
 
 "n-body" here means the ship feels every body, and Verda recoils from its moons as real gravity requires.
