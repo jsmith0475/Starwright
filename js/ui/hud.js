@@ -1029,13 +1029,15 @@ export function createHud(app, act) {
       if (live) {
         // rises at once, falls back over a moment: a one-frame spike stays readable
         if (stStamp !== v.structureStamp) { stStamp = v.structureStamp; stShown = 0; }      // other joints now (staging, a break): start again
-        const u = st.maxUtil; stShown = u > stShown ? u : Math.max(u, stShown - dt * 2.5);
+        // (the same read-out carries the air ratings, docs/AERO_BREAKUP.md: whichever is nearer its limit is shown)
+        const byAir = (v.airUtil || 0) > st.maxUtil && !!v.airWorst;
+        const u = byAir ? v.airUtil : st.maxUtil; stShown = u > stShown ? u : Math.max(u, stShown - dt * 2.5);
         const pct = stressPercent(stShown);
         if (pct !== stPct) { stPct = pct; setText(nStPct, pct + '%'); }
         setW(stFill, stShown);
         const lvl = stressLevel(stShown);
         setCls(structBox, 'warn', lvl === 'warn'); setCls(structBox, 'bad', lvl === 'bad');
-        if (tick || pct !== stWhyPct) { stWhyPct = pct; stWhy = describeJoint(st.worst, stShown); setText(nStWhy, stWhy); }
+        if (tick || pct !== stWhyPct) { stWhyPct = pct; stWhy = byAir ? v.airWorst.def.name + ': airflow, ' + pct + ' %' : describeJoint(st.worst, stShown); setText(nStWhy, stWhy); }
         values.structure = stShown;
       } else if (stPct !== -1 || tick) {
         stShown = 0; stPct = -1; setText(nStPct, '--'); setW(stFill, 0); setCls(structBox, 'warn', false); setCls(structBox, 'bad', false);

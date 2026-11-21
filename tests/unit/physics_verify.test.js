@@ -22,6 +22,7 @@ for (const [title, only, skip] of [
   ['multi-body: ephemeris, SOI continuity, map prediction, Pell transfer, flyby, rendezvous, rotation', ['3'], ['3c']],
   ['atmosphere and surface: density, drag, heating, gravity, ballistic hops', ['4'], null],
   ['structure: joint loads against an independent multibody solver, closed forms, thin-ring strength, live closure, failure', ['7'], null],
+  ['aerodynamic breakup: thin roots, air ratings against the vessel state, open panels, tear-off law, conservation, stock flights', ['8'], null],
 ]) {
   test(`physics verification, ${title}`, async () => {
     const S = await runAll({ fast: true, only, skip });

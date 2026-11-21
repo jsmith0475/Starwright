@@ -71,28 +71,34 @@ moment of the flight, and in flight you can watch the load rise before it gives 
 
 ## 3. Aerodynamic breakup
 
-**What it is.** A rocket that goes sideways or tumbles in thick air comes apart the way a real
-one does: fins and panels are torn off, side boosters are ripped from their clamps, the nose
-goes, and what is left breaks into pieces that fall on their own.
+**Status: built.** How it works, what was checked against what, and what is still open are in
+[AERO_BREAKUP.md](AERO_BREAKUP.md).
+
+**What it is.** A rocket that goes sideways or tumbles in thick air comes apart: side boosters
+are ripped from their clamps, antennas and open solar panels are stripped, nose cones go, a fin
+caught face on tears off at its root, and the pieces fly on as debris with a push and a tumble
+of their own. A clean climb loses nothing.
 
 **Why it matters.** A flip past max Q is the most dramatic thing that can happen on the way up,
 and it should look like it. It also teaches: you see what the air did, in what order, and why
 a steady hand through the dense part of the climb matters.
 
-**Today.** Structural dynamics (item 2) gives every joint a strength and breaks a stack that is
-bent too far: a tall rocket that flips at high dynamic pressure snaps in two. But the air load
-on a single part is still modest, because drag on a part does not rise sharply when it meets
-the flow broadside, and wings are treated as stronger than they are. So in a tumble the stack
-may break while fins, panels, noses and most side boosters stay on. Pieces that do come off are
-already separate vessels that fall and burn on their own.
+**How it is done.** Two mechanisms, kept apart on purpose. Fins and wings now sit on a thin
+root and fail under the lift and drag they really carry. Thin, exposed parts (antennas, open
+panels, nose cones, booster clamps) carry a rated dynamic pressure, the way every part carries
+a maximum temperature, because flutter, buckling and sway-brace failure are not things a
+rigid-body load can show. The world keeps at most 24 loose pieces so the frame rate holds.
 
-**Building it.** Give each exposed part the air load it really takes when the flow is across it
-(fins and wings at high angle, panels and antennas face on, a nose cone pushed sideways) and
-check it against the joint strengths that already exist. Rate thin surface parts for a maximum
-dynamic pressure, so solar panels and antennas left open are stripped first. Let a break shed
-its debris with a little spin and drag of its own, and cap the number of pieces so the frame
-rate holds. Then tune it on the stock rockets: a clean climb loses nothing, a flip past max Q
-loses the lot.
+**Still open, for anyone who wants it.**
+
+- Fins usually hold in a tumble, because the computed load on them is honest and modest. A
+  flutter model for fins and wings would make them go the way thin panels do.
+- Shielding: a booster in the lee of the core sees the same flow as one in front.
+- A dish is judged like a mast, on flow across the stack axis, not on which way it faces.
+- Pieces have the drag of their parts and no lift of their own shape, so they do not flutter
+  down like a panel.
+- Stock rockets with only fins and a strong stack (Skylark II, Hopper) cannot be made to flip
+  at all, so they have nothing to shed.
 
 ## 4. Higher-fidelity worlds
 

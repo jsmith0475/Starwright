@@ -356,3 +356,65 @@ export function ringUtilisation(F, M, n, r, capT, capC, capS, opts = {}) {
   const c = [['tension', L.nT / capT], ['compression', L.nC / capC], ['shear', L.q / capS]].sort((a, b) => b[1] - a[1]);
   return { ...L, util: c[0][1], mode: c[0][0], margin: c[0][1] - c[1][1] };
 }
+
+// ------------------------------------------------------------------------------------------ thin root (fins, wings)
+/**
+ * Line loads of a thin rectangular root (docs/AERO_BREAKUP.md): a line of fasteners round a rectangle `h` long
+ * along the unit vector `c` and `t` across, in the plane with normal n, centred on the joint point. As for the
+ * ring, WITHOUT the section formulas. Assumptions only: the axial line load varies linearly across the section,
+ * s = A + B x + C y (x along c, y across); the shear line load is twice its mean round the perimeter (as on a
+ * ring) plus the shear flow of a closed thin section in torsion, Mt / (2 × enclosed area). A, B, C are fitted so
+ * that s integrated round the four sides (Gauss-Legendre, exact for this integrand) gives back the axial force
+ * and both bending moments; perimeter and enclosed area are measured from the corner points.
+ * → { N, V, Mb, Mt, nT, nC, q, back: { N, Mc, Me } }
+ */
+export function rootLineLoads(F, M, n, c, h, t) {
+  const nn = scale(n, 1 / norm(n));
+  let e1 = sub(c, scale(nn, dot(c, nn))); e1 = scale(e1, 1 / norm(e1));
+  const e2 = cross(nn, e1);
+  const corners = [[-h / 2, -t / 2], [h / 2, -t / 2], [h / 2, t / 2], [-h / 2, t / 2]];
+  const gx = [-Math.sqrt(3 / 5), 0, Math.sqrt(3 / 5)], gw = [5 / 9, 8 / 9, 5 / 9];
+  // walk the four sides: perimeter, enclosed area (shoelace) and the response of each basis function
+  let per = 0, area = 0;
+  const cols = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];      // per basis function: [force along -n, moment about e1, moment about e2]
+  const basis = [() => 1, (x) => x, (x, y) => y];
+  for (let k = 0; k < 4; k++) {
+    const a = corners[k], b = corners[(k + 1) % 4], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    per += len; area += (a[0] * b[1] - b[0] * a[1]) / 2;
+    for (let g = 0; g < 3; g++) {
+      const u = (gx[g] + 1) / 2, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u, dl = gw[g] * len / 2;
+      const at = add(scale(e1, x), scale(e2, y));
+      for (let i = 0; i < 3; i++) {
+        // axial line load (tension positive): the root side pulls the far side back, along -n
+        const df = scale(nn, -basis[i](x, y) * dl), dm = cross(at, df);
+        cols[i][0] += dot(df, nn); cols[i][1] += dot(dm, e1); cols[i][2] += dot(dm, e2);
+      }
+    }
+  }
+  const A = [0, 1, 2].map(row => cols.map(col => col[row]));
+  const ax = solveDense(A, [dot(F, nn), dot(M, e1), dot(M, e2)]);
+  // peaks: a linear field over a rectangle peaks at a corner; the sides are walked anyway
+  let hi = -Infinity, lo = Infinity;
+  for (let k = 0; k < 4; k++) {
+    const a = corners[k], b = corners[(k + 1) % 4];
+    for (let i = 0; i <= 50; i++) { const u = i / 50, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u, s = ax[0] + ax[1] * x + ax[2] * y; if (s > hi) hi = s; if (s < lo) lo = s; }
+  }
+  const fn = dot(F, nn), mn = dot(M, nn);
+  const V = norm(sub(F, scale(nn, fn))), Mt = Math.abs(mn), Mb = norm(sub(M, scale(nn, mn)));
+  return {
+    N: -fn, V, Mb, Mt, nT: Math.max(0, hi), nC: Math.max(0, -lo), q: 2 * V / per + Mt / (2 * Math.abs(area)), per, area: Math.abs(area),
+    back: { N: -(ax[0] * cols[0][0] + ax[1] * cols[1][0] + ax[2] * cols[2][0]), Mc: ax[0] * cols[0][1] + ax[1] * cols[1][1] + ax[2] * cols[2][1], Me: ax[0] * cols[0][2] + ax[1] * cols[1][2] + ax[2] * cols[2][2] },
+  };
+}
+
+/** Utilisation from the root line loads above. → { util, mode, margin, nT, nC, q, N, V, Mb, Mt } */
+export function rootUtilisation(F, M, n, c, h, t, capT, capC, capS) {
+  const L = rootLineLoads(F, M, n, c, h, t);
+  const u = [['tension', L.nT / capT], ['compression', L.nC / capC], ['shear', L.q / capS]].sort((a, b) => b[1] - a[1]);
+  return { ...L, util: u[0][1], mode: u[0][0], margin: u[0][1] - u[1][1] };
+}
+
+/** Utilisation of a joint by whichever reference fits it: the thin root when the joint has one, else the ring. */
+export function sectionUtilisation(F, M, j, opts = {}) {
+  return j.root ? rootUtilisation(F, M, j.n, j.root.c, j.root.h, j.root.t, j.capT, j.capC, j.capS) : ringUtilisation(F, M, j.n, j.r, j.capT, j.capC, j.capS, opts);
+}

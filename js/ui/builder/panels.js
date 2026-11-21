@@ -6,6 +6,7 @@ import * as PARTS_MOD from '../../core/parts.js';
 import * as CRAFT_MOD from '../../core/craft.js';
 const { Craft, stockCrafts } = CRAFT_MOD;
 import { SYSTEM } from '../../core/bodies.js';
+import { airRatingText } from '../stress.js';
 
 const { PART_LIST, partDef, engineThrust } = PARTS_MOD;
 const AUTOSAVE = '__autosave';
@@ -129,6 +130,8 @@ export function partStatRows(d) {
   if (d.heatshield) rows.push(['Heat limit', fmt.num(d.maxTemp) + ' K']);
   if (d.experiment) rows.push(['Experiment', String(d.experiment).replace(/_/g, ' ')]);
   if (Number.isFinite(d.tolerance)) rows.push(['Impact limit', d.tolerance + ' m/s']);
+  const air = airRatingText(PARTS_MOD.airRating(d));
+  if (air) rows.push(['Air limit', air]);
   rows.push(['Mounts', d.attach.radial ? (d.attach.outer ? 'On surfaces; holds a booster' : 'On surfaces') : d.topOnly ? 'Top of a stack only' : 'Stack nodes, top and bottom']);
   return rows;
 }

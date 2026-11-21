@@ -109,8 +109,24 @@ What helps:
   the two. Run them from the core to the side boosters.
 - The Assembly Hangar checks the design for the usual load cases before you fly.
 
+**Parts the air can tear off.** Some parts are rated for how much air may press on them, the way every
+part has a temperature limit. The part card in the Assembly Hangar shows it as "Air limit".
+
+- **Antennas, dishes, nose cones, fairings and the clamps that hold side boosters** are rated for air
+  blowing *across* them. Nose first they feel nothing, however fast you go. Sideways at high Q they go:
+  a rocket that flips around maximum Q loses its side boosters first, then its antennas, and the loose
+  boosters lose their nose cones as they tumble away.
+- **Folding solar panels** are rated for a few kPa of air from any direction while they are open. Open
+  them in space. Stowed, they are safe.
+- **Fins and wings** have no rating: they are held on by a thin root and break off when the lift on them
+  bends it too far, which takes a large fin face on to fast, thick air.
+
+The message says what went and why, for example "The Whip Antenna was torn off by the airflow: 18 kPa
+across it, rated for 12 kPa". The Structure read-out shows the air figure when it is the highest one on
+the ship. Pieces fly on as debris; the game keeps at most 24 loose pieces at a time.
+
 If you would rather not lose rockets this way, switch **Structural failures** off in Settings (Esc →
-Settings in flight). The loads are still measured and shown; nothing breaks.
+Settings in flight). The loads are still measured and shown; nothing breaks and nothing is torn off.
 
 ## Landing on legs
 

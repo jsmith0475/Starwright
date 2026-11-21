@@ -12,6 +12,8 @@ export const WARP_RATES = Object.freeze([1, 2, 3, 4, 5, 10, 50, 100, 1000, 10000
 export const PHYSICS_WARP_MAX = 3;          // highest physics-warp index
 export const LOAD_RANGE = 2500;             // m: vessels this close to the active one get full physics
 export const MAX_SUBSTEPS = 400;            // per World.step call
+export const MAX_DEBRIS = 24;               // loose pieces flown near the active vessel at once (the lightest go first)
+export const SCRAP_MASS = 1000;             // kg: debris lighter than this is removed without a message when it falls behind
 // Minimum altitude for each rails-warp index, as a fraction of the body radius (never below the atmosphere top,
 // or 1.5 % of the radius on airless bodies).
 export const RAIL_ALT_FRAC = Object.freeze([0, 0, 0, 0, 0, 0.05, 0.1, 0.2, 0.5, 1, 2]);
@@ -588,8 +590,22 @@ export class World {
     if (v.dead) return;
     const what = v.type === 'debris' ? 'Debris' : v.type === 'eva' ? 'Pip' : 'Vessel';
     const how = reason === 'atmosphere' ? `burned up in the atmosphere of ${v.body.name}` : `crashed into ${v.body.name}`;
-    this._ev.push({ type: 'message', text: `${what} "${v.name}" ${how}`, vessel: v, reason, kind: 'removed' });
+    // (a fin or a panel that fell behind is not news: a break-up would otherwise end in a column of messages)
+    if (!(v.type === 'debris' && v.mass < SCRAP_MASS)) this._ev.push({ type: 'message', text: `${what} "${v.name}" ${how}`, vessel: v, reason, kind: 'removed' });
     this._destroy(v, reason);
+  }
+
+  /** A break-up may not leave more than MAX_DEBRIS loose pieces in flight near the active vessel: the lightest go. */
+  _capDebris() {
+    const loose = [];
+    for (const v of this._loaded) if (v.type === 'debris' && !v.dead && !v.landed && v !== this.active) loose.push(v);
+    if (loose.length <= MAX_DEBRIS) return;
+    loose.sort((a, b) => a.mass - b.mass);
+    const targets = new Set(this.vessels.map(v => v.targetId).filter(id => id != null));
+    for (let i = 0, cut = loose.length - MAX_DEBRIS; i < loose.length && cut > 0; i++) {
+      if (targets.has(loose[i].id)) continue;
+      this._destroy(loose[i], 'breakup'); cut--;
+    }
   }
 
   _processEvents() {
@@ -603,6 +619,7 @@ export class World {
           this.vessels.push(d);
           this._loaded.push(d);
           this.emit('decouple', { vessel: e.vessel, debris: d, part: e.part });
+          if (d.type === 'debris') this._capDebris();
           break;
         }
         case 'destroyed':

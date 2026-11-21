@@ -494,12 +494,12 @@ function liveLoadsOf(S, f) {
       wResGame = Math.max(wResGame, Math.abs(s.residual.F - norm(p.residual.F)) / sc, Math.abs(s.residual.M - resM) / sc);
       // components and utilisation from the ring quadrature, with the joint's own radius and allowables
       s.joints.forEach((j, i) => {
-        const q = RS.ringUtilisation(p.loads[i].F, p.loads[i].M, j.n, j.r, j.capT, j.capC, j.capS, RING_LIVE);
+        const q = RS.sectionUtilisation(p.loads[i].F, p.loads[i].M, j, RING_LIVE);
         const l = live[i];
         wComp = Math.max(wComp, Math.abs(l.axial - q.N) / sc, Math.abs(l.shear - q.V) / sc, Math.abs(l.bending - q.Mb) / sc, Math.abs(l.torsion - q.Mt) / sc);
         // brace struts (docs/STRUCTURE.md): forces are shared by relF, moments by relB, and only the utilisation sees it
         const braced = j.relB !== 1 || j.relF !== 1;
-        const qb = braced ? RS.ringUtilisation(scale(p.loads[i].F, j.relF), scale(p.loads[i].M, j.relB), j.n, j.r, j.capT, j.capC, j.capS, RING_LIVE) : q;
+        const qb = braced ? RS.sectionUtilisation(scale(p.loads[i].F, j.relF), scale(p.loads[i].M, j.relB), j, RING_LIVE) : q;
         if (braced) nBraced++;
         wUtil = Math.max(wUtil, Math.abs(l.util - qb.util));
         if (qb.margin > 1e-6 && l.mode !== qb.mode) modeBad++;
@@ -739,7 +739,7 @@ function flyToFailure(make, maxSteps) {
       const p = RS.multibodyPrescribed(r.solved.bodies, r.solved.joints, r.solved.motion);
       let top = 0, topKey = null;
       r.solved.joints.forEach((j, k) => {
-        const u = RS.ringUtilisation(p.loads[k].F, p.loads[k].M, j.n, j.r, j.capT, j.capC, j.capS, RING_LIVE);
+        const u = RS.sectionUtilisation(p.loads[k].F, p.loads[k].M, j, RING_LIVE);
         const key = jointKey(j.a, j.b);
         if (u.util > top) { top = u.util; topKey = key; }
         let d = damage.get(key) || 0;
@@ -832,7 +832,9 @@ function flyStock(craft, { maxSim = 1500 } = {}) {
   const w = new World();
   const v = w.launch(craft, { crew: ['Ada', 'Bo', 'Cy'] });
   const events = [], stress = [];
-  w.on('structure', d => events.push({ ut: w.ut, joint: jointKey(d.joint.a, d.joint.b), mode: d.mode, util: d.util }));
+  const shed = [];
+  // (what a dropped stage loses as it tumbles away is no concern of the ship's: docs/AERO_BREAKUP.md)
+  w.on('structure', d => (d.vessel === v ? events : shed).push({ ut: w.ut, joint: jointKey(d.joint.a, d.joint.b), mode: d.mode, util: d.util }));
   w.on('stress', d => { if (d.vessel === w.active) stress.push({ ut: w.ut, util: d.util }); });
   const top = sys.byId.verda.atmo.height;
   const ctl = ascentProgram(w, {});
@@ -849,7 +851,7 @@ function flyStock(craft, { maxSim = 1500 } = {}) {
       if (st) for (const j of st.joints) if (j.peak > peak) { peak = j.peak; peakAt = a.altitude; peakJoint = `${j.a.def.id} / ${j.b.def.id}`; peakMode = j.mode; }
     },
   });
-  return { events, stress, peak, peakAt, peakJoint, peakMode, maxAlt, maxQ, top, failed: ctl.failed, log: ctl.log, t: w.ut };
+  return { events, shed, stress, peak, peakAt, peakJoint, peakMode, maxAlt, maxQ, top, failed: ctl.failed, log: ctl.log, t: w.ut };
 }
 
 function stock(S, full) {

@@ -1274,3 +1274,11 @@ every check ran on the software rasteriser.
 `js/core/loadcases.js` (`analyzeCraft`, the assembly building's reference load cases). World events
 `structure` and `stress`. UI: `js/ui/stress.js`, `js/ui/builder/loads.js`, `js/ui/builder/loadfx.js`.
 The contract is [STRUCTURE.md](STRUCTURE.md).
+
+## Additions (aerodynamic breakup)
+
+Air ratings (`AIR_RATING`, `airRating` in `js/core/parts.js`), judged in the aerodynamics loop of
+`js/core/vessel.js` (`TUNING.AERO_FAIL`, `vessel.airUtil`, `vessel.airLoads()`); thin roots for fins and
+wings in `js/core/structure.js` (`rootSection`, the `root` argument of `jointUtilisation`); the debris
+limit in `js/core/world.js` (`MAX_DEBRIS`). A torn-off part raises the `structure` event with
+`mode: 'airflow'`. Words: `js/ui/stress.js`. The contract is [AERO_BREAKUP.md](AERO_BREAKUP.md).
