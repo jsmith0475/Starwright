@@ -176,7 +176,7 @@ export function createFlightScreen(app) {
         if (mine) {
           if (sepUt === world.ut) sepUt = -1;
           const j = p.joint || {};
-          app.toast(breakMessage(p, strain.get(strainKey(j.a, j.b))), 'bad', 7000);
+          app.toast(breakMessage(p, strain.get(strainKey(j.a, j.b)) || (p.loads ? stressCause(p.loads) : undefined)), 'bad', 7000);
           app.audio.play('snap');
           if (cam) cam.kick(0.7);
           if (hud) { hud.invalidate(); hud.flashStress(); }

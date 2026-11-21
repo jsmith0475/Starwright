@@ -1292,7 +1292,8 @@ export class Vessel {
       if (a.dockedTo === b.id) a.dockedTo = null;
       if (b.dockedTo === a.id) b.dockedTo = null;
       _a.set(j.px, j.py, j.pz).sub(this.com).applyQuaternion(this.q).add(this.pos);
-      info.push({ a: a.id, b: b.id, kind: j.kind, mode: j.mode, util: j.util, aName: a.def.name, bName: b.def.name, pos: _a.clone() });
+      info.push({ a: a.id, b: b.id, kind: j.kind, mode: j.mode, util: j.util, aName: a.def.name, bName: b.def.name, pos: _a.clone(),
+        loads: { r: j.r, capT: j.capT, capC: j.capC, capS: j.capS, axial: j.axial, shear: j.shear, bending: j.bending, torsion: j.torsion, relB: j.relB, relF: j.relF, mode: j.mode } });
     }
     if (!info.length) return;
     const pieces = [], seen = new Set();
@@ -1314,7 +1315,7 @@ export class Vessel {
     if (!left.length) { this._rebuild(); this._updateMass(true); }      // still held some other way (a docked ring)
     for (const i of info) {
       const debris = left.find(d => d.parts.has(i.a) || d.parts.has(i.b)) || null;
-      events.push({ type: 'structure', vessel: this, debris, joint: { a: i.a, b: i.b, kind: i.kind, aName: i.aName, bName: i.bName }, mode: i.mode, util: i.util, pos: i.pos, body: this.body });
+      events.push({ type: 'structure', vessel: this, debris, joint: { a: i.a, b: i.b, kind: i.kind, aName: i.aName, bName: i.bName }, mode: i.mode, util: i.util, loads: i.loads, pos: i.pos, body: this.body });
     }
     this.estimateDeltaV();
   }

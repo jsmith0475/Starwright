@@ -208,9 +208,13 @@ analyzeCraft(craft, { body } = {}) → { joints:[{ a, b (craft part ids), kind, 
 `TUNING.STRUCT_FAIL = false` (js/core/vessel.js) keeps the loads and the display but lets
 nothing break.
 
-Events: `structure {vessel, debris, joint:{a,b,kind}, mode, util}` when a joint breaks (a
-`decouple` event with `part: null` follows for the piece that left), and
+Events: `structure {vessel, debris, joint:{a,b,kind,aName,bName}, mode, util, loads, pos, body}` when a joint
+breaks (`loads` holds the joint's radius, strengths and the axial, shear, bending and torsion it carried; a
+`decouple` event with `part: null` for the piece that left comes just BEFORE it, in the same step), and
 `stress {vessel, util}` when the worst joint first passes `STRUCT.WARN`.
+
+Joints also carry `relB`, `relF` (the share of bending and of force left to the joint after its brace
+struts, 1 when unbraced) and `braces`.
 
 ## Cost
 
