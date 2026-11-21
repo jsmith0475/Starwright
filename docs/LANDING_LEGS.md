@@ -124,7 +124,27 @@ walking pace. Released as compressed springs they would throw it off a small moo
   at most and no further than its legs.
 - The state of the struts survives a save, and they hang at full length again after liftoff.
 
+### In a browser, drawn feet against drawn ground
+
+`ONLY=worlds node tests/e2e/contact.mjs`, all 16 worlds, level sites everywhere and 9° and 17 to 20°
+slopes on Verda, Pell, Rusk and Sear.
+
+- On every level and 9° site the feet are between 3.7 cm inside and 0.1 cm above the drawn surface,
+  within the allowance. Before this change the same check failed on level ground at home: feet
+  6.9 cm in the ground. That was the frozen lander.
+- **Two failures remain, both a lander that has fallen over on a 17 to 20° slope.** On Rusk a leg of
+  the fallen craft is 6.4 cm inside the drawn ground where 6 cm is allowed; the build before this
+  change gives the identical number. On Verda the fallen craft's decoupler is 13.9 cm inside the
+  ground. Before this change that lander did not fall on that slope: it was frozen upright at the
+  moment of touching, which was the fault. A hull lying on its side rests on a few rings of contact
+  points, and the ground can rise between them.
+
 ## What was not checked, and what is left
+
+- **A fallen craft can lie up to 14 cm inside the ground** on a steep slope (above). The hull needs
+  more contact points along its length.
+- **Steep slopes are now hard.** The contact-test lander goes over when dropped on 17 to 20°. That
+  is what its stance predicts, but it is a change: before, it was frozen standing.
 
 - **How it looks, and the frame rate, on a real graphics card.** The tests above are physics only.
   The strut animation follows the physics by construction, but it has to be looked at.
