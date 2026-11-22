@@ -11,6 +11,9 @@ const DEFAULT = {
   detail: 1,                    // strength of the close-range detail normals
   gloss: 0,                     // 0 matte regolith … 1 wet ice
   clouds: null,                 // { cover, color, seed, speed (rad/s relative to the ground), alt (m), streak }
+                                // clouds.high: a thin layer far above the deck (ice streaks, veils, blown dust), drawn with it:
+                                // { alt (m), cover (0 rare … 1 most of the sky), opacity (of its thickest parts), streak (0 even
+                                //   veil … 1 separate streaks), color, drift (rad/s relative to the deck), phase (rad) }
   water: null,                  // { shallow, deep, clarity (m) }
   snow: null,                   // { line (m), latDrop (m per unit |sin lat|), color }
   scatter: null,                // ground clutter: { rocks: density per 100 m², rockColor, grass, trees }
@@ -28,7 +31,8 @@ const STYLE = {
     clouds: { cover: 0.97, color: [0.74, 0.60, 0.38], seed: 77, speed: 2.2e-5, alt: 56000, streak: 1, soft: 1 },
     scatter: { rocks: 6, rockColor: [0.3, 0.24, 0.2] } },
   verda: { rock: [0.40, 0.37, 0.33], rockSlope: [0.2, 0.42], strata: 0.15, fill: 0.05, bump: 2.2,
-    clouds: { cover: 0.3, color: [1, 1, 1], seed: 11, speed: 1.2e-5, alt: 7000, streak: 0, phase: 5.16 },    // phase: fair weather over the space centre for the first days
+    clouds: { cover: 0.3, color: [1, 1, 1], seed: 11, speed: 1.2e-5, alt: 7000, streak: 0, phase: 5.16,       // phase: fair weather over the space centre for the first days
+      high: { alt: 13000, cover: 0.2, opacity: 0.42, streak: 1, color: [1, 1, 1], drift: 0.9e-5 } },          // ice streaks in the jet stream
     water: { shallow: [0.10, 0.50, 0.55], deep: [0.012, 0.07, 0.19], clarity: 14 },
     snow: { line: 2500, latDrop: 2600, color: [0.93, 0.95, 0.98] },
     ground: { tintA: [1.2, 1.06, 0.7], tintB: [0.62, 0.8, 0.6], vary: 0.9, dirt: [0.43, 0.35, 0.25], dirtT: 0.5, veg: 1, grain: 1 },
@@ -37,13 +41,15 @@ const STYLE = {
   ost: { rock: [0.55, 0.70, 0.85], gloss: 0.7, rockSlope: [0.3, 0.55], scatter: { rocks: 3, rockColor: [0.8, 0.88, 0.95] } },
   rusk: { rock: [0.42, 0.20, 0.13], rockSlope: [0.18, 0.4], strata: 0.8,
     ground: { tintA: [1.12, 1.03, 0.9], tintB: [0.74, 0.68, 0.7], vary: 1, dirt: [0.26, 0.13, 0.1], dirtT: 0.3, dirtK: 0.4, veg: 0, grain: 1 },
-    clouds: { cover: 0.1, color: [0.78, 0.60, 0.46], seed: 5, speed: 1e-5, alt: 9000, streak: 0.5 },
+    clouds: { cover: 0.1, color: [0.78, 0.60, 0.46], seed: 5, speed: 1e-5, alt: 9000, streak: 0.5,
+      high: { alt: 17000, cover: 0.26, opacity: 0.32, streak: 0.55, color: [0.84, 0.66, 0.5], drift: 1.4e-5 } },  // dust the wind has lifted and drawn out
     scatter: { rocks: 9, rockColor: [0.47, 0.25, 0.17] } },
   dray: { rock: [0.36, 0.31, 0.32], scatter: { rocks: 9, rockColor: [0.4, 0.35, 0.35] } },
   tiv: { rock: [0.45, 0.42, 0.18], emissive: 0.9, strata: 0.3, scatter: { rocks: 5, rockColor: [0.62, 0.58, 0.25] } },
   marn: { rock: [0.30, 0.29, 0.34], rockSlope: [0.2, 0.42], strata: 0.2, gloss: 0.15,
     ground: { tintA: [1.14, 1.08, 0.9], tintB: [0.72, 0.74, 0.86], vary: 1, dirt: [0.2, 0.19, 0.22], dirtT: 0.3, dirtK: 0.4, veg: 0, grain: 1 },
-    clouds: { cover: 0.22, color: [0.95, 0.96, 1], seed: 31, speed: 1.6e-5, alt: 6000, streak: 0.3 },
+    clouds: { cover: 0.22, color: [0.95, 0.96, 1], seed: 31, speed: 1.6e-5, alt: 6000, streak: 0.3,
+      high: { alt: 11000, cover: 0.24, opacity: 0.5, streak: 0.8, color: [0.94, 0.96, 1], drift: 0.7e-5 } },    // ice veils in the cold upper air
     snow: { line: 2100, latDrop: 2300, color: [0.9, 0.93, 0.97] },
     scatter: { rocks: 4, rockColor: [0.33, 0.32, 0.37], grass: 22, grassColor: [0.36, 0.33, 0.42] } },
   slate: { rock: [0.55, 0.60, 0.66], rockSlope: [0.3, 0.55], strata: 0.3, scatter: { rocks: 8, rockColor: [0.27, 0.3, 0.36] } },
@@ -73,6 +79,12 @@ export function styleOf(id) {
 export function cloudAngle(style, ut) {
   const c = style.clouds;
   return c ? ((c.phase || 0) + c.speed * ut) % (Math.PI * 2) : 0;
+}
+
+/** Rotation (rad, about the spin axis, relative to the deck) of a body's high cloud layer at time ut: it has its own wind. */
+export function highCloudAngle(style, ut) {
+  const h = style.clouds && style.clouds.high;
+  return h ? ((h.phase || 0) + h.drift * ut) % (Math.PI * 2) : 0;
 }
 
 /** True when a surface colour (0..1 display rgb) on a body with `emissive` style is glowing lava. */
