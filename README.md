@@ -31,6 +31,7 @@ Real orbital mechanics. A solar system of nineteen bodies. No account, no downlo
   <a href="#play-in-one-step"><b>Play</b></a> ·
   <a href="#your-first-orbit">First orbit</a> ·
   <a href="#for-the-people-who-do-the-math">The physics</a> ·
+  <a href="#aerodynamics">Aerodynamics</a> ·
   <a href="docs/MANUAL.md">Manual</a> ·
   <a href="#roadmap">Roadmap</a> ·
   <a href="#come-build-it-with-us"><b>Volunteer</b></a>
@@ -90,6 +91,8 @@ Grok, worked on Starwright, and it is not affiliated with or endorsed by either 
 | **Plan the burn.** Drop a maneuver node on your orbit, drag the handles, and watch the encounter appear before you spend a drop of fuel. Time warp to 100,000×. | **Land on a moon.** Then step outside, plant a flag, take a sample and get everyone home through re-entry. |
 | [![A six-wheeled rover driving across the red surface of Rusk](media/shot-rover.jpg)](media/shot-rover.jpg) | [![The tracking station showing a world and the list of bodies in the Helion system](media/shot-system.jpg)](media/shot-system.jpg) |
 | **Not only rockets.** Rovers, spaceplanes off a runway, space stations assembled by docking, fuel pumped from tanker to ship. | **A whole solar system.** A star, eight planets, nine moons and a comet, each with its own terrain, gravity and sky. |
+| [![A tall rocket in a hard turn with coloured stress bands at its joints and the Structure read-out at 82 percent](media/shot-structure.jpg)](media/shot-structure.jpg) | [![A heavy rocket flipped across the airflow just after both side boosters were torn off, with the game's messages naming the cause](media/shot-aero.jpg)](media/shot-aero.jpg) |
+| **Structures that carry load.** Every joint between two parts bears a computed load: thrust, weight, drag and bending. Tall thin stacks flex, and a hard turn in thick air snaps them. A stress overlay shows the load in flight, and the assembly building names the weak joint before you launch. [How it works.](docs/STRUCTURE.md) | **Air that behaves like air.** Every part meets the airflow on its own, so drag, stability and lift come from the shape you built. Fins keep a rocket pointed, wings stall, drag climbs through the speed of sound, and at max Q the air can tear parts off. [The framework and the math.](#aerodynamics) |
 
 And around the flying:
 
@@ -111,6 +114,16 @@ And around the flying:
   the pieces fly on as debris. A clean climb loses nothing.
 - **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
+
+<p align="center">
+  <a href="media/structure-breakup.mp4">
+    <img src="media/structure-breakup-preview.gif" width="100%" alt="Two flights recorded in the game: a tall thin rocket is turned hard at 30 kPa and its stack bends and snaps in two, then a heavy rocket is flipped across the airflow at 20 kPa and both side boosters are torn off">
+  </a>
+  <br>
+  <a href="media/structure-breakup.mp4"><b>▶ Watch a stack snap and the airflow strip a rocket (27 seconds, silent)</b></a>
+  <br>
+  <sub>Real gameplay recorded in Chrome, slowed to half speed at each break. How it works: <a href="docs/STRUCTURE.md">structure</a>, <a href="docs/AERO_BREAKUP.md">breakup</a>.</sub>
+</p>
 
 <p align="center">
   <img src="media/shot-centre.jpg" width="100%" alt="The Starwright space centre from the air: assembly building, launch pad, runway and tracking station on a green coastal plain">
@@ -264,6 +277,102 @@ Starwright does not fake its orbits, and it shows its work.
   <img src="media/shot-science.png" width="100%" alt="The in-game science reference open on chapter 1, gravity and the two-body problem, with numbered equations">
 </p>
 
+## Aerodynamics
+
+Every part of a vessel meets the air on its own. There is no single drag number for the rocket:
+each physics step (20 ms in air) the game works out the airflow at each part, the force that
+flow puts on it, and where on the vessel that force acts. Drag, stability, lift, control
+authority, heating and breakup all fall out of the same per-part sum.
+
+<p align="center">
+  <a href="media/structure-breakup.mp4">
+    <img src="media/aero-breakup-preview.gif" width="100%" alt="A heavy rocket with two side boosters is flipped across the airflow at 20 kPa. Both boosters are torn off at 23 kPa against a 12 kPa rating and fly on as debris">
+  </a>
+  <br>
+  <sub>Real gameplay: Colossus flipped across the airflow at 20 kPa. <a href="media/structure-breakup.mp4">Full clip</a>.</sub>
+</p>
+
+### The framework
+
+1. **The air.** Density falls exponentially with height up to a hard top, and the atmosphere
+   turns with the planet, so airspeed is measured against moving air.
+2. **The flow at each part.** A part away from the centre of mass moves with the spin of the
+   vessel, so a tumbling rocket sees different air at its nose and its tail.
+3. **The force on each part,** by kind: bodies (tanks, capsules, engines) take drag on their
+   end faces and their sides, wings and fins take lift and drag from an angle of attack, and
+   small attached parts take plain drag.
+4. **The sum.** Each force is applied at its part, so the forces add to one net force and one
+   net torque about the centre of mass. Nothing else decides whether a rocket flies straight.
+5. **What follows.** The same per-part loads feed the joint loads
+   ([docs/STRUCTURE.md](docs/STRUCTURE.md)), the air ratings
+   ([docs/AERO_BREAKUP.md](docs/AERO_BREAKUP.md)) and re-entry heating.
+
+### The math
+
+Air density at altitude $h$, with surface density $\rho_0$ and scale height $H$ (on the home
+world Verda: 1.22 kg/m³, 5.8 km, top at 72 km):
+
+$$\rho(h) = \rho_0 e^{-h/H}$$
+
+The flow at part $i$, at position $\mathbf{r}_i$ from the centre of mass of a vessel moving at
+$\mathbf{v}$ through the air and turning at $\boldsymbol{\omega}$, and its dynamic pressure:
+
+$$\mathbf{v}_i = \mathbf{v} + \boldsymbol{\omega} \times \mathbf{r}_i \qquad q_i = \tfrac{1}{2} \rho |\mathbf{v}_i|^2$$
+
+A body part with windward face area $A_w$, leeward face area $A_l$ and side area $A_s$ (each
+already multiplied by its drag coefficient), with $\theta$ the angle between its axis and the
+flow. The wake behind the leeward face adds a quarter of that face:
+
+$$F_\text{axial} = - q_i M(\mathrm{Ma}) (A_w + 0.25 A_l) \cos\theta \qquad \mathbf{F}_\text{side} = - q_i M(\mathrm{Ma}) A_s \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
+
+$M$ is the transonic drag rise. The speed of sound is held at 320 m/s:
+
+| Mach | below 0.7 | 0.7 to 1.1 | 1.1 to 2.5 | above 2.5 |
+| --- | --- | --- | --- | --- |
+| $M$ | 1 | rises in a straight line to 2.0 | falls in a straight line to 1.5 | 1.5 |
+
+A wing or fin of area $S$ at angle of attack $\alpha$, with lift-curve slope $a$ (3.6 per
+radian for a wing, 1.6 for a fin). While the flow is attached:
+
+$$C_L = a \alpha \qquad C_D = 0.012 + 0.07 C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S C_L \qquad D = \tfrac{1}{2} \rho v^2 S C_D M$$
+
+Past the stall (16° for a wing, 26° for a fin) it blends smoothly into a flat plate, so a wing
+still makes force at any angle, including backwards:
+
+$$C_L = 0.9 \sin 2\alpha \qquad C_D = 0.012 + 1.8 \sin^2\alpha$$
+
+Control surfaces work by adding to $\alpha$, up to 20° of throw. The totals that fly the vessel:
+
+$$\mathbf{F} = \sum_i \mathbf{F}_i \qquad \boldsymbol{\tau} = \sum_i \mathbf{r}_i \times \mathbf{F}_i$$
+
+Re-entry heating uses the Sutton-Graves form, with heat flux in W/m²:
+
+$$\dot{q} = 1.83 \times 10^{-4} \sqrt{\rho} v^3$$
+
+### What it gives you in flight
+
+- **Stability is not scripted.** Fins at the tail put drag and lift behind the centre of mass,
+  so the rocket weathervanes into the flow. Put the weight at the back and it swaps ends.
+- **Max Q is real.** Dynamic pressure peaks on the way up, and that is where a hard turn snaps a
+  stack or strips a rocket.
+- **Wings stall.** Pull too hard and lift falls away while drag climbs.
+- **Debris flies.** A torn-off booster keeps the drag of its own parts and tumbles on.
+
+### Checked against
+
+The independent verification covers density and pressure against scale height on six
+atmospheres (exact), a capsule drop against an integrated reference (0.9 m after a 5.4 km
+fall), terminal velocity, and re-entry (peak heat flux 126.7 kW/m² against a reference of
+126.6, with peak heating ahead of peak deceleration as Allen and Eggers predict). Numbers and
+method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
+
+### What it leaves out
+
+One scale height per atmosphere, a constant speed of sound, and no winds. Capsules and tanks
+make no lift of their own shape, and neither does debris. There is no shock heating model
+beyond the flux law, and no flutter or buckling: thin parts carry a stated air rating instead.
+Deeper aerodynamics and re-entry is [roadmap item 6](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry).
+
 ## Under the hood
 
 - Plain JavaScript modules. No framework, no bundler, no build step, no install. The only
@@ -282,7 +391,7 @@ js/ui/               screens: space centre, assembly, flight, map, tracking, res
                      missions, crew, Flight School, science reference, demo tour
 docs/                architecture, manual, physics verification, parts and scenarios
 tests/               unit tests, browser tests, physics verification
-media/               trailer and screenshots for this page
+media/               trailer, clips and screenshots for this page
 ```
 
 ### Tests
@@ -290,7 +399,7 @@ media/               trailer and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 417 tests, including scripted flights flown by the autopilot
+npm test            # 431 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
