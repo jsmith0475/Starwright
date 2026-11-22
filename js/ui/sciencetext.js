@@ -7,10 +7,13 @@
 //   > game: text               "In Starwright": what the game itself does with this
 //   > example: text            a worked example with the game's own numbers
 //   [[calc:name]]              an interactive calculator (js/ui/science.js CALCS)
+// The three chapters on the game's own aerodynamics, structural loads and breakup are in js/ui/scienceaero.js.
 //   **bold**, *italic*
 // Paragraphs are separated by blank lines. The numbers in the examples are computed from js/core/bodies.js when the
 // chapter is drawn (ctx), so the text can never disagree with the worlds the player flies in.
 // Pure data and string work: imported by the unit tests in Node.
+
+import { AERO_CHAPTERS, aeroModel } from './scienceaero.js';
 
 const TAU = Math.PI * 2;
 
@@ -47,7 +50,7 @@ export function scienceContext(SYSTEM, G0 = 9.80665) {
   /** Burn from a circular parking orbit (altitude alt about b) that leaves b with excess speed vinf. */
   const eject = (b, alt, vinf) => { const r = b.radius + alt; return Math.sqrt(vinf * vinf + 2 * b.gm / r) - Math.sqrt(b.gm / r); };
   const parkAlt = home.atmo ? Math.ceil((home.atmo.height + 8000) / 10000) * 10000 : 20000;
-  return { SYSTEM, B, G0, home, star, moon, far, farMoon, sig, int, km, dur, vcirc, vesc, period, hohmann, eject, parkAlt, TAU };
+  return { SYSTEM, B, G0, home, star, moon, far, farMoon, sig, int, km, dur, vcirc, vesc, period, hohmann, eject, parkAlt, TAU, aero: aeroModel() };
 }
 
 export const CHAPTERS = [
@@ -602,7 +605,7 @@ It rises as the air thins. An aircraft flying at constant indicated load must fl
 
 The ratio $L/D$ is the glide ratio: metres forward per metre of height lost with the engines off. It peaks where the two drag terms are equal, at $C_L = \sqrt{C_{D0}/K}$.
 
-> game: Wings use a lift-curve slope of 3.6 per radian up to the stall, the drag polar above with $K = 0.07$, and a flat-plate model beyond the stall. Each part has its own drag, with a transonic rise between Mach 0.7 and 1.1. Lift and drag act at each part's position, so a badly balanced aircraft pitches and stalls for real reasons.
+> game: Wings use a lift-curve slope of 3.6 per radian up to the stall, the drag polar above with $K = 0.07$, and a flat-plate model beyond the stall. Each part has its own drag, with a transonic rise between Mach 0.7 and 1.1. Lift and drag act at each part's position, so a badly balanced aircraft pitches and stalls for real reasons. The next chapter sets out the whole model, part by part.
 
 ## Re-entry heating
 
@@ -785,6 +788,9 @@ Everything here is standard astrodynamics. Good next steps are any university te
     },
   },
 ];
+
+// the game's own flight model, structure and breakup follow the textbook chapter on flight through air
+CHAPTERS.splice(CHAPTERS.findIndex(c => c.id === 'atmosphere') + 1, 0, ...AERO_CHAPTERS);
 
 /** Split a chapter body into blocks: { type: 'h' | 'p' | 'eq' | 'li' | 'game' | 'example' | 'calc', text }. */
 export function parseBody(src) {
