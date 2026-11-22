@@ -1,7 +1,9 @@
 // Starwright — "What's New": the list of what each release added, and the pop-up that shows it.
 //
-// A returning player sees, once, the entries added since their last visit; they dismiss it (Got it, Enter, Esc or a
-// click outside) and are on the title menu. The title menu's "What's New" entry opens the whole list at any time.
+// A returning player sees it once when something has been added since their last visit: the last RECENT_DAYS days
+// that anything shipped (more when they have been away longer), newest first, with what they have not seen marked
+// "New". They dismiss it (Got it, Enter, Esc or a click outside) and are on the title menu. The title menu's
+// "What's New" entry opens the whole list at any time.
 // Somebody opening the game for the first time is not interrupted: the list is marked as seen and nothing is shown.
 //
 // ADDING AN ENTRY (every pull request that changes what a player sees or does should add one):
@@ -16,16 +18,21 @@
 //
 //   RELEASES                     the entries, newest first
 //   unseen(seenId, list)         the entries newer than the one with that id (all of them when the id is unknown)
+//   recent(seenId, list, days)   what the pop-up lists: the newest `days` days, and every day with something unseen
 //   groupByDay(list)             [{ date, label, entries }] in the order given
-//   openWhatsNew(app, opts)      opens the list; opts.entries = which (default all); resolves when it is closed
+//   openWhatsNew(app, opts)      opens the list; opts.entries = which (default all), opts.fresh = the entries to
+//                                mark "New"; resolves when it is closed
 //   installWhatsNew(app)         adds app.whatsNew = { open, auto, note, entries, latest }
 //   app.whatsNew.auto()          the once-per-release pop-up: called after the title menu is up (js/main.js)
-// Address switches: ?whatsnew=1 shows the pop-up with everything, ?whatsnew=0 keeps it away.
-// Test hooks: .sw-whatsnew (the list), [data-day="YYYY-MM-DD"] (a day), [data-entry="<id>"] (an entry).
+// Address switches: ?whatsnew=1 shows the pop-up whether or not anything is new, ?whatsnew=0 keeps it away.
+// Test hooks: .sw-whatsnew (the list), [data-day="YYYY-MM-DD"] (a day), [data-entry="<id>"] (an entry; .new when
+// marked New), .wn-count (the "3 new since your last visit" line).
 import { el, showModal } from './dom.js';
 
 export const SEEN_KEY = 'starwright.whatsnew.v1';
 const REPO_URL = 'https://github.com/jsmith0475/Starwright';
+/** How many days of releases the pop-up lists (a day is a day on which something shipped). */
+export const RECENT_DAYS = 6;
 
 export const RELEASES = [
   { id: 'worlds-1', date: '2026-11-22', title: 'Worlds with ground of their own',
@@ -50,6 +57,10 @@ export const RELEASES = [
     text: 'Tree crowns are built from scans of real leaves, conifer boughs and bark, and the grass is finer and denser.' },
   { id: 'realism-3', date: '2026-11-21', title: 'A more real-looking world',
     text: 'Soft contact shadows, rockets that reflect the sky and ground around them, terrain that no longer repeats in rows, part-buried boulders, and a sea that deepens away from the shore.' },
+  { id: 'about', date: '2026-11-20', title: 'An About screen',
+    text: 'The main menu has an About entry: what Starwright is, the story of the game that inspired it, and a plain account of how this one was made.' },
+  { id: 'launch', date: '2026-11-20', title: 'Starwright goes public',
+    text: `The first public release: build a rocket, fly it to orbit with real orbital mechanics, and go on to the moons and the other worlds. Free, open source, and playable in the browser. The source is at [github.com/jsmith0475/Starwright](${REPO_URL}).` },
 ];
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -63,6 +74,18 @@ export function dayLabel(date) {
 export function unseen(seenId, list = RELEASES) {
   const i = list.findIndex(e => e.id === seenId);
   return i < 0 ? list.slice() : list.slice(0, i);
+}
+
+/**
+ * What the pop-up lists: every entry of the newest `days` days, and of any older day that still has something the
+ * player has not seen. So there is always some history to read, and nothing new is ever left out.
+ */
+export function recent(seenId, list = RELEASES, days = RECENT_DAYS) {
+  const dates = [...new Set(list.map(e => e.date))];
+  const fresh = unseen(seenId, list);
+  let cut = dates[Math.min(days, dates.length) - 1];
+  if (fresh.length && fresh[fresh.length - 1].date < cut) cut = fresh[fresh.length - 1].date;
+  return list.filter(e => e.date >= cut);
 }
 
 /** Entries → [{ date, label, entries }], keeping their order. */
@@ -88,6 +111,10 @@ const CSS = `
 .sw-whatsnew .wn-entry b { display: block; margin-bottom: 2px; font-size: 15px; color: var(--sw-text); }
 .sw-whatsnew .wn-entry p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--sw-dim); }
 .sw-whatsnew a { color: var(--sw-teal); }
+.sw-whatsnew .wn-count { margin: 0 0 14px; font-size: 13.5px; color: var(--sw-text); }
+.sw-whatsnew .wn-entry.new { margin-left: -12px; padding-left: 10px; border-left: 2px solid var(--sw-teal); }
+.sw-whatsnew .wn-entry .wn-new { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 8px; vertical-align: 2px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #06231f; background: var(--sw-teal); }
 `;
 let cssDone = false;
 function addCss() {
@@ -110,12 +137,16 @@ function inline(text) {
   return out;
 }
 
-/** Opens the list. opts.entries: which entries (default: all of them). Resolves when it is closed. */
-export function openWhatsNew(app, { entries = RELEASES } = {}) {
+/** Opens the list. opts.entries: which entries (default: all of them); opts.fresh: the ones to mark "New". Resolves when it is closed. */
+export function openWhatsNew(app, { entries = RELEASES, fresh = [] } = {}) {
   addCss();
-  const body = el('div', { class: 'sw-whatsnew' }, ...groupByDay(entries).map(d =>
-    el('section', { attrs: { 'data-day': d.date } }, el('h3', { text: d.label }),
-      ...d.entries.map(e => el('div', { class: 'wn-entry', attrs: { 'data-entry': e.id } }, el('b', { text: e.title }), el('p', {}, ...inline(e.text)))))));
+  const isNew = new Set(fresh.map(e => e.id));
+  const body = el('div', { class: 'sw-whatsnew' },
+    isNew.size && isNew.size < entries.length ? el('p', { class: 'wn-count', text: `${isNew.size} new since your last visit, marked below.` }) : null,
+    ...groupByDay(entries).map(d =>
+      el('section', { attrs: { 'data-day': d.date } }, el('h3', { text: d.label }),
+        ...d.entries.map(e => el('div', { class: 'wn-entry' + (isNew.has(e.id) ? ' new' : ''), attrs: { 'data-entry': e.id } },
+          el('b', {}, e.title, isNew.has(e.id) ? el('span', { class: 'wn-new', text: 'New' }) : null), el('p', {}, ...inline(e.text)))))));
   return showModal({ title: "What's new in Starwright", body, class: 'sw-whatsnew-modal', cancelValue: false, buttons: [{ label: 'Got it', value: true, kind: 'primary' }] });
 }
 
@@ -133,11 +164,11 @@ export function installWhatsNew(app) {
       if (!latest || flag === '0') return Promise.resolve(false);
       const seen = readSeen();
       const returning = !app.firstVisit;      // js/main.js: was anything of Starwright stored when the page opened?
-      const fresh = flag === '1' ? RELEASES : unseen(seen);
+      const fresh = unseen(seen);
       // Marked as seen the moment it is shown: it never comes up twice for the same release.
       writeSeen(latest.id);
       if (flag !== '1' && (!returning || !fresh.length)) return Promise.resolve(false);
-      return openWhatsNew(app, { entries: fresh }).then(() => true);
+      return openWhatsNew(app, { entries: recent(seen), fresh }).then(() => true);
     },
   };
   return app.whatsNew;
