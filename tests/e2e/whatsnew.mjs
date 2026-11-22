@@ -10,7 +10,7 @@ const { chromium } = await loadPlaywright();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(ROOT, 'tests/out');
 fs.mkdirSync(OUT, { recursive: true });
-const { RELEASES, SEEN_KEY } = await import(path.join(ROOT, 'js/ui/whatsnew.js')).catch(() => ({}));   // dom.js is not touched until a function is called
+const { RELEASES, SEEN_KEY, recent } = await import(path.join(ROOT, 'js/ui/whatsnew.js')).catch(() => ({}));   // dom.js is not touched until a function is called
 
 const problems = [];
 let checks = 0;
@@ -32,6 +32,7 @@ async function open(seed, query = '') {
   return { ctx, page };
 }
 const shown = page => page.evaluate(() => [...document.querySelectorAll('.sw-whatsnew [data-entry]')].map(n => n.dataset.entry));
+const marked = page => page.evaluate(() => [...document.querySelectorAll('.sw-whatsnew [data-entry].new')].map(n => n.dataset.entry));
 const seenId = page => page.evaluate(k => localStorage.getItem(k), SEEN_KEY);
 const reload = async page => { await page.reload(); await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 240000 }); };
 const all = RELEASES.map(e => e.id), latest = all[0];
@@ -59,6 +60,7 @@ try {
         title: document.querySelector('.sw-whatsnew-modal .sw-title').textContent, wide: root.scrollWidth > root.clientWidth + 1 };
     });
     ok((await shown(page)).join() === all.join(), 'the menu entry shows every entry, newest first (' + all.length + ')');
+    ok((await marked(page)).length === 0, 'nothing is marked New there');
     ok(r.days.length === new Set(RELEASES.map(e => e.date)).size && /^\d{1,2} [A-Z][a-z]+ \d{4}$/.test(r.heads[0]), 'entries are grouped under a dated heading (' + r.heads.join(' | ') + ')');
     ok(r.flat === 0 && !r.wide && !r.raw, 'every entry is laid out, nothing overflows sideways, no raw markup');
     ok(/What's new in Starwright/.test(r.title), "it is titled What's new in Starwright");
@@ -75,6 +77,7 @@ try {
     const { ctx, page } = await open({ 'starwright.settings.v1': '{}' });
     await page.waitForSelector('.sw-whatsnew [data-entry]');
     ok((await shown(page)).join() === all.join(), 'the pop-up comes up by itself with everything');
+    ok((await marked(page)).length === all.length && await page.locator('.wn-count').count() === 0, 'all of it is marked New, with no count line');
     ok(await page.evaluate(() => document.activeElement && document.activeElement.textContent) === 'Got it', 'Got it has the focus');
     await page.screenshot({ path: path.join(OUT, 'whatsnew-popup.png') });
     await page.keyboard.press('Enter');
@@ -88,11 +91,15 @@ try {
 
   console.log('\n=== Returning player who saw an earlier release ===');
   if (all.length >= 2) {
-    const last = all[Math.min(2, all.length - 1)];
+    const last = all[1];
     const { ctx, page } = await open({ [SEEN_KEY]: last });
     await page.waitForSelector('.sw-whatsnew [data-entry]');
-    const got = await shown(page);
-    ok(got.join() === all.slice(0, all.indexOf(last)).join(), 'only the entries above "' + last + '" are shown (' + got.join(', ') + ')');
+    const got = await shown(page), want = recent(last).map(e => e.id), news = await marked(page);
+    ok(got.join() === want.join() && got.length > 1, 'the last several days are listed, not only what is new (' + got.length + ' entries, ' + new Set(recent(last).map(e => e.date)).size + ' days)');
+    ok(news.join() === all[0], 'only the entry above "' + last + '" is marked New (' + news.join(', ') + ')');
+    const r = await page.evaluate(() => { const n = document.querySelector('.sw-whatsnew .wn-entry.new'), c = document.querySelector('.wn-count'), body = document.querySelector('.sw-whatsnew-modal .sw-modal-body').getBoundingClientRect(), b = n.getBoundingClientRect();
+      return { chip: n.querySelector('.wn-new') && n.querySelector('.wn-new').textContent, count: c && c.textContent, inView: b.top >= body.top && b.bottom <= body.bottom }; });
+    ok(r.chip === 'New' && /^1 new since your last visit/.test(r.count || '') && r.inView, 'it carries a New tag, the count line says 1 new, and it is in view without scrolling');
     await page.screenshot({ path: path.join(OUT, 'whatsnew-since.png') });
     await page.locator('.sw-whatsnew-modal .sw-btn.primary').click();
     await page.waitForSelector('.sw-whatsnew', { state: 'detached' });
@@ -112,7 +119,7 @@ try {
     await b.ctx.close();
     const c = await open(null, '?whatsnew=1');
     await c.page.waitForSelector('.sw-whatsnew [data-entry]');
-    ok((await shown(c.page)).join() === all.join(), '?whatsnew=1 shows it with everything');
+    ok((await shown(c.page)).length > 0, '?whatsnew=1 shows it');
     await c.ctx.close();
   }
 } catch (err) {

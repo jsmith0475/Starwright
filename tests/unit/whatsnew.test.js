@@ -2,7 +2,7 @@
 // rule does what the pop-up relies on. A pull request that adds an entry badly fails here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RELEASES, unseen, groupByDay, dayLabel } from '../../js/ui/whatsnew.js';
+import { RELEASES, unseen, recent, groupByDay, dayLabel, RECENT_DAYS } from '../../js/ui/whatsnew.js';
 
 test('whatsnew: every entry has a unique id, a real date, a title and text', () => {
   assert.ok(RELEASES.length >= 1);
@@ -42,4 +42,18 @@ test('whatsnew: entries are grouped by day in order', () => {
   assert.deepEqual(days.map(d => [d.label, d.entries.map(e => e.id).join()]), [['2 December 2026', 'c,b'], ['30 November 2026', 'a']]);
   assert.equal(groupByDay().reduce((n, d) => n + d.entries.length, 0), RELEASES.length);
   assert.equal(dayLabel('2026-01-09'), '9 January 2026');
+});
+
+test('whatsnew: the pop-up lists the newest days, and every day with something unseen', () => {
+  const list = [];
+  for (let d = 10; d >= 1; d--) for (const n of ['b', 'a']) list.push({ id: `d${d}${n}`, date: `2026-12-${String(d).padStart(2, '0')}` });
+  const days = l => [...new Set(l.map(e => e.date.slice(8)))].join();
+  assert.equal(days(recent('d10b', list, 6)), '10,09,08,07,06,05', 'up to date: six days of history');
+  assert.equal(days(recent('d10a', list, 6)), '10,09,08,07,06,05', 'one new entry: still six days');
+  assert.equal(recent('d10a', list, 6).length, 12, 'whole days, not cut part-way');
+  assert.equal(days(recent('d3a', list, 6)), '10,09,08,07,06,05,04,03', 'away for longer: back to the oldest unseen day');
+  assert.equal(recent(null, list, 6).length, 20, 'never shown anything: all of it');
+  assert.equal(recent('d10b', list.slice(0, 4), 6).length, 4, 'a short list: all of it');
+  assert.ok(RECENT_DAYS >= 5, 'several releases are shown');
+  assert.ok(recent(RELEASES[0].id).length >= Math.min(RELEASES.length, 2));
 });
