@@ -268,10 +268,11 @@ Starwright does not fake its orbits, and it shows its work.
   Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
   verification document lists what the model cannot do, with measurements.
-- **A science reference in the game.** Twelve chapters and 68 equations, from the two-body
+- **A science reference in the game.** Fifteen chapters and 99 equations, from the two-body
   problem and the vis-viva equation through the rocket equation, patched conics, re-entry
-  heating and rendezvous, with worked examples computed from the game's own worlds and two
-  calculators. It is on the title menu under **Science**.
+  heating and rendezvous, to the game's own aerodynamics, structural loads and aerodynamic
+  breakup, with worked examples computed from the game's own worlds and flight code and
+  three calculators. It is on the title menu under **Science**.
 
 <p align="center">
   <img src="media/shot-science.png" width="100%" alt="The in-game science reference open on chapter 1, gravity and the two-body problem, with numbered equations">
