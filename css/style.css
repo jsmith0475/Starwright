@@ -417,14 +417,24 @@ p:last-child { margin-bottom: 0; }
 .sw-wordmark { width: min(520px, calc(80vw / var(--sw-ui-scale, 1))); height: auto; display: block; overflow: visible; }
 .sw-wordmark .star { transform-origin: center; transform-box: fill-box; animation: sw-twinkle 4s ease-in-out infinite; }
 .sw-tagline { margin: 6px 0 30px 4px; color: #b9c6d6; font-size: 16px; letter-spacing: 0.02em; }
-.sw-menu { display: flex; flex-direction: column; gap: 8px; width: 300px; }
-.sw-menu .sw-btn { justify-content: flex-start; height: 46px; padding: 0 18px; font-size: 16px; border-radius: 12px; background: rgba(29, 38, 49, 0.88); backdrop-filter: blur(6px); }
-.sw-menu .sw-btn:hover { background: var(--sw-panel-3); transform: translateX(3px); }
-.sw-menu .sw-btn.primary { background: var(--sw-teal); }
+.sw-menu { display: flex; flex-direction: column; gap: 14px; width: 330px; }
+.sw-menu-group { display: flex; flex-direction: column; gap: 7px; }
+.sw-menu-head { display: flex; align-items: center; gap: 10px; margin: 0 2px 1px 4px; font-size: 11px; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; color: #9fb1c2; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.sw-menu-head::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(57, 208, 192, 0.55), rgba(57, 208, 192, 0)); }
+.sw-menu-row { display: flex; gap: 7px; }
+.sw-menu-row > .sw-btn { flex: 1 1 0; min-width: 0; }
+.sw-menu .sw-btn { justify-content: flex-start; gap: 11px; height: 44px; padding: 0 16px 0 14px; font-size: 16px; border-radius: 12px; background: rgba(29, 38, 49, 0.88); backdrop-filter: blur(6px); }
+.sw-menu .sw-btn svg { width: 18px; height: 18px; flex: none; color: var(--sw-teal); opacity: 0.9; }
+.sw-menu .sw-btn:hover { background: var(--sw-panel-3); border-color: rgba(57, 208, 192, 0.45); transform: translateX(3px); }
+.sw-menu .sw-menu-row > .sw-btn:hover { transform: none; }
+.sw-menu .sw-btn.primary { background: var(--sw-teal); box-shadow: 0 0 18px rgba(57, 208, 192, 0.22); }
+.sw-menu .sw-btn.primary svg { color: inherit; }
 .sw-menu .sw-btn.primary:hover { background: #5ee0d2; }
-.sw-menu .sw-btn small { margin-left: auto; font-size: 12px; font-weight: 600; opacity: 0.7; }
-.sw-menu .sw-btn.ghost { background: transparent; height: 36px; font-size: 14px; }
-.sw-menu .sw-btn.ghost:hover { color: var(--sw-red); background: rgba(255, 107, 107, 0.08); }
+.sw-menu .sw-btn small { margin-left: auto; padding-left: 6px; font-size: 12px; font-weight: 600; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; }
+.sw-menu .sw-btn.sw-menu-del { flex: none; width: 44px; padding: 0; justify-content: center; background: rgba(29, 38, 49, 0.6); border-color: var(--sw-line); }
+.sw-menu .sw-btn.sw-menu-del svg { color: var(--sw-dim); }
+.sw-menu .sw-btn.sw-menu-del:hover { background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.5); }
+.sw-menu .sw-btn.sw-menu-del:hover svg { color: var(--sw-red); }
 .sw-title-foot { position: absolute; left: calc(8vw / var(--sw-ui-scale, 1)); bottom: 22px; z-index: 2; color: var(--sw-faint); font-size: 12px; }
 @keyframes sw-twinkle { 0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; } 50% { transform: scale(0.86) rotate(8deg); opacity: 0.85; } }
 
@@ -748,13 +758,15 @@ p:last-child { margin-bottom: 0; }
   .sw-stat .sw-label { display: none; }
   .sw-brand small { display: none; }
   .sw-tagline { margin-bottom: 20px; }
-  .sw-menu .sw-btn { height: 42px; }
+  .sw-menu .sw-btn { height: 40px; }
+  .sw-menu .sw-btn.sw-menu-del { width: 40px; }
 }
-@media (max-height: 760px) {      /* the title menu with a saved game is twelve entries: keep all of them on a 720-pixel-high window */
-  .sw-menu { gap: 6px; }
-  .sw-menu .sw-btn { height: 38px; }
-  .sw-menu .sw-btn.ghost { height: 32px; }
-  .sw-title-foot { display: none; }      /* the last entry would sit on it */
+@media (max-height: 760px) {      /* the title menu is four groups, nine rows with a saved game: keep all of them on a 720-pixel-high window */
+  .sw-menu { gap: 10px; }
+  .sw-menu-group, .sw-menu-row { gap: 5px; }
+  .sw-menu .sw-btn { height: 36px; font-size: 15px; }
+  .sw-menu .sw-btn.sw-menu-del { width: 36px; }
+  .sw-title-foot { display: none; }      /* the last row would sit on it */
 }
 @media (max-width: 1399px) { .sw-hub-help .keys { display: none; } }   /* the key legend would run under the quick bar */
 @media (max-width: 1100px) {

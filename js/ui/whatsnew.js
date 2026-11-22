@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'menu-groups', date: '2026-11-22', title: 'A tidier front menu',
+    text: 'The front menu is sorted into four groups: Play, Learn and tour, Options and About. Each entry has its own small picture, the arrow keys walk the list, and deleting a saved game is now the small bin beside Continue.' },
   { id: 'worlds-1', date: '2026-11-22', title: 'Worlds with ground of their own',
     text: 'Stand on any world and the ground is its own: craters down to a hand\'s width on Pell, broken ice plates on Brim and Ost, a dark crust with glowing cracks on Sear\'s lava sea, wind ripples and cracked mud on Rusk. Each world has its own kinds of rock, and Verda, Marn and Rusk have a high thin layer of cloud or dust. It is drawn detail: wheels and legs stand where they did.' },
   { id: 'whats-new', date: '2026-11-22', title: "What's New",
