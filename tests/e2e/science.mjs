@@ -1,5 +1,5 @@
 // End-to-end test of the science reference: the title menu's Science entry opens the reader, every chapter draws
-// its equations as real MathML with a laid-out size, the two calculators answer and react to input, the chapter is
+// its equations as real MathML with a laid-out size, the three calculators answer and react to input, the chapter is
 // remembered, and nothing logs an error.
 //   node tests/e2e/science.mjs          (screenshots: tests/out/science-*.png)
 import path from 'node:path';
@@ -36,7 +36,7 @@ try {
   await entry.click();
   await page.waitForSelector('.sw-sci .sw-sci-eq math');
   const chapters = await page.evaluate(() => [...document.querySelectorAll('.sw-sci-nav [data-chapter]')].map(b => b.dataset.chapter));
-  ok(chapters.length >= 12, `the reader lists ${chapters.length} chapters`);
+  ok(chapters.length >= 15, `the reader lists ${chapters.length} chapters`);
   ok(await page.evaluate(() => window.__sw.app.science.chapters.length) === chapters.length, 'app.science knows the same chapters');
 
   let totalEq = 0, bad = [];
@@ -105,6 +105,28 @@ try {
   ok(toOpts.includes('Ost') && !toOpts.includes('Pell') && !toOpts.includes('Rusk'), 'choosing a moon offers its sister moons only: ' + toOpts.join(', '));
   ok(Number.isFinite(num(await out('transfer', 'eject'))), 'and still answers');
   await page.screenshot({ path: path.join(OUT, 'science-03-transfer.png') });
+
+  // the three chapters on the game's own aerodynamics follow "Flight through air", and the air-load calculator answers
+  const at = chapters.indexOf('atmosphere');
+  ok(chapters[at + 1] === 'aeromodel' && chapters[at + 2] === 'structure' && chapters[at + 3] === 'breakup', 'flight model, structure and breakup follow the chapter on flight through air');
+  for (const id of ['aeromodel', 'structure', 'breakup']) { await page.click(`[data-chapter="${id}"]`); await page.screenshot({ path: path.join(OUT, `science-05-${id}.png`) }); }
+  const ac = page.locator('[data-calc="airflow"]');
+  await ac.scrollIntoViewIfNeeded();
+  const q0 = num(await out('airflow', 'q')), x0 = num(await out('airflow', 'cross'));
+  const qWant = 0.5 * 1.22 * Math.exp(-8000 / 5800) * 360 * 360 / 1000;
+  ok(Math.abs(q0 - qWant) < 0.06 && Math.abs(x0 - qWant / 2) < 0.06, `the air-load calculator opens at 8 km, 360 m/s, 45°: ${q0} kPa, ${x0} kPa across (${qWant.toFixed(1)} and half of it)`);
+  ok(/Mach 1\.13/.test(await out('airflow', 'mach')), 'it gives the Mach number and the drag factor: ' + await out('airflow', 'mach'));
+  ok(/large dish .*8 kPa/.test(await out('airflow', 'rated')) && !/nose cone/.test(await out('airflow', 'rated')), 'at 45° the dishes go and the nose cone stays: ' + (await out('airflow', 'rated')).slice(0, 110));
+  await ac.locator('input').nth(2).fill('0');
+  ok(num(await out('airflow', 'cross')) === 0 && /Sunfoil/.test(await out('airflow', 'rated')), 'nose first there is no flow across the rocket, and only open panels go: ' + (await out('airflow', 'rated')).slice(0, 110));
+  await ac.locator('input').nth(2).fill('90');
+  ok(/nose cone/.test(await out('airflow', 'rated')), 'broadside the nose cone goes too');
+  await ac.locator('input').nth(0).fill('80');
+  ok(/above the atmosphere/.test(await out('airflow', 'rho')) && /No air/.test(await out('airflow', 'rated')), 'above the top of the atmosphere there is no air and no load');
+  await ac.locator('input').nth(0).fill('8'); await ac.locator('input').nth(2).fill('60');
+  await ac.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(OUT, 'science-06-airflow.png') });
+  await page.click('[data-chapter="transfers"]');
 
   // closing and coming back
   await page.keyboard.press('Escape');

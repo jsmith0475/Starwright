@@ -750,6 +750,12 @@ p:last-child { margin-bottom: 0; }
   .sw-tagline { margin-bottom: 20px; }
   .sw-menu .sw-btn { height: 42px; }
 }
+@media (max-height: 760px) {      /* the title menu with a saved game is twelve entries: keep all of them on a 720-pixel-high window */
+  .sw-menu { gap: 6px; }
+  .sw-menu .sw-btn { height: 38px; }
+  .sw-menu .sw-btn.ghost { height: 32px; }
+  .sw-title-foot { display: none; }      /* the last entry would sit on it */
+}
 @media (max-width: 1399px) { .sw-hub-help .keys { display: none; } }   /* the key legend would run under the quick bar */
 @media (max-width: 1100px) {
   .sw-card { width: 70px; }

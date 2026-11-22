@@ -284,8 +284,8 @@ sound, with engines you feel, the quiet of vacuum, and music.
 **Why it matters.** A game is easier to love when it starts like one. And riding a launch from
 the seat is a different experience from watching it from outside.
 
-**Today.** The game runs in a browser tab from a small local server, started by a launcher
-script. The camera has four outside views and none inside. Sound is synthesised in the browser:
+**Today.** The game runs in a browser tab, from the hosted page or from a small local server
+started by a launcher script. The camera has four outside views and none inside. Sound is synthesised in the browser:
 engine rumble, wind and effects, with a simple ambient pad on the menus.
 
 **Building it.** Wrap the existing game in a desktop shell, with signed installers so the

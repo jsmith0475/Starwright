@@ -23,11 +23,14 @@ let checks = 0;
 function ok(cond, what) { checks++; if (!cond) { problems.push('FAILED: ' + what); console.log('  ✗ ' + what); } else console.log('  ✓ ' + what); return !!cond; }
 function note(text) { notes.push(text); console.log('  · ' + text); }
 
+const WHATSNEW_LATEST = (await import('../../js/ui/whatsnew.js')).RELEASES[0].id;
 const server = await startServer(ROOT);
 const browser = await chromium.launch({ args: CHROMIUM_ARGS });
 
 async function newPage(width = 1440, height = 900, storage = null) {
   const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+  // a seeded save makes this a returning player: mark What's New as seen, so its pop-up (tests/e2e/whatsnew.mjs) stays out of the way
+  if (storage) storage = { 'starwright.whatsnew.v1': WHATSNEW_LATEST, ...storage };
   if (storage) await ctx.addInitScript(s => { if (!sessionStorage.getItem('__seeded')) { for (const k in s) localStorage.setItem(k, s[k]); sessionStorage.setItem('__seeded', '1'); } }, storage);
   const page = await ctx.newPage();
   page.setDefaultTimeout(180000);            // software GL on a busy machine: a single frame can take seconds

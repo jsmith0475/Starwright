@@ -4,7 +4,13 @@ import assert from 'node:assert/strict';
 import { texToMathML, texToText } from '../../js/ui/tex.js';
 import { CHAPTERS, scienceContext, parseBody, parseInline } from '../../js/ui/sciencetext.js';
 import { SYSTEM } from '../../js/core/bodies.js';
-import { G0 } from '../../js/core/parts.js';
+import { G0, PARTS, AIR_RATING } from '../../js/core/parts.js';
+import { TUNING, wingCoefficients } from '../../js/core/vessel.js';
+import { STRUCT, jointUtilisation } from '../../js/core/structure.js';
+import { World } from '../../js/core/world.js';
+import { Craft } from '../../js/core/craft.js';
+import { Quaternion, Vector3 } from '../../js/lib/three.module.min.js';
+import { machRise } from '../../js/ui/scienceaero.js';
 
 const ctx = scienceContext(SYSTEM, G0);
 
@@ -21,6 +27,7 @@ test('tex: fractions, roots, scripts, accents and Greek become MathML', () => {
   assert.match(texToMathML(String.raw`\left(\frac{a}{b}\right)`), /<mo>\(<\/mo><mrow><mfrac>/);
   assert.match(texToMathML('v = 2,337'), /<mn>2,337<\/mn>/, 'a number with a thousands comma stays one number');
   assert.match(texToMathML('a < b'), /&lt;/, 'angle brackets are escaped');
+  assert.match(texToMathML(String.raw`\sin^2\alpha`), /<msup><mi>sin<\/mi><mn>2<\/mn><\/msup><mo>&#x2061;<\/mo><mi>α<\/mi>/, 'a squared function name carries its own exponent');
 });
 
 test('tex: anything unknown or unbalanced throws, so a typo cannot ship', () => {
@@ -39,7 +46,7 @@ test('tex: the spoken form drops the markup', () => {
 test('science: the chapters cover the subject and each has a unique id, title and lead', () => {
   assert.ok(CHAPTERS.length >= 10);
   assert.equal(new Set(CHAPTERS.map(c => c.id)).size, CHAPTERS.length);
-  for (const want of ['gravity', 'conics', 'visviva', 'kepler', 'rocket', 'maneuvers', 'transfers', 'ascent', 'atmosphere', 'landing', 'rendezvous', 'numerics']) {
+  for (const want of ['gravity', 'conics', 'visviva', 'kepler', 'rocket', 'maneuvers', 'transfers', 'ascent', 'atmosphere', 'aeromodel', 'structure', 'breakup', 'landing', 'rendezvous', 'numerics']) {
     assert.ok(CHAPTERS.some(c => c.id === want), 'chapter ' + want);
   }
   for (const c of CHAPTERS) { assert.ok(c.title.length > 5 && c.lead.length > 20, c.id); }
@@ -56,7 +63,7 @@ test('science: every equation and inline formula converts, and no computed numbe
     assert.ok(blocks.some(b => b.type === 'game'), ch.id + ' says what the game does');
     for (const b of blocks) {
       if (b.type === 'eq') { equations++; assert.doesNotThrow(() => texToMathML(b.text, { display: true }), ch.id + ': ' + b.text); continue; }
-      if (b.type === 'calc') { assert.ok(['rocket', 'transfer'].includes(b.text), 'calculator ' + b.text); continue; }
+      if (b.type === 'calc') { assert.ok(['rocket', 'transfer', 'airflow'].includes(b.text), 'calculator ' + b.text); continue; }
       const spans = parseInline(b.text);
       for (const s of spans) {
         if (s.math !== undefined) assert.doesNotThrow(() => texToMathML(s.math), ch.id + ': ' + s.math);
@@ -90,4 +97,133 @@ test('science: the worked numbers agree with the game\'s own worlds and orbit co
   // the sphere of influence quoted is the one the game patches at
   assert.ok(Math.abs(home.soi - home.orbit.a * Math.pow(home.gm / star.gm, 0.4)) < 1e-3);
   assert.match(CHAPTERS.find(c => c.id === 'transfers').body(ctx), new RegExp((home.soi / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })));
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The chapters on the game's own aerodynamics, structure and breakup (js/ui/scienceaero.js). The formulas printed in
+// the reference are evaluated here by hand and compared with what the real flight code does to a real vessel.
+
+const text = id => CHAPTERS.find(c => c.id === id).body(ctx);
+/** A craft in the air above the home world: air-relative velocity `speed` straight up, nose turned `tilt` about a body axis. */
+function inAir(craft, { alt, speed, axis = [0, 0, 1], tilt = 0 }) {
+  const w = new World(), b = SYSTEM.home, r = b.radius + alt;
+  const v = w.spawn(craft, { crew: ['Ada'], body: b, pos: new Vector3(r, 0, 0), vel: new Vector3(speed, 0, -2 * Math.PI / b.rotPeriod * r) });
+  v.q.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(1, 0, 0));
+  if (tilt) v.q.multiply(new Quaternion().setFromAxisAngle(new Vector3(...axis), tilt));
+  v.w.set(0, 0, 0); v.ctrl.sas = false; v.ctrl.throttle = 0;
+  return { w, v, rho: b.density(alt), q: 0.5 * b.density(alt) * speed * speed };
+}
+/** pod + `tanks` M-400 canisters, with `sym` copies of a fin on the lowest. */
+function finned(fin, sym, tanks = 3, angle = 0) {
+  const c = new Craft('finned');
+  let t = c.attachStack('tank_m400', c.setRoot('pod_acorn')[0].id, 'bottom')[0];
+  for (let k = 1; k < tanks; k++) t = c.attachStack('tank_m400', t.id, 'bottom')[0];
+  c.attachRadial(fin, t.id, 0, angle, sym); c.autoStage();
+  return c;
+}
+const close = (got, want, rel, what) => assert.ok(Math.abs(got - want) <= rel * Math.abs(want), `${what}: ${got} against ${want}`);
+
+test('aerodynamics chapter: the body-drag formulas and the drag rise are what the flight code applies', () => {
+  const t = PARTS.tank_m400, face = Math.PI * t.r * t.r * t.drag.top, side = 2 * t.r * t.h * t.drag.side;
+  const one = new Craft('tank'); one.setRoot('tank_m400'); one.autoStage();
+  for (const speed of [200, 288, 400, 576, 960]) for (const broadside of [false, true]) {
+    const { w, v, q } = inAir(one, { alt: 1153, speed, tilt: broadside ? Math.PI / 2 : 0 });
+    const m = v.mass; w.step(TUNING.DT_MAX);
+    const mach = speed / TUNING.SOUND_SPEED;
+    // end on: q M (A_w + 0.25 A_l); broadside: q M A_s
+    close(v.gForce * G0 * m, q * machRise(mach) * (broadside ? side : face * (1 + TUNING.BASE_DRAG)), 1e-9, `Mach ${mach.toFixed(2)} ${broadside ? 'broadside' : 'end on'}`);
+  }
+  assert.deepEqual([0.5, 0.7, 1.1, 2.5, 4].map(machRise), [1, 1, TUNING.MACH_PEAK, TUNING.MACH_HIGH, TUNING.MACH_HIGH]);
+  close(machRise(0.9), 1.5, 1e-12, 'half way up the rise');
+  // the worked example prints these two forces at 20 kPa
+  const body = text('aeromodel');
+  assert.ok(body.includes(ctx.sig(20000 * face * 1.25 / 1000, 3)) && body.includes(ctx.sig(20000 * side / 1000, 3)), 'the canister example');
+  assert.ok(body.includes(String(TUNING.SOUND_SPEED)) && body.includes(String(TUNING.WING_SLOPE)) && body.includes(String(TUNING.FIN_LIFT)));
+});
+
+test('aerodynamics chapter: fin lift, the stall and the flat plate are the game\'s', () => {
+  // attached: C_L = a α, C_D = C_D0 + K C_L²; broadside: no lift, full plate drag
+  const a5 = 5 * Math.PI / 180, [cl, cd] = wingCoefficients(a5, TUNING.FIN_LIFT, TUNING.FIN_STALL, [0, 0]);
+  close(cl, TUNING.FIN_LIFT * a5, 1e-12, 'C_L at 5°');
+  close(cd, TUNING.WING_CD0 + TUNING.WING_K * cl * cl, 1e-12, 'C_D at 5°');
+  const [cl90, cd90] = wingCoefficients(Math.PI / 2);
+  assert.ok(Math.abs(cl90) < 1e-12); close(cd90, TUNING.WING_CD0 + TUNING.WING_PLATE_CD, 1e-12, 'plate drag');
+  const [cl45] = wingCoefficients(Math.PI / 4); close(cl45, TUNING.WING_PLATE, 1e-12, 'plate lift at 45°');
+  // in flight: a Tail Fin at 5° to the flow carries q S C_L
+  const { w, v, q } = inAir(finned('fin', 1), { alt: 3000, speed: 200, axis: [1, 0, 0], tilt: a5 });
+  w.step(TUNING.DT_MAX);
+  const fin = [...v.parts.values()].find(p => p.def.id === 'fin');
+  close(Math.abs(fin._aoa), a5, 1e-9, 'angle of attack');
+  close(Math.abs(fin._lift), q * PARTS.fin.fin.area * cl, 1e-9, 'lift of a Tail Fin');
+});
+
+test('structure chapter: the ring formulas and the strength table are the game\'s', () => {
+  const A = ctx.aero, n = [0, 1, 0], caps = [STRUCT.LINE_T, STRUCT.LINE_C, STRUCT.LINE_S];
+  for (const r of [0.3125, 0.625, 1.25, 1.875]) {
+    const s = A.ring(r);
+    close(jointUtilisation([0, -s.pull, 0], [0, 0, 0], n, r, ...caps).util, 1, 1e-12, 'pull apart');      // F·n < 0 is tension
+    close(jointUtilisation([0, s.crush, 0], [0, 0, 0], n, r, ...caps).util, 1, 1e-12, 'crush');
+    close(jointUtilisation([0, 0, 0], [s.bend, 0, 0], n, r, ...caps).util, 1, 1e-12, 'bend');
+    // shear V/(πr) and twist M_t/(2πr²)
+    close(jointUtilisation([STRUCT.LINE_S * Math.PI * r, 0, 0], [0, 0, 0], n, r, ...caps).util, 1, 1e-12, 'shear');
+    close(jointUtilisation([0, 0, 0], [0, STRUCT.LINE_S * 2 * Math.PI * r * r, 0], n, r, ...caps).util, 1, 1e-12, 'twist');
+  }
+  // the worked example: compression lets a joint take more bending before its tension side opens
+  const r = 0.625, comp = 200e3, bend = (STRUCT.LINE_T + comp / (2 * Math.PI * r)) * Math.PI * r * r;
+  const u = jointUtilisation([0, comp, 0], [bend, 0, 0], n, r, ...caps);
+  close(u.util, 1, 1e-12, 'pre-compressed joint at its limit'); assert.equal(u.mode, 'tension');
+  const body = text('structure');
+  assert.ok(body.includes(ctx.sig(bend / 1e6, 2)) && body.includes(String(STRUCT.FAIL_TIME)) && body.includes(String(STRUCT.HEAL_TIME)));
+});
+
+test('breakup chapter: the thin root, the air ratings and the tear-off time are the game\'s', () => {
+  const A = ctx.aero, body = text('breakup');
+  // a pure flat-wise moment equal to the quoted capacity puts the root exactly at its limit
+  for (const id of ['fin_broad', 'fin']) {
+    const f = A.fin(id), cap = STRUCT.LINE_T * f.factor;
+    const u = jointUtilisation([0, 0, 0], [0, f.capM, 0], [1, 0, 0], 0.5, cap, STRUCT.LINE_C * f.factor, STRUCT.LINE_S * f.factor, { h: f.h, t: f.t, c: [0, 1, 0] });
+    close(u.util, 1, 1e-12, id + ' root at the quoted moment');
+    assert.equal(f.arm, PARTS[id].rw / 2);
+  }
+  // in flight: two opposite Broad Fins face on to the flow at the pressure the chapter quotes. The root reads a little
+  // under 100 % (the fin's own mass is moved along with the ship), which is what the example says.
+  const f = A.fin('fin_broad'), qLimit = f.capM / (f.area * f.cd90 * f.arm);
+  assert.ok(body.includes(ctx.sig(qLimit / 1000, 2) + ' kPa'), 'the quoted face-on limit');
+  const rho = SYSTEM.home.density(3000), speed = Math.sqrt(2 * qLimit / rho);
+  for (const tanks of [1, 3]) {
+    const { w, v } = inAir(finned('fin_broad', 2, tanks), { alt: 3000, speed, axis: [1, 0, 0], tilt: Math.PI / 2 });
+    w.step(TUNING.DT_MAX);
+    const utils = v.structure.joints.filter(j => j.b.def.id === 'fin_broad').map(j => j.util);
+    assert.equal(utils.length, 2);
+    for (const u of utils) assert.ok(u > 0.82 && u < 1, `Broad Fin root face on at ${(qLimit / 1000).toFixed(1)} kPa, ${tanks} tanks: ${(u * 100).toFixed(0)} %`);
+    // 9 to 10 kPa in flight: the limit is reached between those
+    const inFlight = qLimit / Math.max(...utils);
+    assert.ok(inFlight > 8900 && inFlight < 10500, `in-flight limit ${(inFlight / 1000).toFixed(1)} kPa`);
+  }
+  // fins in an X: each at half the pressure through its face
+  {
+    const at = ang => { const { w, v } = inAir(finned('fin_broad', 1, 3, ang), { alt: 3000, speed: 150, axis: [1, 0, 0], tilt: Math.PI / 2 }); w.step(TUNING.DT_MAX); return v.structure.joints.find(j => j.b.def.id === 'fin_broad').util; };
+    close(at(Math.PI / 4) / at(0), 0.5, 0.02, 'a fin at 45° to a cross-flow');
+  }
+  // every rating is listed with the game's number
+  assert.equal(A.rated.length, Object.keys(AIR_RATING).length);
+  for (const r of A.rated) assert.ok(body.includes(`${r.q / 1000} kPa`), r.name);
+  // cross-flow q sin²θ and the damage rule, on a real nose cone pitched 60° off the flow
+  const c = new Craft('nosed');
+  assert.equal(c.attachStack('nose_m', c.setRoot('tank_m400')[0].id, 'top').length, 1); c.autoStage();
+  const th = Math.PI / 3, { w, v, q } = inAir(c, { alt: 2000, speed: 250, tilt: th });
+  const held = { pos: v.pos.clone(), vel: v.vel.clone(), q: v.q.clone() };
+  const hold = () => { v.pos.copy(held.pos); v.vel.copy(held.vel); v.q.copy(held.q); v.w.set(0, 0, 0); };
+  w.step(TUNING.DT_MAX);
+  const nose = v.airLoads().find(l => l.name === PARTS.nose_m.name);
+  close(nose.q, q * Math.sin(th) ** 2, 1e-9, 'flow across the nose cone');
+  close(nose.damage, (nose.q / nose.rated - 1) * TUNING.DT_MAX / STRUCT.AIR_FAIL_TIME, 1e-9, 'damage after one step');
+  close(A.tearTime(2 * nose.rated, nose.rated), STRUCT.AIR_FAIL_TIME, 1e-12, 'twice the rating');
+  assert.equal(A.tearTime(nose.rated, nose.rated), Infinity);
+  // and held in that airflow (the drag would otherwise slow it below its rating), it comes off when the formula says
+  let steps = 1; const events = []; w.on('structure', d => events.push(d));
+  while (!events.length && steps < 500) { hold(); w.step(TUNING.DT_MAX); steps++; }
+  assert.ok(events.length && events[0].mode === 'airflow', 'the nose cone is torn off by the airflow');
+  const predicted = A.tearTime(nose.q, nose.rated);
+  assert.ok(Math.abs(steps * TUNING.DT_MAX - predicted) <= 2 * TUNING.DT_MAX, `torn off after ${(steps * TUNING.DT_MAX).toFixed(2)} s, formula ${predicted.toFixed(2)} s`);
 });

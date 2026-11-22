@@ -867,6 +867,7 @@ export function createTitleScreen(app) {
     menu.appendChild(btn('settings', 'Settings', '', () => openSettings(app).then(() => { if (root) drawMenu(); })));
     menu.appendChild(btn('controls', 'Controls', '', () => openControls()));
     if (app.about) menu.appendChild(btn('about', 'About', '', () => app.about.open(), 'the story behind the game'));   // js/ui/about.js
+    if (app.whatsNew && app.whatsNew.latest) menu.appendChild(btn('whatsnew', "What's New", '', () => app.whatsNew.open(), app.whatsNew.note()));   // js/ui/whatsnew.js
     if (has) {
       menu.appendChild(btn('delete', 'Delete saved game', 'ghost', async () => {
         if (await app.confirm('Delete saved game?', 'Your program, crew, designs and flights in progress will be erased. This cannot be undone.', { okLabel: 'Delete', danger: true })) {
