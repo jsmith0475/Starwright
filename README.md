@@ -91,6 +91,8 @@ Grok, worked on Starwright, and it is not affiliated with or endorsed by either 
 | **Plan the burn.** Drop a maneuver node on your orbit, drag the handles, and watch the encounter appear before you spend a drop of fuel. Time warp to 100,000×. | **Land on a moon.** Then step outside, plant a flag, take a sample and get everyone home through re-entry. |
 | [![A six-wheeled rover driving across the red surface of Rusk](media/shot-rover.jpg)](media/shot-rover.jpg) | [![The tracking station showing a world and the list of bodies in the Helion system](media/shot-system.jpg)](media/shot-system.jpg) |
 | **Not only rockets.** Rovers, spaceplanes off a runway, space stations assembled by docking, fuel pumped from tanker to ship. | **A whole solar system.** A star, eight planets, nine moons and a comet, each with its own terrain, gravity and sky. |
+| [![A tall rocket in a hard turn with coloured stress bands at its joints and the Structure read-out at 82 percent](media/shot-structure.jpg)](media/shot-structure.jpg) | [![A heavy rocket flipped across the airflow just after both side boosters were torn off, with the game's messages naming the cause](media/shot-aero.jpg)](media/shot-aero.jpg) |
+| **Structures that carry load.** Every joint between two parts bears a computed load: thrust, weight, drag and bending. Tall thin stacks flex, and a hard turn in thick air snaps them. A stress overlay shows the load in flight, and the assembly building names the weak joint before you launch. [How it works.](docs/STRUCTURE.md) | **Air that behaves like air.** Every part meets the airflow on its own, so drag, stability and lift come from the shape you built. Fins keep a rocket pointed, wings stall, drag climbs through the speed of sound, and at max Q the air can tear parts off. [The framework and the math.](#aerodynamics) |
 
 And around the flying:
 
@@ -102,10 +104,6 @@ And around the flying:
   station, on final descent to a moon, or falling from 120 km in a bare capsule.
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
-- **Air that behaves like air.** Every part meets the airflow on its own, so drag, stability
-  and lift come from the shape you built. Fins at the tail keep a rocket pointed, wings stall
-  if you pull too hard, drag climbs through the speed of sound, and max Q is a real place on
-  the way up. [How it works, with the math.](#aerodynamics)
 - **Rockets that bend and break.** Every joint between two parts carries a computed load. Tall
   thin stacks wobble, and a hard turn in thick air snaps them. A read-out and a stress overlay
   (the `;` key) show the load in flight, and the assembly building tells you which joint will
