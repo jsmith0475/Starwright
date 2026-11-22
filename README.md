@@ -102,6 +102,10 @@ And around the flying:
   station, on final descent to a moon, or falling from 120 km in a bare capsule.
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
+- **Air that behaves like air.** Every part meets the airflow on its own, so drag, stability
+  and lift come from the shape you built. Fins at the tail keep a rocket pointed, wings stall
+  if you pull too hard, drag climbs through the speed of sound, and max Q is a real place on
+  the way up. [How it works, with the math.](#aerodynamics)
 - **Rockets that bend and break.** Every joint between two parts carries a computed load. Tall
   thin stacks wobble, and a hard turn in thick air snaps them. A read-out and a stress overlay
   (the `;` key) show the load in flight, and the assembly building tells you which joint will
