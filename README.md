@@ -310,18 +310,18 @@ authority, heating and breakup all fall out of the same per-part sum.
 Air density at altitude $h$, with surface density $\rho_0$ and scale height $H$ (on the home
 world Verda: 1.22 kg/m³, 5.8 km, top at 72 km):
 
-$$\rho(h) = \rho_0 \, e^{-h/H}$$
+$$\rho(h) = \rho_0 e^{-h/H}$$
 
 The flow at part $i$, at position $\mathbf{r}_i$ from the centre of mass of a vessel moving at
 $\mathbf{v}$ through the air and turning at $\boldsymbol{\omega}$, and its dynamic pressure:
 
-$$\mathbf{v}_i = \mathbf{v} + \boldsymbol{\omega} \times \mathbf{r}_i \qquad q_i = \tfrac{1}{2} \rho \, |\mathbf{v}_i|^2$$
+$$\mathbf{v}_i = \mathbf{v} + \boldsymbol{\omega} \times \mathbf{r}_i \qquad q_i = \tfrac{1}{2} \rho |\mathbf{v}_i|^2$$
 
 A body part with windward face area $A_w$, leeward face area $A_l$ and side area $A_s$ (each
 already multiplied by its drag coefficient), with $\theta$ the angle between its axis and the
 flow. The wake behind the leeward face adds a quarter of that face:
 
-$$F_\text{axial} = -\, q_i \, M(\mathrm{Ma}) \, (A_w + 0.25 \, A_l) \cos\theta \qquad \mathbf{F}_\text{side} = -\, q_i \, M(\mathrm{Ma}) \, A_s \, \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
+$$F_\text{axial} = - q_i M(\mathrm{Ma}) (A_w + 0.25 A_l) \cos\theta \qquad \mathbf{F}_\text{side} = - q_i M(\mathrm{Ma}) A_s \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
 
 $M$ is the transonic drag rise. The speed of sound is held at 320 m/s:
 
@@ -332,7 +332,7 @@ $M$ is the transonic drag rise. The speed of sound is held at 320 m/s:
 A wing or fin of area $S$ at angle of attack $\alpha$, with lift-curve slope $a$ (3.6 per
 radian for a wing, 1.6 for a fin). While the flow is attached:
 
-$$C_L = a \, \alpha \qquad C_D = 0.012 + 0.07 \, C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S \, C_L \qquad D = \tfrac{1}{2} \rho v^2 S \, C_D \, M$$
+$$C_L = a \alpha \qquad C_D = 0.012 + 0.07 C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S C_L \qquad D = \tfrac{1}{2} \rho v^2 S C_D M$$
 
 Past the stall (16° for a wing, 26° for a fin) it blends smoothly into a flat plate, so a wing
 still makes force at any angle, including backwards:
@@ -345,7 +345,7 @@ $$\mathbf{F} = \sum_i \mathbf{F}_i \qquad \boldsymbol{\tau} = \sum_i \mathbf{r}_
 
 Re-entry heating uses the Sutton-Graves form, with heat flux in W/m²:
 
-$$\dot{q} = 1.83 \times 10^{-4} \, \sqrt{\rho} \, v^3$$
+$$\dot{q} = 1.83 \times 10^{-4} \sqrt{\rho} v^3$$
 
 ### What it gives you in flight
 
