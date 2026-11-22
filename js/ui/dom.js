@@ -333,6 +333,8 @@ installTips();
 
 const S = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
 export const ICONS = {
+  tour: `<circle ${S} cx="12" cy="12" r="9"/><path ${S} d="M15.5 8.500l-2 5-5 2 2-5z"/>`,
+  info: `<circle ${S} cx="12" cy="12" r="9"/><path ${S} d="M12 11v6"/><circle cx="12" cy="7.6" r="1.2" fill="currentColor"/>`,
   star: `<path d="M12 2c.8 6 3.2 8.9 10 10-6.8 1.1-9.2 4-10 10-.8-6-3.2-8.9-10-10 6.8-1.1 9.2-4 10-10z" fill="currentColor"/>`,
   funds: `<path d="M12 2c.8 6 3.2 8.9 10 10-6.8 1.1-9.2 4-10 10-.8-6-3.2-8.9-10-10 6.8-1.1 9.2-4 10-10z" fill="currentColor"/>`,
   science: `<path ${S} d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.400a2 2 0 0 0 1.8-3l-5-9V3M7.5 15h9"/>`,

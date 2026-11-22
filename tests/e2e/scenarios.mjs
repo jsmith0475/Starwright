@@ -63,6 +63,8 @@ await E(async () => {
   const c = Career.newGame('career', { seed: 99 });
   c.funds = 12345; c.ut = 40000;
   c.save();
+  // a saved game makes this a returning player: mark What's New as seen, so its pop-up (tests/e2e/whatsnew.mjs) stays off the menu
+  localStorage.setItem('starwright.whatsnew.v1', (await import('/js/ui/whatsnew.js')).RELEASES[0].id);
 });
 const mainSave = await store(MAIN_KEY);
 ok(!!mainSave && JSON.parse(mainSave).funds === 12345, 'a program of the player\'s own is saved (12,345 funds)');
@@ -86,7 +88,7 @@ ok(catalog.length >= 10, catalog.length + ' scenarios in the catalog');
 {
   console.log('\n--- title menu and picker');
   await page.waitForSelector('.sw-menu [data-action="scenarios"]');
-  const menu = await E(() => [...document.querySelectorAll('.sw-menu .sw-btn')].map(b => ({ action: b.dataset.action, text: b.childNodes[0].textContent.trim(), small: b.querySelector('small') ? b.querySelector('small').textContent : '' })));
+  const menu = await E(() => [...document.querySelectorAll('.sw-menu .sw-btn')].map(b => ({ action: b.dataset.action, text: (b.querySelector('.lbl') || b).textContent.trim(), small: b.querySelector('small') ? b.querySelector('small').textContent : '' })));
   const actions = menu.map(m => m.action);
   ok(actions.includes('scenarios') && menu.find(m => m.action === 'scenarios').text === 'Scenarios', 'the title menu has a Scenarios entry: ' + actions.join(', '));
   ok(actions.indexOf('scenarios') > actions.indexOf('new') && actions.indexOf('scenarios') < actions.indexOf('settings'), 'it sits with New Game, Flight School and the demo tour');

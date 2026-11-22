@@ -852,38 +852,84 @@ export function createTitleScreen(app) {
     try { const c = app.Career.load(); const n = c && c.nextProgramStep ? c.nextProgramStep() : null; return n ? 'next: ' + n.title : 'the flight program'; } catch { return ''; }
   }
 
+  /**
+   * The menu, in four groups under small headings: Play (the saved game, a new one, missions, scenarios), Learn and
+   * tour (Flight School, the science reference, the demo tour), Options (settings, controls) and About (the story,
+   * What's New). The last two groups are rows of two, which keeps the whole menu on a 720-pixel-high window.
+   */
   function drawMenu() {
+    const hadFocus = menu.contains(document.activeElement) ? document.activeElement.dataset.action : null;
     clear(menu);
     const has = app.hasSave();
-    const btn = (action, label, cls, handler, small) => el('button', { class: 'sw-btn ' + (cls || ''), attrs: { type: 'button', 'data-action': action }, on: { click: handler } },
-      label, small ? el('small', { text: small }) : null);
-    if (has) menu.appendChild(btn('continue', 'Continue', 'primary', () => app.continueGame(), saveSummary()));
-    menu.appendChild(btn('new', 'New Game', has ? '' : 'primary', () => openNewGame(app)));
-    menu.appendChild(btn('missions', 'Missions', '', () => openTitleMissions(app), has ? savedMissionLine() : 'the flight program and contracts'));
-    if (app.scenarios) menu.appendChild(btn('scenarios', 'Scenarios', '', () => app.scenarios.open().then(() => { if (root) drawMenu(); }), app.scenarios.note()));   // ready-made flights (js/ui/scenarios.js)
-    menu.appendChild(btn('guide', 'Flight School', '', () => app.goto('guide')));
-    if (app.science) menu.appendChild(btn('science', 'Science', '', () => app.science.open(), 'the mathematics of orbits and flight'));   // the reference (js/ui/science.js)
-    if (app.demo) menu.appendChild(btn('demo', 'Demo tour', '', () => app.demo.start(), 'self-running'));   // demo tour hook (js/ui/demo.js)
-    menu.appendChild(btn('settings', 'Settings', '', () => openSettings(app).then(() => { if (root) drawMenu(); })));
-    menu.appendChild(btn('controls', 'Controls', '', () => openControls()));
-    if (app.about) menu.appendChild(btn('about', 'About', '', () => app.about.open(), 'the story behind the game'));   // js/ui/about.js
-    if (app.whatsNew && app.whatsNew.latest) menu.appendChild(btn('whatsnew', "What's New", '', () => app.whatsNew.open(), app.whatsNew.note()));   // js/ui/whatsnew.js
-    if (has) {
-      menu.appendChild(btn('delete', 'Delete saved game', 'ghost', async () => {
-        if (await app.confirm('Delete saved game?', 'Your program, crew, designs and flights in progress will be erased. This cannot be undone.', { okLabel: 'Delete', danger: true })) {
-          app.deleteSave();
-          app.toast('Saved game deleted.', 'warn');
-          drawMenu();
-        }
-      }));
+    const btn = (action, ico, label, cls, handler, small, tip) => el('button', { class: 'sw-btn ' + (cls || ''), tip: tip || null, attrs: { type: 'button', 'data-action': action }, on: { click: handler } },
+      icon(ico), el('span', { class: 'lbl', text: label }), small ? el('small', { text: small }) : null);
+    const group = (id, title, ...rows) => {
+      rows = rows.filter(Boolean);
+      if (!rows.length) return;
+      menu.appendChild(el('div', { class: 'sw-menu-group', attrs: { role: 'group', 'aria-label': title }, data: { group: id } }, el('div', { class: 'sw-menu-head', text: title }), ...rows));
+    };
+    const pair = (...btns) => { btns = btns.filter(Boolean); return btns.length ? el('div', { class: 'sw-menu-row' }, ...btns) : null; };
+    const redraw = () => { if (root) drawMenu(); };
+
+    const del = has ? el('button', { class: 'sw-btn ghost sw-menu-del', tip: 'Delete saved game', attrs: { type: 'button', 'data-action': 'delete', 'aria-label': 'Delete saved game' }, on: { click: async () => {
+      if (await app.confirm('Delete saved game?', 'Your program, crew, designs and flights in progress will be erased. This cannot be undone.', { okLabel: 'Delete', danger: true })) {
+        app.deleteSave();
+        app.toast('Saved game deleted.', 'warn');
+        redraw();
+      }
+    } } }, icon('trash')) : null;
+    group('play', 'Play',
+      has ? el('div', { class: 'sw-menu-row lead' }, btn('continue', 'play', 'Continue', 'primary', () => app.continueGame(), saveSummary()), del) : null,
+      btn('new', 'plus', 'New Game', has ? '' : 'primary', () => openNewGame(app)),
+      btn('missions', 'rocket', 'Missions', '', () => openTitleMissions(app), has ? savedMissionLine() : 'flight program, contracts'),
+      app.scenarios ? btn('scenarios', 'board', 'Scenarios', '', () => app.scenarios.open().then(redraw), app.scenarios.note()) : null);   // ready-made flights (js/ui/scenarios.js)
+    group('learn', 'Learn and tour',
+      btn('guide', 'pilot', 'Flight School', '', () => app.goto('guide'), 'short lessons'),
+      app.science ? btn('science', 'science', 'Science', '', () => app.science.open(), 'the mathematics of flight') : null,   // the reference (js/ui/science.js)
+      app.demo ? btn('demo', 'tour', 'Demo tour', '', () => app.demo.start(), 'self-running') : null);   // demo tour hook (js/ui/demo.js)
+    group('options', 'Options', pair(
+      btn('settings', 'gear', 'Settings', '', () => openSettings(app).then(redraw)),
+      btn('controls', 'keyboard', 'Controls', '', () => openControls())));
+    group('about', 'About', pair(
+      app.about ? btn('about', 'info', 'About', '', () => app.about.open(), null, 'The story behind the game') : null,   // js/ui/about.js
+      app.whatsNew && app.whatsNew.latest ? btn('whatsnew', 'star', "What's New", '', () => app.whatsNew.open(), null, 'Latest: ' + app.whatsNew.note()) : null));   // js/ui/whatsnew.js
+    if (hadFocus) { const again = menu.querySelector(`[data-action="${hadFocus}"]`); if (again) again.focus(); }
+  }
+
+  /** Arrow keys walk the menu (Up and Down by row, Left and Right inside a row of two); Home and End jump to the ends. */
+  function onMenuKey(e) {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
+    const all = [...menu.querySelectorAll('.sw-btn')];
+    if (!all.length) return;
+    const at = all.indexOf(document.activeElement);
+    let next = null;
+    if (e.key === 'Home') next = all[0];
+    else if (e.key === 'End') next = all[all.length - 1];
+    else if (at < 0) next = all[0];
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const row = all[at].closest('.sw-menu-row');
+      const mates = row ? [...row.querySelectorAll('.sw-btn')] : [];
+      next = mates[mates.indexOf(all[at]) + (e.key === 'ArrowRight' ? 1 : -1)] || null;
+    } else {
+      // the nearest entry in the next row up or down, keeping to the same side of a row of two
+      const rowOf = b => b.closest('.sw-menu-row') || b;
+      const rows = [...new Set(all.map(rowOf))];
+      const target = rows[rows.indexOf(rowOf(all[at])) + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (target) {
+        const cands = target.matches('.sw-btn') ? [target] : [...target.querySelectorAll('.sw-btn')];
+        const x = all[at].getBoundingClientRect().left;
+        next = cands.reduce((best, c) => (Math.abs(c.getBoundingClientRect().left - x) < Math.abs(best.getBoundingClientRect().left - x) ? c : best), cands[0]);
+      }
     }
+    e.preventDefault(); e.stopPropagation();
+    if (next) next.focus();
   }
 
   return {
     is3D: true, capturesKeys: false,
     enter() {
       view = null;
-      menu = el('div', { class: 'sw-menu sw-interactive' });
+      menu = el('div', { class: 'sw-menu sw-interactive', attrs: { role: 'navigation', 'aria-label': 'Main menu' }, on: { keydown: onMenuKey } });
       root = el('div', { class: 'sw-screen sw-title-screen' + (app.renderer ? ' live' : ''), data: { screen: 'title' } },
         el('div', { class: 'sw-title-shade' }),
         el('div', { class: 'sw-title-wrap' }, wordmark(),
