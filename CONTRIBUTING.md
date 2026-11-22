@@ -60,6 +60,9 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The short version:
   the verification document with what changed.
 - **Small pull requests.** One change, explained in plain words: what it does, how you tested
   it, and a screenshot if it changes what the player sees.
+- **Tell players what is new.** If your change is something a player will see or do, add one
+  entry at the top of `RELEASES` in `js/ui/whatsnew.js` (the file says how). Returning players
+  are shown it once, and it stays on the main menu under What's New.
 - **Be kind.** Assume good intent, criticise the work and not the person, and make newcomers
   welcome. Harassment is not tolerated.
 
