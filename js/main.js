@@ -48,6 +48,13 @@ const DEFAULT_SETTINGS = { musicVolume: 0.5, sfxVolume: 0.8, invertPitch: false,
 const GAME_SCREENS = new Set(['flight', 'builder', 'tracking']);      // 3D screens written by other modules
 const NEEDS_CAREER = new Set(['hub', 'builder', 'flight', 'tracking', 'research', 'missions', 'crew']);
 
+// Has this browser run Starwright before? Read now, before anything is stored: starting up writes the settings.
+// (What's New, js/ui/whatsnew.js, does not interrupt a first visit.)
+const FIRST_VISIT = (() => {
+  try { for (let i = 0; i < localStorage.length; i++) if ((localStorage.key(i) || '').startsWith('starwright.')) return false; } catch { /* storage switched off */ }
+  return true;
+})();
+
 const canvas = document.getElementById('gl');
 const uiRoot = document.getElementById('ui');
 
@@ -117,6 +124,7 @@ function toastPump() {
 if (typeof MutationObserver !== 'undefined') new MutationObserver(toastPump).observe(toastBox, { childList: true });
 
 const app = {
+  firstVisit: FIRST_VISIT,
   renderer: (perf.renderer = createRenderer()),
   canvas, uiRoot,
   career: null,
@@ -501,12 +509,15 @@ async function boot() {
   try { (await import('./ui/science.js')).installScience(app); } catch (err) { console.warn('Science reference not available:', err && err.message); }
   // About screen (js/ui/about.js): optional, adds app.about (the title menu's About entry).
   try { (await import('./ui/about.js')).installAbout(app); } catch (err) { console.warn('About screen not available:', err && err.message); }
+  // What's New (js/ui/whatsnew.js): optional, adds app.whatsNew (the title menu's entry and the once-per-release pop-up).
+  try { (await import('./ui/whatsnew.js')).installWhatsNew(app); } catch (err) { console.warn("What's New not available:", err && err.message); }
   // Demo tour (js/ui/demo.js): optional, adds app.demo; ?demo=1 in the address starts it once the title is up.
   try { (await import('./ui/demo.js')).installDemo(app); } catch (err) { console.warn('Demo tour not available:', err && err.message); }
   await app.goto('title');
   document.body.dataset.ready = '1';
   if (app.perf && app.perf.auto) app.perf.runBenchmark(app.perf.auto);
   else if (app.demo && app.demo.auto) app.demo.start(app.demo.auto);
+  else if (app.whatsNew) app.whatsNew.auto();      // a returning player sees what was added since their last visit, once
 }
 
 boot().catch(err => fatal('Unexpected error while starting.', err));
