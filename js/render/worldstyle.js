@@ -32,7 +32,7 @@ const STYLE = {
     scatter: { rocks: 6, rockColor: [0.3, 0.24, 0.2] } },
   verda: { rock: [0.40, 0.37, 0.33], rockSlope: [0.2, 0.42], strata: 0.15, fill: 0.05, bump: 2.2,
     clouds: { cover: 0.3, color: [1, 1, 1], seed: 11, speed: 1.2e-5, alt: 7000, streak: 0, phase: 5.16,       // phase: fair weather over the space centre for the first days
-      high: { alt: 13000, cover: 0.2, opacity: 0.42, streak: 1, color: [1, 1, 1], drift: 0.9e-5 } },          // ice streaks in the jet stream
+      high: { alt: 13000, cover: 0.12, opacity: 0.26, streak: 1, color: [1, 1, 1], drift: 0.9e-5 } },          // ice streaks in the jet stream
     water: { shallow: [0.10, 0.50, 0.55], deep: [0.012, 0.07, 0.19], clarity: 14 },
     snow: { line: 2500, latDrop: 2600, color: [0.93, 0.95, 0.98] },
     ground: { tintA: [1.2, 1.06, 0.7], tintB: [0.62, 0.8, 0.6], vary: 0.9, dirt: [0.43, 0.35, 0.25], dirtT: 0.5, veg: 1, grain: 1 },
@@ -49,7 +49,7 @@ const STYLE = {
   marn: { rock: [0.30, 0.29, 0.34], rockSlope: [0.2, 0.42], strata: 0.2, gloss: 0.15,
     ground: { tintA: [1.14, 1.08, 0.9], tintB: [0.72, 0.74, 0.86], vary: 1, dirt: [0.2, 0.19, 0.22], dirtT: 0.3, dirtK: 0.4, veg: 0, grain: 1 },
     clouds: { cover: 0.22, color: [0.95, 0.96, 1], seed: 31, speed: 1.6e-5, alt: 6000, streak: 0.3,
-      high: { alt: 11000, cover: 0.24, opacity: 0.5, streak: 0.8, color: [0.94, 0.96, 1], drift: 0.7e-5 } },    // ice veils in the cold upper air
+      high: { alt: 11000, cover: 0.18, opacity: 0.36, streak: 0.8, color: [0.94, 0.96, 1], drift: 0.7e-5 } },    // ice veils in the cold upper air
     snow: { line: 2100, latDrop: 2300, color: [0.9, 0.93, 0.97] },
     scatter: { rocks: 4, rockColor: [0.33, 0.32, 0.37], grass: 22, grassColor: [0.36, 0.33, 0.42] } },
   slate: { rock: [0.55, 0.60, 0.66], rockSlope: [0.3, 0.55], strata: 0.3, scatter: { rocks: 8, rockColor: [0.27, 0.3, 0.36] } },
