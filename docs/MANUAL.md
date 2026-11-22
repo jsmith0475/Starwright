@@ -3,6 +3,10 @@
 The reference for everything on the keyboard and every screen. New here? Start with the
 [README](../README.md) for how to install the game and fly a first orbit, then come back.
 
+Nothing needs installing to play: the game runs in your browser at
+<https://jsmith0475.github.io/Starwright/>. Everything in this manual works the same there as
+in a copy on your own machine, which is served at <http://localhost:8642/>.
+
 Contents: [Controls](#controls-mac-keyboard--logitech-mx-mouse) ·
 [A first flight](#a-first-flight) ·
 [Targeting, rendezvous and docking](#targeting-rendezvous-and-docking) ·
@@ -248,8 +252,9 @@ spaceplane take-off, a rover on Rusk, a docking, the tracking station, the ninet
 system, and research, contracts and crew. It takes about six minutes, runs on a throw-away
 program and never touches your save.
 
-- Start it directly with <http://localhost:8642/?demo=1>; add `&clean=1` to hide the control strip
+- Start it directly with <https://jsmith0475.github.io/Starwright/?demo=1> in the browser, or
+  <http://localhost:8642/?demo=1> on your own copy; add `&clean=1` to hide the control strip
   and the mouse cursor for a recording, or `&chapter=<id>` to start at one chapter.
 - `Space` pauses, `←` `→` change chapter, `Esc` leaves.
-- [docs/DEMO.md](docs/DEMO.md) has the chapter list and step-by-step instructions for recording
+- [DEMO.md](DEMO.md) has the chapter list and step-by-step instructions for recording
   the tour as a video on a Mac.

@@ -113,7 +113,8 @@ And around the flying:
   ripped from their clamps, antennas and open solar panels are stripped, nose cones go, and
   the pieces fly on as debris. A clean climb loses nothing.
 - **Landing legs with real suspension** that compress and settle on touchdown.
-- **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
+- **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
+  [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
 
 <p align="center">
   <a href="media/structure-breakup.mp4">
