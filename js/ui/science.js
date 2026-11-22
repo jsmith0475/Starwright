@@ -1,11 +1,11 @@
 // Starwright — the science reference: the title menu's "Science" entry.
 // A reader for the chapters in js/ui/sciencetext.js: chapter list on the left, the text with typeset equations on the
-// right, two live calculators. Equations are TeX turned into MathML by js/ui/tex.js, which every current browser
+// right, three live calculators. Equations are TeX turned into MathML by js/ui/tex.js, which every current browser
 // draws itself, so the game still needs no outside library and works offline.
 //   openScience(app, chapterId?)    opens the reader; resolves when it is closed
 //   installScience(app)             adds app.science = { open, chapters }
 // Test hooks: .sw-sci (the reader), [data-chapter="<id>"] (list entries), .sw-sci-eq (displayed equations),
-// [data-calc="rocket" | "transfer"] (calculators) with [data-out="…"] results.
+// [data-calc="rocket" | "transfer" | "airflow"] (calculators) with [data-out="…"] results.
 import { el, clear, showModal } from './dom.js';
 import { CHAPTERS, scienceContext, parseBody, parseInline } from './sciencetext.js';
 import { texToMathML, texToText } from './tex.js';
@@ -155,6 +155,38 @@ const CALCS = {
     from.addEventListener('change', () => { fillTo(); run(); });
     node.addEventListener('input', run);
     fillTo(); run();
+    return node;
+  },
+  /** The air at a height and speed on a chosen world, and what a turn off the flow does to the air-rated parts. */
+  airflow(ctx) {
+    const A = ctx.aero, T = A.TUNING;
+    const world = el('select', null, ...ctx.SYSTEM.bodies.filter(b => b.atmo).map(b => el('option', { text: b.name, attrs: { value: b.id, ...(b === ctx.home ? { selected: '' } : {}) } })));
+    const [lalt, alt] = numIn('Altitude (km)', 8, { min: '0' }), [lsp, sp] = numIn('Airspeed (m/s)', 360, { min: '0' }), [lang, ang] = numIn('Angle off the flow (°)', 45, { min: '0', max: '180' });
+    const [r1, oRho] = outRow('rho', 'Air density'), [r2, oMach] = outRow('mach', 'Mach number and drag factor'), [r3, oQ] = outRow('q', 'Dynamic pressure'),
+      [r4, oCross] = outRow('cross', 'Flow across the rocket'), [r5, oHeat] = outRow('heat', 'Heat flux');
+    const why = el('p', { class: 'why', attrs: { 'data-out': 'rated' } });
+    const kpa = x => (x / 1000).toFixed(x < 99950 ? 1 : 0) + ' kPa';
+    const secs = t => t < 10 ? t.toFixed(t < 1 ? 2 : 1) + ' s' : Math.round(t) + ' s';
+    const run = () => {
+      const body = ctx.B[world.value], h = Number(alt.value) * 1000, v = Number(sp.value), th = Number(ang.value) * Math.PI / 180;
+      if (!body || !(h >= 0) || !(v >= 0) || !Number.isFinite(th)) { for (const o of [oRho, oMach, oQ, oCross, oHeat]) o.textContent = 'n/a'; why.textContent = 'Altitude and airspeed must be zero or more.'; return; }
+      const rho = body.density(h), q = 0.5 * rho * v * v, mach = v / T.SOUND_SPEED, cross = q * Math.sin(th) * Math.sin(th), flux = T.HEAT_FLUX_K * Math.sqrt(rho) * v * v * v;
+      oRho.textContent = rho > 0 ? (rho >= 0.01 ? rho.toFixed(3) : rho.toExponential(2)) + ' kg/m³' : 'none: above the atmosphere';
+      oMach.textContent = 'Mach ' + mach.toFixed(2) + ', drag × ' + A.machRise(mach).toFixed(2);
+      oQ.textContent = kpa(q);
+      oCross.textContent = kpa(cross);
+      oHeat.textContent = flux >= T.HEAT_MIN_FLUX ? (flux / 1000).toFixed(1) + ' kW/m²' : 'too low to heat anything';
+      // which rated parts go, soonest first; otherwise the one nearest its limit
+      const judged = A.rated.map(r => ({ r, q: r.open ? q : cross })).map(x => ({ ...x, util: x.q / x.r.q, t: A.tearTime(x.q, x.r.q) }));
+      const over = judged.filter(x => x.util > 1).sort((a, b) => a.t - b.t), top = judged.slice().sort((a, b) => b.util - a.util)[0];
+      why.textContent = over.length
+        ? 'Torn off if this is held: ' + over.map(x => `${x.r.name} (rated ${x.r.q / 1000} kPa) in ${secs(x.t)}`).join('; ') + '. Fins are not on this list: they are judged by the load at their root.'
+        : q <= 0 ? 'No air, no load.'
+        : `Nothing rated is over its limit. Nearest: ${top.r.name} at ${Math.round(top.util * 100)} % of its ${top.r.q / 1000} kPa. Nose first (0°) the flow across the rocket is zero at any speed, and only open panels are at risk.`;
+    };
+    const node = el('div', { class: 'sw-sci-calc', attrs: { 'data-calc': 'airflow' } }, el('h4', { text: 'Try it: the air load in a turn' }),
+      el('div', { class: 'rows' }, el('label', null, 'World', world), lalt, lsp, lang), el('dl', null, r1, r2, r3, r4, r5), why);
+    node.addEventListener('input', run); run();
     return node;
   },
 };

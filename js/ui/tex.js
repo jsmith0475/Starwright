@@ -103,12 +103,16 @@ class Parser {
       else break;
     }
     if (sub === null && sup === null) return base;
+    // a function name with a script (sin²α, log₂x): the script goes on the name, the function-application mark after it
+    const FA = '<mo>&#x2061;</mo>';
+    let after = '';
+    if (base.endsWith('</mi>' + FA)) { base = base.slice(0, -FA.length); after = FA; }
     if (bigop && this.display && bigop !== '∫' && bigop !== '∮') {
       if (sub !== null && sup !== null) return `<munderover>${base}${sub}${sup}</munderover>`;
       return sub !== null ? `<munder>${base}${sub}</munder>` : `<mover>${base}${sup}</mover>`;
     }
-    if (sub !== null && sup !== null) return `<msubsup>${base}${sub}${sup}</msubsup>`;
-    return sub !== null ? `<msub>${base}${sub}</msub>` : `<msup>${base}${sup}</msup>`;
+    if (sub !== null && sup !== null) return `<msubsup>${base}${sub}${sup}</msubsup>` + after;
+    return (sub !== null ? `<msub>${base}${sub}</msub>` : `<msup>${base}${sup}</msup>`) + after;
   }
 
   delim() {
