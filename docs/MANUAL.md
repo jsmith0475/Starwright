@@ -7,11 +7,29 @@ Nothing needs installing to play: the game runs in your browser at
 <https://jsmith0475.github.io/Starwright/>. Everything in this manual works the same there as
 in a copy on your own machine, which is served at <http://localhost:8642/>.
 
-Contents: [Controls](#controls-mac-keyboard--logitech-mx-mouse) ·
+Contents: [The front menu](#the-front-menu) ·
+[Controls](#controls-mac-keyboard--logitech-mx-mouse) ·
 [A first flight](#a-first-flight) ·
 [Targeting, rendezvous and docking](#targeting-rendezvous-and-docking) ·
 [Career, contracts and Flight School](#career-contracts-and-flight-school) ·
 [Demo tour](#demo-tour)
+
+## The front menu
+
+![The Starwright front menu over the launch pad at first light, in four groups](../media/shot-title.jpg)
+
+The game opens on the front menu, in four groups. The mouse, Tab and the arrow keys all walk it,
+and Return opens the entry that is lit.
+
+- **Play.** *Continue* opens your saved game (the small bin beside it deletes that game, after
+  asking). *New Game* starts a career, science or sandbox program. *Missions* opens Mission
+  Control. *Scenarios* are ready-made flights that leave your own game alone.
+- **Learn and tour.** *Flight School* has eight short lessons, *Science* is the reference on the
+  mathematics the game flies by, and *Demo tour* lets the game fly itself.
+- **Options.** *Settings* (among them, saving your game to a file and loading it back) and
+  *Controls* (the keys and mouse actions).
+- **About.** *About* tells the story behind the game and *What's New* lists what each release
+  added.
 
 The key names are for a Mac keyboard. On Windows and Linux, `Cmd` is `Ctrl`.
 

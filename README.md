@@ -144,6 +144,12 @@ And around the flying:
 
 ### ▶ [Play Starwright now](https://jsmith0475.github.io/Starwright/)
 
+<p align="center">
+  <a href="https://jsmith0475.github.io/Starwright/"><img src="media/shot-title.jpg" width="100%" alt="The Starwright front menu over the launch pad at first light: Play (Continue, New Game, Missions, Scenarios), Learn and tour (Flight School, Science, Demo tour), Options (Settings, Controls) and About (About, What's New)"></a>
+  <br>
+  <sub>The front menu, in four groups: play, learn and tour, options, about. The arrow keys walk it.</sub>
+</p>
+
 Prefer your own copy that works offline? One step puts Starwright on your machine and starts it.
 
 ### macOS
