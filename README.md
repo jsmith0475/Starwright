@@ -113,6 +113,16 @@ And around the flying:
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
 
 <p align="center">
+  <a href="media/structure-breakup.mp4">
+    <img src="media/structure-breakup-preview.gif" width="100%" alt="Two flights recorded in the game: a tall thin rocket is turned hard at 30 kPa and its stack bends and snaps in two, then a heavy rocket is flipped across the airflow at 20 kPa and both side boosters are torn off">
+  </a>
+  <br>
+  <a href="media/structure-breakup.mp4"><b>▶ Watch a stack snap and the airflow strip a rocket (27 seconds, silent)</b></a>
+  <br>
+  <sub>Real gameplay recorded in Chrome, slowed to half speed at each break. How it works: <a href="docs/STRUCTURE.md">structure</a>, <a href="docs/AERO_BREAKUP.md">breakup</a>.</sub>
+</p>
+
+<p align="center">
   <img src="media/shot-centre.jpg" width="100%" alt="The Starwright space centre from the air: assembly building, launch pad, runway and tracking station on a green coastal plain">
 </p>
 
@@ -282,7 +292,7 @@ js/ui/               screens: space centre, assembly, flight, map, tracking, res
                      missions, crew, Flight School, science reference, demo tour
 docs/                architecture, manual, physics verification, parts and scenarios
 tests/               unit tests, browser tests, physics verification
-media/               trailer and screenshots for this page
+media/               trailer, clips and screenshots for this page
 ```
 
 ### Tests
@@ -290,7 +300,7 @@ media/               trailer and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 417 tests, including scripted flights flown by the autopilot
+npm test            # 431 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
