@@ -1,6 +1,6 @@
 # Starwright roadmap
 
-The next eleven upgrades, in the order we plan to take them. There are no dates. Each one ships
+The next twelve upgrades, in the order we plan to take them. There are no dates. Each one ships
 when it is good, and the order will move as people play and tell us what matters most.
 
 Each item says what it is, why it matters when you are flying, what the game does today, and
@@ -17,8 +17,9 @@ which one you want, and read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 7. [Optional n-body gravity](#7-optional-n-body-gravity)
 8. [Stations and surface bases](#8-stations-and-surface-bases)
 9. [A deeper career](#9-a-deeper-career)
-10. [Sharing](#10-sharing)
-11. [A desktop app and a seat in the cockpit](#11-a-desktop-app-and-a-seat-in-the-cockpit)
+10. [A faster-than-light drive and a second star system](#10-a-faster-than-light-drive-and-a-second-star-system)
+11. [Sharing](#11-sharing)
+12. [A desktop app and a seat in the cockpit](#12-a-desktop-app-and-a-seat-in-the-cockpit)
 
 ---
 
@@ -102,6 +103,12 @@ rigid-body load can show. The world keeps at most 24 loose pieces so the frame r
 
 ## 4. Higher-fidelity worlds
 
+**Status: first pass built.** Walking-scale craters, ice plates, lava crust and wind ripples
+on every world but the home world, eight kinds of loose rock, a high cloud or dust layer on
+three worlds, and dawn and dusk light on the clouds. All of it is drawn on top of the ground;
+the height the physics uses did not change. How it works, what was checked against what, and
+what is still open are in [WORLDS.md](WORLDS.md).
+
 **What it is.** Sharper terrain and textures, better atmospheres, clouds and lighting, and more
 on the ground: rocks and craters at walking scale, weather and haze, surfaces that look
 different on every world all the way from orbit down to the dust under a rover's wheels.
@@ -111,13 +118,16 @@ ground looks to a real place, the more it feels like you went there.
 
 **Today.** All nineteen bodies have procedural terrain with level of detail that refines as you
 approach, generated in the browser with no image files. Worlds with air have atmospheric
-scattering, and the home world has vegetation. Detail runs out at close range, and the far
-worlds have had less attention than Verda and Pell.
+scattering, and the home world has vegetation. Since the first pass, each world also has
+surface features and rocks of its own close up. They are drawn, not built: a rover does not
+feel a drawn crater.
 
-**Building it.** Add finer terrain levels and detail textures near the camera, per-world
-surface features (dunes, ice fractures, lava fields, canyons), cloud layers, and better
-lighting at dawn and dusk. All of it has to stay procedural and stay inside the frame budget
-on a laptop graphics card. This is a good place for artists who can write shaders.
+**Still open, for anyone who wants it.** Put craters, dunes and canyons into the height
+function itself, so they can be driven over and landed in (this changes physics and needs the
+independent checks re-run). Weather and ground haze. The high cloud layer on distant globes.
+Bigger and clustered rocks. The same feature code for Verda's beaches and bare mountains. All
+of it has to stay procedural and stay inside the frame budget on a laptop graphics card. This
+is a good place for artists who can write shaders.
 
 ## 5. Reusable boosters
 
@@ -214,7 +224,41 @@ experience. It is complete, and it is still a first pass at balance.
 rewards, add experiments and the reasons to carry them, and play it through again and again.
 This is one of the best items for someone who does not program.
 
-## 10. Sharing
+## 10. A faster-than-light drive and a second star system
+
+**What it is.** A late-game part for the assembly building, the Longstride drive (a working
+name), that you earn rather than buy. Fit it to a ship, fly far from any planet, and it carries
+the ship to a second star system with worlds nobody has landed on.
+
+**Why it matters.** Helion's system can be finished: every world landed on, every crew brought
+home. The drive is the reward for that, and it opens a new map with new flying problems, for
+example a double star whose planets do not keep simple orbits, and a heavy world with thick air
+that is easy to reach and very hard to leave.
+
+**The rules it must keep.** This is the one deliberately fictional thing in a game that is
+otherwise honest physics, so it is fenced in:
+
+- It only moves a ship from one system to the other. It is not an engine and gives no thrust.
+- It works only far from any planet or moon, outside every sphere of influence but the star's.
+- It is heavy and it uses a great deal of propellant, so a ship that carries it has to be
+  designed around it.
+- The ship arrives with the velocity it left with. Everything after the jump (capture,
+  landing, the trip home) is ordinary orbital mechanics, flown the ordinary way.
+- It is earned by achievements, for example landing on every world and returning a crew from
+  the farthest one.
+- The game says plainly that it is fiction, and it stays out of the independent physics
+  checks, which go on covering everything that is real.
+
+**Today.** Not started. There is one star system, and nothing travels faster than its engines
+push it.
+
+**Building it.** The body table and the map assume a single star, so the first job is letting
+the game hold two systems and switch between them. Then the part and its unlock rule, the
+jump itself (conditions, cost, what the player sees), and the new system: its star or stars,
+its worlds, their terrain and skies. World design is most of the work, and it builds on
+[higher-fidelity worlds](#4-higher-fidelity-worlds).
+
+## 11. Sharing
 
 **What it is.** Export a craft to a file or a link and hand it to someone else. Later, add
 community-made parts and scenarios without editing the game's own files.
@@ -230,7 +274,7 @@ There is no way to share one craft, and adding a part means editing the source.
 Then a format for part and scenario packs that the game loads at start, with checks so a bad
 pack cannot break a save.
 
-## 11. A desktop app and a seat in the cockpit
+## 12. A desktop app and a seat in the cockpit
 
 **What it is.** Three things that make it feel like a finished game: an app for Mac and Windows
 that you double-click, with no terminal window and no browser tab; a view from inside the

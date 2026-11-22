@@ -18,7 +18,7 @@ import { atmoUniforms, atmoParams, ambientSky, skyAt, sunTransmit, SUN_SURFACE, 
 import { COMMON_GLSL } from './worldshaders.js';
 import { getBodyMaps, requestBodyMaps, bakesPending } from './bodytex.js';
 import { getPool } from './workpool.js';
-import { styleOf, cloudAngle } from './worldstyle.js';
+import { styleOf, cloudAngle, highCloudAngle } from './worldstyle.js';
 import { perf } from '../perf.js';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -28,7 +28,14 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
 const CLOUD_VS = `#include <common>
 #include <logdepthbuf_pars_vertex>
 varying vec3 vPosO;
+#ifdef HIGH_LAYER
+attribute float aLayer;
+varying float vLayer;
+#endif
 void main(){ vPosO = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+#ifdef HIGH_LAYER
+  vLayer = aLayer;
+#endif
 #include <logdepthbuf_vertex>
 }`;
 const CLOUD_FS = `#include <common>
@@ -43,12 +50,69 @@ float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * 
 float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+#ifdef HIGH_LAYER
+// ---- the high, thin layer (ice streaks and veils over a world with weather, blown dust over a desert). It is a second
+// shell in the same mesh and the same draw call (vLayer says which shell a fragment belongs to), so worlds without
+// one compile none of this. Its weather comes from what is already here: the deck's own map read at another place
+// on the globe, and the n3 noise pulled out long along the wind. Cost where it is in view: one map read and three
+// noise values for every pixel, three more noise values where there is cloud.
+uniform vec4 uHi;          // radius of the layer (body radii), how much of the sky it takes, how opaque it gets, streaks (1) … even veil (0)
+uniform vec3 uHiColor;
+uniform float uHiRot;      // how far the layer has drifted round the spin axis, relative to the deck below it
+varying float vLayer;
+vec4 highVeil(vec3 d0, vec3 V, float dist){
+  float below = step(length(uCamO), uHi.x);
+  float cosI = abs(dot(V, d0));                         // 1 seen square on, small where the view skims the layer
+  float px = dist * 1.4 / 900.0 / sqrt(max(cosI, 0.06));   // footprint of a pixel on the layer, in body radii (it is longer along a skimming view, no wider across it)
+  float cr = cos(uHiRot), sr = sin(uHiRot);
+  vec3 d = vec3(d0.x * cr - d0.z * sr, d0.y, d0.x * sr + d0.z * cr);
+  // Its shapes are noise pulled out long along the wind, in four sizes that each do one job. The wind blows round the
+  // world and wanders north and south (w), so nothing follows the parallels exactly. Latitude itself is the
+  // across-wind coordinate, which keeps the streaks as wide near the poles as at the equator.
+  float w = n3(d * 5.0 + 4.0);
+  vec3 q = vec3(d.x, asin(clamp(d.y, -1.0, 1.0)) + (w - 0.5) * 0.12, d.z);
+  // every size fades to its mean before a pixel grows as wide as its streaks: nothing is left to shimmer
+  float kL = 1.0 - smoothstep(0.3, 1.0, px * 26.0), kB = 1.0 - smoothstep(0.08, 0.3, px * 100.0);   // (the strokes go early: from high orbit a field of them reads as ripples, their mean as a veil)
+  float k1 = 1.0 - smoothstep(0.3, 1.0, px * 400.0), k2 = 1.0 - smoothstep(0.3, 1.0, px * 1600.0);
+  float bands = mix(0.5, n3(q * vec3(5.0, 26.0, 5.0) + 2.0), kL);         // jet-stream bands, a hundred kilometres long
+  q.y += (bands - 0.5) * 0.02;                                           // (the finer shapes bend with the band they are in)
+  // where there is high cloud at all: broad regions, from the weather map of the far side of the world read upside
+  // down (so it never sits exactly over the deck's own clouds), the wandering of the wind, and the bands
+  float m = wEquirect(uCloudTex, vec3(d.z, -d.y, d.x)).r;
+  float region = smoothstep(0.3, 0.6, m * 0.5 + (w - 0.5) * 0.35 + (bands - 0.5) * 0.6 + uHi.y) * (1.0 - smoothstep(0.88, 0.98, abs(d.y)));
+  if (region <= 0.0) return vec4(0.0);                                   // most of the sky: clear, and done
+  float strokes = mix(0.5, n3(q * vec3(16.0, 100.0, 16.0) + 7.0), kB);   // single brush strokes, a few kilometres across
+  float fib = mix(0.5, n3(q * vec3(46.0, 400.0, 46.0)), k1) * 0.55 + mix(0.5, n3(q * vec3(140.0, 1600.0, 140.0) + 9.0), k2) * 0.45;   // the fibres in a stroke
+  // inside a region the strokes and their fibres thin the layer out rather than cut it: soft, see-through strands,
+  // never a hard edge (uHi.w = 0 leaves an even veil)
+  float thinOut = (0.12 + 0.88 * smoothstep(0.35, 0.7, strokes)) * (0.25 + 0.75 * smoothstep(0.34, 0.66, fib));
+  float a = min(region * mix(0.5, 1.6 * thinOut, uHi.w) * uHi.z, 1.0) * uFade;
+  // light: a thin layer has no shaded side. It shows the colour the sun has after its path through the air up there,
+  // which near the terminator is long and low: the layer goes gold, then red, and is still lit when the ground and
+  // the deck under it are in shadow. Seen from below it is brightest toward the sun (ice and dust scatter forward).
+  float mu = dot(d0, uSun);
+  vec3 sunC = mu > -0.5 ? uSunSurf * aSunTransmit(d0 * uHi.x, uSun) : vec3(0.0);
+  // (seen from below, a low sun's colour is deepened as it is on the deck: see there)
+  float sunMax = max(max(sunC.r, sunC.g), max(sunC.b, 1e-4));
+  sunC = mix(sunC, sunC * sunC * sunC / (sunMax * sunMax), (1.0 - smoothstep(0.03, 0.3, mu)) * below);
+  float lit = mix(0.4 + 0.6 * smoothstep(-0.15, 0.45, mu), 0.4 + 0.2 * pow(max(dot(-V, uSun), 0.0), 8.0), below);
+  vec3 amb = mix(uAmbSky * smoothstep(-0.2, 0.3, mu), uAmbNow, below) + vec3(0.012) + uNightGlow * 0.6;
+  vec3 col = pow(uHiColor, vec3(2.2)) * (sunC * lit * 0.36 + amb * 0.55);
+  // toward the horizon (from below) or the limb (from above) the layer is seen through more and more air: let it
+  // dissolve there instead of standing in front of the haze
+  a *= smoothstep(mix(0.02, 0.2, below), mix(0.3, 0.5, below), cosI) * mix(0.75, 1.0, below);
+  return vec4(col * a, a);
+}
+#endif
 void main(){
 #include <logdepthbuf_fragment>
   vec3 dirO = normalize(vPosO);
   vec3 toCam = uCamO - vPosO;
   float dist = length(toCam);
   vec3 V = toCam / dist;
+#ifdef HIGH_LAYER
+  if (vLayer > 0.5) { gl_FragColor = highVeil(dirO, V, dist); } else {
+#endif
   float cov = wEquirect(uCloudTex, dirO).r;
   // break the smooth baked coverage into puffs: three octaves of noise, strongest at the cloud edges
   float px = dist * 1.4 / 900.0;                        // rough footprint of a pixel, in body radii
@@ -81,7 +145,8 @@ void main(){
   float self = clamp(0.72 + (dnH - dnS) * 3.4, 0.0, 1.0);
   float thick = smoothstep(0.3, 1.0, dens);
   float mu = dot(dirO, uSun);
-  vec3 sunC = uSunSurf * aSunTransmit(dirO * uShell, uSun) * smoothstep(-0.06, 0.08, mu);
+  vec3 sunT = mu > -0.5 ? uSunSurf * aSunTransmit(dirO * uShell, uSun) : vec3(0.0);   // (the formula is for a sun near the horizon or above it)
+  vec3 sunC = sunT * smoothstep(-0.06, 0.08, mu);
   // tops: lit shoulders, shaded hollows, a thin bright fringe; bases: pale where thin, soft grey where the deck is thick
   float top = (0.3 + 0.7 * self) * relief * (0.86 + 0.5 * (dn - 0.42)) * (0.84 + 0.16 * (1.0 - thick));
   float deep = smoothstep(0.55, 1.15, dens);            // how much cloud is overhead
@@ -91,6 +156,26 @@ void main(){
   // from above: the daylight sky over that part of the world; from below: the sky the camera stands under right now
   vec3 amb = mix(uAmbSky * smoothstep(-0.2, 0.3, mu) * (0.75 + 0.5 * self), uAmbNow * mix(1.5, 0.8, deep), below) + vec3(0.012) + uNightGlow * 0.6;
   vec3 col = pow(uCloudColor, vec3(2.2)) * (sunC * (0.3 + 0.7 * max(mu, 0.0)) * shade * mix(0.42, 0.34, below) + sunC * fwd * 0.3 + amb * mix(0.72, 0.7, below));
+  // dawn and dusk from below. A sun that stands low for this piece of cloud shines along under the deck and lights
+  // the bases themselves; it goes on doing so after it has set for the ground, until the world's own shadow climbs to
+  // the deck. That light has come the long way through the low, thick air, so its colour is deeper than the light on
+  // the tops (deepened, not brightened: gold and red on a world with blue air, blue on dusty Rusk). Each piece of cloud has its own sun height (mu): the deck toward
+  // the sun glows while the deck behind you has already gone to the grey-blue of the sky. Looking toward the sun the
+  // thick cores stand dark against bright thin edges; looking away the faces are evenly lit. At mu > 0.3 nothing changes.
+  float lowSun = (1.0 - smoothstep(0.03, 0.3, mu)) * below * (1.0 - uSoft);   // (no sun gets under an unbroken overcast)
+  if (lowSun > 0.0) {
+    vec3 tint = pow(uCloudColor, vec3(2.2));
+    float sunMax = max(max(sunT.r, sunT.g), max(sunT.b, 1e-4));
+    vec3 warm = sunT * sunT * sunT / (sunMax * sunMax);
+    float thin = 1.0 - smoothstep(0.3, 1.0, c);
+    float form = (0.45 + 0.55 * self) * (0.75 + 0.5 * cdet) * mix(0.75, mix(0.5, 1.35, thin), max(dot(-V, uSun), 0.0));
+    vec3 day = sunC * (0.3 + 0.7 * max(mu, 0.0)) * shade * 0.34 + sunC * fwd * 0.3;
+    col += tint * (warm * form * 0.2 - day) * lowSun;
+    // and the light of the sky on them: less of it than by day (the ground under them is dark, the bright band of
+    // the horizon is far to one side), and cooler, half way to the blue of the open sky. Back to normal at night.
+    vec3 cool = uAmbSky * (dot(uAmbNow, vec3(0.333)) / max(dot(uAmbSky, vec3(0.333)), 1e-4));
+    col += tint * (mix(uAmbNow, cool, 0.5) * 0.5 - uAmbNow) * mix(1.5, 0.8, deep) * 0.7 * lowSun * smoothstep(-0.6, -0.3, mu);
+  }
   float a = c * 0.97 * uFade;
   if (below < 0.5) {
     // seen from above: the air between the camera and the deck
@@ -102,9 +187,35 @@ void main(){
     a *= smoothstep(0.0, 0.12, dot(V, -dirO) + 0.02);
   }
   gl_FragColor = vec4(col * a, a);
+#ifdef HIGH_LAYER
+  }
+#endif
 #include <tonemapping_fragment>
 #include <colorspace_fragment>
 }`;
+
+/**
+ * Two concentric spheres in one geometry: the cloud deck (aLayer 0) and the high thin layer over it (aLayer 1).
+ * The index list holds high, deck, high: drawing the first two thirds puts the high shell down first (right for a
+ * camera under the deck), the last two thirds the deck first (right from above). One draw call either way;
+ * geometry.userData.one is the index count of one shell.
+ */
+function twoShells(rLow, rHigh) {
+  const lo = new THREE.SphereGeometry(rLow, 128, 64), hi = new THREE.SphereGeometry(rHigh, 128, 64);
+  const pl = lo.attributes.position.array, ph = hi.attributes.position.array, il = lo.index.array, nv = pl.length / 3, one = il.length;
+  const pos = new Float32Array(pl.length * 2); pos.set(pl, 0); pos.set(ph, pl.length);
+  const layer = new Float32Array(nv * 2); layer.fill(1, nv);
+  const idx = new Uint32Array(one * 3);
+  for (let i = 0; i < one; i++) { idx[i] = idx[i + 2 * one] = il[i] + nv; idx[i + one] = il[i]; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.setDrawRange(0, 2 * one);
+  g.userData.one = one;
+  lo.dispose(); hi.dispose();
+  return g;
+}
 
 function dotTexture() {
   const s = 64, c = document.createElement('canvas'); c.width = c.height = s; const g = c.getContext('2d');
@@ -178,15 +289,27 @@ export function createWorldRenderer({ renderer = null, scene, camera, system = S
         uCloudColor: { value: new THREE.Vector3(...st.clouds.color) }, uAmbSky: { value: new THREE.Vector3(...e.amb) }, uAmbNow: { value: new THREE.Vector3() }, uSunSurf: { value: SUN_SURFACE },
         uShell: { value: shell }, uSoft: { value: st.clouds.soft || 0 }, uFade: { value: 1 },
       };
+      // a high thin layer, where the world has one: a second shell in the same geometry, so it costs no draw call
+      const hi = st.clouds.high || null, shellHi = hi ? 1 + hi.alt / body.radius : 0;
+      const defines = {};
+      if (hi) {
+        defines.HIGH_LAYER = 1;
+        cu.uHi = { value: new THREE.Vector4(shellHi, hi.cover, hi.opacity, hi.streak) };
+        cu.uHiColor = { value: new THREE.Vector3(...hi.color) }; cu.uHiRot = { value: 0 };
+      }
       const mat = new THREE.ShaderMaterial({
-        uniforms: cu, vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false,
+        uniforms: cu, defines, vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false,
         blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation,
       });
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(shell, 128, 64), mat);
+      const geo = hi ? twoShells(shell, shellHi) : new THREE.SphereGeometry(shell, 128, 64);
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.name = 'clouds_' + body.id; mesh.renderOrder = 2; mesh.frustumCulled = false;
       mesh.onBeforeRender = (r, s, cam) => {
         m4.copy(mesh.matrixWorld).invert();
         cu.uCamO.value.setFromMatrixPosition(cam.matrixWorld).applyMatrix4(m4);
+        // the two shells blend over each other, so the farther one must be drawn first: the high one from under the
+        // deck, the deck from above it (between them no line of sight crosses both)
+        if (hi) geo.setDrawRange(cu.uCamO.value.length() < shell ? 0 : geo.userData.one, 2 * geo.userData.one);
         mesh.matrixWorld.decompose(v1, q1, g1);
         cu.uSun.value.copy(sunScene).applyQuaternion(q1.invert()).normalize();
         mat.uniformsNeedUpdate = true;
@@ -320,6 +443,7 @@ export function createWorldRenderer({ renderer = null, scene, camera, system = S
         cm.position.copy(t.group.position); cm.scale.setScalar(R);
         cm.rotation.set(0, ang + cloudRot, 0);
         fe.clouds.mat.uniforms.uAmbNow.value.set(info.ambient.r, info.ambient.g, info.ambient.b);
+        if (fe.clouds.mat.uniforms.uHiRot) fe.clouds.mat.uniforms.uHiRot.value = highCloudAngle(fe.clouds.style, ut);
       }
       if (fe.scatter) {
         fe.scatter.group.position.copy(t.group.position); fe.scatter.group.quaternion.copy(t.group.quaternion);

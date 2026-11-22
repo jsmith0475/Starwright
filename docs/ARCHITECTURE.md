@@ -502,6 +502,7 @@ point (x, z) metres from the pad is `home.dirFromLatLon(-z / R, x / R)`.
 | `workpool.js`, `terrainworker.js` | pool of module workers (falls back to time-sliced work on the main thread) |
 | `worldstyle.js` | per-body look: rock colour, strata, lava glow, clouds, water colours, snow line, clutter |
 | `worldshaders.js` | terrain, globe and atmosphere-shell shaders, the tiling detail texture |
+| `surfacefeatures.js` | walking-scale craters, cracks and ripples per world, drawn by the terrain shader ([WORLDS.md](WORLDS.md)) |
 
 All shaders light themselves from a sun direction (no scene lights needed), include the logarithmic-depth,
 tone-mapping and colour-space chunks, and so follow the renderer contract whether they draw to the canvas or into the

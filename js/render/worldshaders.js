@@ -1,6 +1,7 @@
 // Starwright — GLSL shared by the terrain chunks and the globes, and the tiling detail texture they use.
 import * as THREE from '../lib/three.module.min.js';
 import { ATMO_GLSL } from './atmosphere.js';
+import { FEATURE_PARS, FEATURE_NORMAL, FEATURE_ALBEDO, FEATURE_EMIT } from './surfacefeatures.js';
 
 // ------------------------------------------------------------------------------------------------------------
 // Detail texture: tileable fractal relief. rg = height gradient, b = height, a = a second, coarser pattern.
@@ -183,6 +184,7 @@ vec3 triGrad(vec3 p, vec3 w, out float h, out float a) {
   return vec3(0.0, gx.x, gx.y) * w.x + vec3(gy.y, 0.0, gy.x) * w.y + vec3(gz.x, gz.y, 0.0) * w.z;
 }
 
+${FEATURE_PARS}
 // the same, keeping only what is finer than an eighth of the tile: a tile half a metre wide repeats in plain sight,
 // and it is its big shapes that give the repeat away
 vec3 triFine(vec3 p, vec3 w, out float h, out float a) {
@@ -248,6 +250,7 @@ void main() {
   if (f3 > 0.0) g += triGrad(uPh3 + vPo / 7900.0, w, h3, a3) * f3 * 0.6;
   float hd = mix(0.5, h0, f0) * 0.3 + mix(0.5, h1, f1) * 0.3 + mix(0.5, h2, f2) * 0.25 + mix(0.5, h3, f3) * 0.15;
   float ad = mix(0.5, a0, f0) * 0.25 + mix(0.5, a1, f1) * 0.3 + mix(0.5, a2, f2) * 0.25 + mix(0.5, a3, f3) * 0.2;
+  ${FEATURE_NORMAL}
   g -= nO * dot(g, nO);
   vec3 nD = normalize(nO - g * (0.55 * uDetailK));
 
@@ -320,6 +323,7 @@ void main() {
     albedo = mix(albedo, wSrgb(uSnow) * (0.62 + 0.16 * hd + 0.06 * mix(0.5, hm, ff)), snowK);
   #endif
 
+  ${FEATURE_ALBEDO}
   // ---- light
   vec3 sunC = wSunLight(pU, up);
   #ifdef CLOUDS
@@ -339,7 +343,9 @@ void main() {
   if (uEmissive > 0.0) {
     vec3 c = vCol.rgb;
     float lava = smoothstep(0.7, 0.85, c.r) * smoothstep(0.0, 0.25 * c.r, 0.5 * c.r - c.b);
-    col += wSrgb(c) * lava * uEmissive * (0.6 + 0.8 * hd);
+    vec3 em = wSrgb(c) * lava * uEmissive * (0.6 + 0.8 * hd);
+    ${FEATURE_EMIT}
+    col += em;
   }
 
   #ifdef OCEAN

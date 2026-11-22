@@ -427,7 +427,7 @@ Starwright is version 0.1: playable from the first launch to the outer planets, 
 
 ## Roadmap
 
-The next eleven upgrades, in the order we plan to take them. There are no dates: each one ships when
+The next twelve upgrades, in the order we plan to take them. There are no dates: each one ships when
 it is good. **[Read the full roadmap](docs/ROADMAP.md)** for what each one is, why it matters,
 what the game does today, and what building it involves.
 
@@ -443,8 +443,11 @@ what the game does today, and what building it involves.
    flips or tumbles in thick air has its side boosters, antennas, open panels and nose cones
    torn off, and the pieces fly on as debris. A clean climb loses nothing.
    [How it works and what was checked.](docs/AERO_BREAKUP.md)
-4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** Sharper terrain,
-   richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
+4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** **First pass
+   built.** Every world has ground of its own at walking scale (craters, ice plates, lava
+   crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
+   air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
+   move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
 5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the
    grid fins and land the first stage on its legs while the upper stage flies on to orbit.
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
@@ -455,9 +458,13 @@ what the game does today, and what building it involves.
    refine propellant, and refuel ships far from home.
 9. **[A deeper career.](docs/ROADMAP.md#9-a-deeper-career)** More missions, more science at
    every world, and crew who train into specialists.
-10. **[Sharing.](docs/ROADMAP.md#10-sharing)** Trade craft with other players, and add
-   community-made parts and scenarios.
-11. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#11-a-desktop-app-and-a-seat-in-the-cockpit)**
+10. **[A faster-than-light drive and a second star system.](docs/ROADMAP.md#10-a-faster-than-light-drive-and-a-second-star-system)**
+    A part you earn by finishing the home system, which carries a ship to a new star with new
+    worlds. The one fictional element, labelled as such; everything after the jump is real
+    orbital mechanics.
+11. **[Sharing.](docs/ROADMAP.md#11-sharing)** Trade craft with other players, and add
+    community-made parts and scenarios.
+12. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#12-a-desktop-app-and-a-seat-in-the-cockpit)**
     A double-click app for Mac and Windows, a view from inside the capsule, and fuller sound.
 
 Want one of these to happen sooner? Pick it and help build it. See the next section.

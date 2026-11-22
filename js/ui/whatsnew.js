@@ -28,6 +28,8 @@ export const SEEN_KEY = 'starwright.whatsnew.v1';
 const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 
 export const RELEASES = [
+  { id: 'worlds-1', date: '2026-11-22', title: 'Worlds with ground of their own',
+    text: 'Stand on any world and the ground is its own: craters down to a hand\'s width on Pell, broken ice plates on Brim and Ost, a dark crust with glowing cracks on Sear\'s lava sea, wind ripples and cracked mud on Rusk. Each world has its own kinds of rock, and Verda, Marn and Rusk have a high thin layer of cloud or dust. It is drawn detail: wheels and legs stand where they did.' },
   { id: 'whats-new', date: '2026-11-22', title: "What's New",
     text: 'This list. It appears once when there is something you have not seen, and it is always on the main menu.' },
   { id: 'science-aero', date: '2026-11-22', title: 'Science: aerodynamics, structure and breakup',
