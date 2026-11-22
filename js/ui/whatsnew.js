@@ -30,6 +30,10 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RELEASES = [
   { id: 'whats-new', date: '2026-11-22', title: "What's New",
     text: 'This list. It appears once when there is something you have not seen, and it is always on the main menu.' },
+  { id: 'science-aero', date: '2026-11-22', title: 'Science: aerodynamics, structure and breakup',
+    text: 'The Science reference on the main menu has three new chapters: how the game works out the air on every part and why a rocket weathervanes, the loads in the structure, and aerodynamic breakup. A new calculator gives the air load in a turn.' },
+  { id: 'new-trailer', date: '2026-11-22', title: 'A new trailer',
+    text: `The trailer and screenshots on the project page were recorded again from the current game: [github.com/jsmith0475/Starwright](${REPO_URL}#readme).` },
   { id: 'breakup-clips', date: '2026-11-22', title: 'See it break',
     text: `The project page has a new Aerodynamics section and a 27-second clip of a stack snapping and a rocket being stripped by the airflow: [github.com/jsmith0475/Starwright](${REPO_URL}#readme).` },
   { id: 'fallen-lander', date: '2026-11-21', title: 'A lander that falls over stays where it fell',
