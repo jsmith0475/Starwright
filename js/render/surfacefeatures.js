@@ -218,19 +218,19 @@ export const FEATURE_NORMAL = /* glsl */`
     {
       float where = 1.0;
       #ifdef F_CRACKS_FLAT
-        where = fFlat * smoothstep(0.42, 0.6, tNoise(dirO * uRadius / 260.0 + 41.0));     // pans and flats, in patches
+        where = fFlat * smoothstep(0.58, 0.66, a3 * 0.6 + h2 * 0.4);     // pans and flats, in patches (the patches come from detail samples the shader has already taken: no extra noise)
       #endif
       #ifdef F_CRACKS_LAVA
         where = fLava;
       #endif
       if (where > 0.0) {
-        float kS = 1.0 - smoothstep(uFCk.x * 90.0, uFCk.x * 320.0, dist), kB = (1.0 - smoothstep(uFCk.y * 90.0, uFCk.y * 320.0, dist)) * smoothstep(uFCk.x * 20.0, uFCk.x * 120.0, dist);
+        float kS = 1.0 - smoothstep(uFCk.x * 90.0, uFCk.x * 320.0, dist), kB = (1.0 - smoothstep(uFCk.y * 90.0, uFCk.y * 320.0, dist)) * smoothstep(uFCkM * 90.0, uFCkM * 320.0, dist);     // each size takes over as the one below it fades: one or two in play at any distance, never three
         float mid = uFCkM;
         // an in-between size carries the pattern from the ground to the air
-        float kM = (1.0 - smoothstep(mid * 90.0, mid * 320.0, dist)) * smoothstep(uFCk.x * 20.0, uFCk.x * 120.0, dist);
+        float kM = (1.0 - smoothstep(mid * 90.0, mid * 320.0, dist)) * smoothstep(uFCk.x * 90.0, uFCk.x * 320.0, dist);
         #ifndef F_CRACKS_LAVA
           // seen from the air the net is not a wallpaper: whole regions are sound, others shattered
-          float region = 0.08 + 0.92 * smoothstep(0.44, 0.64, tNoise(dirO * uRadius / (uFCk.y * 9.0) + 59.0));
+          float region = 0.08 + 0.92 * smoothstep(0.58, 0.67, h3 * 0.7 + a2 * 0.3);
           kM *= region; kB *= region;
         #endif
         vec2 cg = vec2(0.0);
@@ -245,8 +245,8 @@ export const FEATURE_NORMAL = /* glsl */`
     #ifdef F_RIPPLES
     {
       // sand moves where the ground is level and the wind can reach it: patches, not a carpet
-      float patchN = tNoise(dirO * uRadius / 420.0 + 77.0);
-      float sand = fFlat * smoothstep(uFRp.z * 0.62, uFRp.z * 0.62 + 0.22, patchN);
+      // (the same field the cracked pans use, the other way up: sand lies where the pans are not)
+      float sand = fFlat * (1.0 - smoothstep(0.66 - uFRp.z * 0.16, 0.74 - uFRp.z * 0.16, a3 * 0.6 + h2 * 0.4));
       if (sand > 0.0) {
         float kR = (1.0 - smoothstep(9.0, 36.0, dist)) * uFRp.x, kD = (1.0 - smoothstep(1500.0, 6000.0, dist)) * uFRp.y, kE = (1.0 - smoothstep(7000.0, 26000.0, dist)) * uFRp.y;
         // whole numbers of waves per period in each direction, so crests run on unbroken from chunk to chunk
