@@ -41,20 +41,20 @@ const SURFACE = {
   cindra: { craters: { small: 0.55, large: 0.6, depth: 1, rim: 0.16 },
     cracks: { size: 4, big: 128, width: 0.05, depth: 0.5, tilt: 0.06, tone: 0.3, color: [0.08, 0.05, 0.04], colorK: 0.7, glow: 0, on: 'flat' } },
   murk: { ripples: { small: 0.2, dunes: 0.3, patch: 0.5 },
-    cracks: { size: 2, big: 128, width: 0.06, depth: 0.45, tilt: 0.05, tone: 0.3, color: [0.1, 0.07, 0.05], colorK: 0.7, glow: 0, on: 'flat' } },
+    cracks: { size: 2, big: 128, width: 0.04, depth: 0.45, tilt: 0.05, tone: 0.3, color: [0.1, 0.07, 0.05], colorK: 0.5, glow: 0, on: 'flat' } },
   pell: { craters: { small: 0.7, large: 0.75, depth: 1, rim: 0.22 } },
   ost: { cracks: { size: 2, big: 128, width: 0.05, depth: 0.6, tilt: 0.09, tone: 0.3, color: [0.2, 0.42, 0.7], colorK: 0.8, glow: 0, on: 'all' },
     craters: { small: 0.2, large: 0.3, depth: 0.7, rim: 0.2 } },
   rusk: { ripples: { small: 0.24, dunes: 0.34, patch: 0.6 },
     craters: { small: 0.12, large: 0.25, depth: 0.7, rim: 0.1 },
     cracks: { size: 0.5, big: 32, width: 0.07, depth: 0.4, tilt: 0.03, tone: 0.22, color: [0.2, 0.09, 0.06], colorK: 0.6, glow: 0, on: 'flat' } },
-  dray: { craters: { small: 0.7, large: 0.7, depth: 1, rim: 0.14 }, ripples: { small: 0, dunes: 0.22, patch: 0.2 } },
+  dray: { craters: { small: 0.7, large: 0.7, depth: 1, rim: 0.14 }, ripples: { small: 0, dunes: 0.12, patch: 0.45 } },
   tiv: { cracks: { size: 1, mid: 16, big: 128, width: 0.07, depth: 0.5, tilt: 0.05, tone: 0.35, color: [0.95, 0.5, 0.12], colorK: 0.8, glow: 1.2, on: 'lava', crust: 0.95 },
     craters: { small: 0.15, large: 0.2, depth: 0.7, rim: 0.1 } },
   marn: { cracks: { size: 2, big: 32, width: 0.05, depth: 0.3, tilt: 0.02, tone: 0.18, color: [0.16, 0.16, 0.2], colorK: 0.5, glow: 0, on: 'flat' },
     ripples: { small: 0.1, dunes: 0.12, patch: 0.7 } },
   slate: { craters: { small: 0.6, large: 0.6, depth: 1, rim: 0.3 },
-    cracks: { size: 4, big: 512, width: 0.04, depth: 0.6, tilt: 0.05, tone: 0.2, color: [0.7, 0.76, 0.84], colorK: 0.6, glow: 0, on: 'all' } },
+    cracks: { size: 4, big: 512, width: 0.03, depth: 0.6, tilt: 0.05, tone: 0.2, color: [0.55, 0.62, 0.72], colorK: 0.35, glow: 0, on: 'all' } },
   nock: { craters: { small: 0.85, large: 0.8, depth: 1.1, rim: 0.12 } },
   brim: { cracks: { size: 2, big: 128, width: 0.08, depth: 0.7, tilt: 0.1, tone: 0.3, color: [0.03, 0.1, 0.18], colorK: 0.9, glow: 0, on: 'all' } },
   quell: { cracks: { size: 4, big: 128, width: 0.04, depth: 0.5, tilt: 0.06, tone: 0.22, color: [0.5, 0.6, 0.78], colorK: 0.6, glow: 0, on: 'all' },
@@ -172,8 +172,9 @@ void fCrackLevel(vec2 p, float size, float per, vec2 warp, float wmod, float k, 
   vec2 q = p / size; float n1 = floor(per * 0.31 + 0.5), n2 = floor(per * 0.13 + 0.5), tau = 6.2831853 / per;
   vec2 bend = vec2(sin(q.y * n1 * tau + 1.3) + 0.6 * sin(q.x * n2 * tau + q.y * n2 * tau), sin(q.x * n1 * tau + 4.1) + 0.6 * sin(q.y * n2 * tau - q.x * n2 * tau + 2.0));
   float e = fPlates(p + (bend * 0.2 + (warp - 0.5) * 0.25) * size, size, per, id, tw);
-  float w = max(uFCk.z * (0.3 + 1.9 * smoothstep(0.25, 0.75, wmod)), dist * 0.0016 / size);     // never thinner than a pixel and a half
-  float m = 1.0 - smoothstep(w * 0.45, w, e);
+  float w0 = uFCk.z * (0.3 + 1.9 * smoothstep(0.25, 0.75, wmod)), w = max(w0, dist * 0.0016 / size);     // never thinner than a pixel and a half
+  // (a crack widened to stay a pixel wide is paler by as much, or far ground would turn the colour of its cracks)
+  float m = (1.0 - smoothstep(w * 0.45, w, e)) * min(1.0, w0 / w);
   fg += (tw * uFCk.w * m * (1.0 - m) * 4.0 + (id.xy - 0.5) * 2.0 * uFCk2.x * (1.0 - m)) * k;
   ck = max(ck, m * k); tone += (id.z - 0.5) * (1.0 - m) * k; heat += id.y * id.y * id.y * (1.0 - m) * k;
 }
@@ -202,8 +203,8 @@ export const FEATURE_NORMAL = /* glsl */`
     {
       // five sizes of cell; each fades out where its craters would be a few pixels wide
       float r1, b1; vec2 cg = vec2(0.0);
-      float k0 = 1.0 - smoothstep(60.0, 220.0, dist), k1 = 1.0 - smoothstep(250.0, 900.0, dist), k2 = 1.0 - smoothstep(1000.0, 3600.0, dist);
-      float k3 = 1.0 - smoothstep(4000.0, 14000.0, dist), k4 = 1.0 - smoothstep(16000.0, 60000.0, dist);
+      float k0 = 1.0 - smoothstep(40.0, 150.0, dist), k1 = 1.0 - smoothstep(160.0, 600.0, dist), k2 = 1.0 - smoothstep(650.0, 2400.0, dist);
+      float k3 = 1.0 - smoothstep(2600.0, 9500.0, dist), k4 = 1.0 - smoothstep(10000.0, 40000.0, dist);
       if (k0 > 0.0) { cg += fCrater(pS, 1.0, 64.0, uFCr.x, r1, b1) * k0; fRim += r1 * k0; fBowl += b1 * k0; }
       if (k1 > 0.0) { cg += fCrater(pS + 17.3, 4.0, 16.0, uFCr.x * 0.8, r1, b1) * k1; fRim += r1 * k1; fBowl += b1 * k1; }
       if (k2 > 0.0) { cg += fCrater(pL, 16.0, 128.0, uFCr.y, r1, b1) * k2; fRim += r1 * k2; fBowl += b1 * k2; }
@@ -229,7 +230,7 @@ export const FEATURE_NORMAL = /* glsl */`
         float kM = (1.0 - smoothstep(mid * 90.0, mid * 320.0, dist)) * smoothstep(uFCk.x * 20.0, uFCk.x * 120.0, dist);
         #ifndef F_CRACKS_LAVA
           // seen from the air the net is not a wallpaper: whole regions are sound, others shattered
-          float region = 0.25 + 0.75 * smoothstep(0.38, 0.62, tNoise(dirO * uRadius / (uFCk.y * 9.0) + 59.0));
+          float region = 0.08 + 0.92 * smoothstep(0.44, 0.64, tNoise(dirO * uRadius / (uFCk.y * 9.0) + 59.0));
           kM *= region; kB *= region;
         #endif
         vec2 cg = vec2(0.0);
