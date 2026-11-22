@@ -17,11 +17,12 @@ import { atmoUniforms, SUN_SURFACE, fillTint } from './atmosphere.js';
 import { TERRAIN_VS, TERRAIN_FS, detailTexture } from './worldshaders.js';
 import { getBodyMaps, MAP_SIZES } from './bodytex.js';
 import { styleOf } from './worldstyle.js';
+import { featureSetup, FEATURE_PERIODS } from './surfacefeatures.js';
 import { perf } from '../perf.js';
 
 const SPLIT = { low: 1.6, medium: 1.75, high: 1.85 };
 const GRID = { low: 32, medium: 32, high: 40 };
-const PERIODS = [2.7, 37, 530, 7900];
+const PERIODS = [2.7, 37, 530, 7900, ...FEATURE_PERIODS];
 const indexCache = new Map();
 const _v = new THREE.Vector3();
 const _d = { x: 0, y: 0, z: 0 };
@@ -45,6 +46,9 @@ export function createTerrain(body, { quality = 'high' } = {}) {
   if (style.clouds) defines.CLOUDS = 1;
   if (style.snow) defines.SNOW = 1;
   const V3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  // craters, cracks and ripples at walking scale (surfacefeatures.js); not at low quality
+  const feat = quality === 'low' ? { defines: {}, uniforms: {}, any: false } : featureSetup(body.id, V3, (a) => new THREE.Vector4(a[0], a[1], a[2], a[3]));
+  Object.assign(defines, feat.defines);
   const uniforms = {
     ...atmoUniforms(body),
     uDetail: { value: detailTexture() },
@@ -68,6 +72,7 @@ export function createTerrain(body, { quality = 'high' } = {}) {
     uCloudTex: { value: maps.clouds }, uCloudRot: { value: 0 }, uCloudShadow: { value: style.clouds ? Math.min(0.62, 0.35 + 0.4 * style.clouds.cover) : 0 },
     uShallow: { value: V3(style.water ? style.water.shallow : [0, 0, 0]) }, uDeep: { value: V3(style.water ? style.water.deep : [0, 0, 0]) },
     uClarity: { value: style.water ? style.water.clarity : 10 },
+    ...feat.uniforms,
     uSnow: { value: V3(style.snow ? style.snow.color : [1, 1, 1]) }, uSnowLine: { value: style.snow ? style.snow.line : 1e9 }, uSnowLat: { value: style.snow ? style.snow.latDrop : 0 },
   };
   const material = new THREE.ShaderMaterial({ uniforms, defines, vertexShader: TERRAIN_VS, fragmentShader: TERRAIN_FS });
@@ -95,6 +100,7 @@ export function createTerrain(body, { quality = 'high' } = {}) {
     const ph = n.phases;
     u.uPh0.value.set(ph[0], ph[1], ph[2]); u.uPh1.value.set(ph[3], ph[4], ph[5]);
     u.uPh2.value.set(ph[6], ph[7], ph[8]); u.uPh3.value.set(ph[9], ph[10], ph[11]);
+    if (feat.any) { u.uPh4.value.set(ph[12], ph[13], ph[14]); u.uPh5.value.set(ph[15], ph[16], ph[17]); }
     const t = (n.spacing / texel - 0.5) / 1.0;
     u.uTexMix.value = t < 0 ? 0 : t > 1 ? 1 : t;
     material.uniformsNeedUpdate = true;
@@ -110,8 +116,8 @@ export function createTerrain(body, { quality = 'high' } = {}) {
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), c.radius);
     n.center.set(c.center[0], c.center[1], c.center[2]);
     n.radius = c.radius; n.minH = c.minH; n.maxH = c.maxH; n.hs = c.hs;
-    n.phases = new Float32Array(12);
-    for (let s = 0; s < 4; s++) for (let k = 0; k < 3; k++) { const q = c.center[k] / PERIODS[s]; n.phases[s * 3 + k] = q - Math.floor(q); }
+    n.phases = new Float32Array(PERIODS.length * 3);
+    for (let s = 0; s < PERIODS.length; s++) for (let k = 0; k < 3; k++) { const q = c.center[k] / PERIODS[s]; n.phases[s * 3 + k] = q - Math.floor(q); }
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.copy(n.center); mesh.visible = false; mesh.userData.node = n;
     mesh.onBeforeRender = onBeforeRender;
