@@ -328,8 +328,11 @@ what the game does today, and what building it involves.
    flips or tumbles in thick air has its side boosters, antennas, open panels and nose cones
    torn off, and the pieces fly on as debris. A clean climb loses nothing.
    [How it works and what was checked.](docs/AERO_BREAKUP.md)
-4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** Sharper terrain,
-   richer surfaces and better atmospheres, from orbit down to the dust under a rover's wheels.
+4. **[Higher-fidelity worlds.](docs/ROADMAP.md#4-higher-fidelity-worlds)** **First pass
+   built.** Every world has ground of its own at walking scale (craters, ice plates, lava
+   crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
+   air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
+   move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
 5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the
    grid fins and land the first stage on its legs while the upper stage flies on to orbit.
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**

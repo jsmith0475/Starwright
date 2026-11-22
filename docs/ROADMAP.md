@@ -103,6 +103,12 @@ rigid-body load can show. The world keeps at most 24 loose pieces so the frame r
 
 ## 4. Higher-fidelity worlds
 
+**Status: first pass built.** Walking-scale craters, ice plates, lava crust and wind ripples
+on every world but the home world, eight kinds of loose rock, a high cloud or dust layer on
+three worlds, and dawn and dusk light on the clouds. All of it is drawn on top of the ground;
+the height the physics uses did not change. How it works, what was checked against what, and
+what is still open are in [WORLDS.md](WORLDS.md).
+
 **What it is.** Sharper terrain and textures, better atmospheres, clouds and lighting, and more
 on the ground: rocks and craters at walking scale, weather and haze, surfaces that look
 different on every world all the way from orbit down to the dust under a rover's wheels.
@@ -112,13 +118,16 @@ ground looks to a real place, the more it feels like you went there.
 
 **Today.** All nineteen bodies have procedural terrain with level of detail that refines as you
 approach, generated in the browser with no image files. Worlds with air have atmospheric
-scattering, and the home world has vegetation. Detail runs out at close range, and the far
-worlds have had less attention than Verda and Pell.
+scattering, and the home world has vegetation. Since the first pass, each world also has
+surface features and rocks of its own close up. They are drawn, not built: a rover does not
+feel a drawn crater.
 
-**Building it.** Add finer terrain levels and detail textures near the camera, per-world
-surface features (dunes, ice fractures, lava fields, canyons), cloud layers, and better
-lighting at dawn and dusk. All of it has to stay procedural and stay inside the frame budget
-on a laptop graphics card. This is a good place for artists who can write shaders.
+**Still open, for anyone who wants it.** Put craters, dunes and canyons into the height
+function itself, so they can be driven over and landed in (this changes physics and needs the
+independent checks re-run). Weather and ground haze. The high cloud layer on distant globes.
+Bigger and clustered rocks. The same feature code for Verda's beaches and bare mountains. All
+of it has to stay procedural and stay inside the frame budget on a laptop graphics card. This
+is a good place for artists who can write shaders.
 
 ## 5. Reusable boosters
 
