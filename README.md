@@ -312,7 +312,7 @@ Starwright is version 0.1: playable from the first launch to the outer planets, 
 
 ## Roadmap
 
-The next eleven upgrades, in the order we plan to take them. There are no dates: each one ships when
+The next twelve upgrades, in the order we plan to take them. There are no dates: each one ships when
 it is good. **[Read the full roadmap](docs/ROADMAP.md)** for what each one is, why it matters,
 what the game does today, and what building it involves.
 
@@ -340,9 +340,13 @@ what the game does today, and what building it involves.
    refine propellant, and refuel ships far from home.
 9. **[A deeper career.](docs/ROADMAP.md#9-a-deeper-career)** More missions, more science at
    every world, and crew who train into specialists.
-10. **[Sharing.](docs/ROADMAP.md#10-sharing)** Trade craft with other players, and add
-   community-made parts and scenarios.
-11. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#11-a-desktop-app-and-a-seat-in-the-cockpit)**
+10. **[A faster-than-light drive and a second star system.](docs/ROADMAP.md#10-a-faster-than-light-drive-and-a-second-star-system)**
+    A part you earn by finishing the home system, which carries a ship to a new star with new
+    worlds. The one fictional element, labelled as such; everything after the jump is real
+    orbital mechanics.
+11. **[Sharing.](docs/ROADMAP.md#11-sharing)** Trade craft with other players, and add
+    community-made parts and scenarios.
+12. **[A desktop app and a seat in the cockpit.](docs/ROADMAP.md#12-a-desktop-app-and-a-seat-in-the-cockpit)**
     A double-click app for Mac and Windows, a view from inside the capsule, and fuller sound.
 
 Want one of these to happen sooner? Pick it and help build it. See the next section.

@@ -227,6 +227,11 @@ export const FEATURE_NORMAL = /* glsl */`
         float mid = uFCkM;
         // an in-between size carries the pattern from the ground to the air
         float kM = (1.0 - smoothstep(mid * 90.0, mid * 320.0, dist)) * smoothstep(uFCk.x * 20.0, uFCk.x * 120.0, dist);
+        #ifndef F_CRACKS_LAVA
+          // seen from the air the net is not a wallpaper: whole regions are sound, others shattered
+          float region = 0.25 + 0.75 * smoothstep(0.38, 0.62, tNoise(dirO * uRadius / (uFCk.y * 9.0) + 59.0));
+          kM *= region; kB *= region;
+        #endif
         vec2 cg = vec2(0.0);
         if (kS > 0.0) fCrackLevel(pS, uFCk.x, 64.0 / uFCk.x, vec2(h0, a0), a1, kS, dist, cg, fCk, fTone, fHeat);
         if (kM > 0.0) fCrackLevel(pL + 53.0, mid, 2048.0 / mid, vec2(h1, a1), a2, kM, dist, cg, fCk, fTone, fHeat);
@@ -282,6 +287,6 @@ export const FEATURE_ALBEDO = /* glsl */`
 export const FEATURE_EMIT = /* glsl */`
   #if defined(FEATURES) && defined(F_CRACKS_LAVA)
     // under the crust the glow is hidden; it comes out through the cracks, brighter than the open surface
-    em *= mix(1.0, mix(0.012 + 0.3 * fHeat, uFCk2.z, fCk), fCov * uFCk2.w);     // (some plates are thin and still dull red)
+    em *= mix(1.0, mix(0.008 + 0.09 * fHeat, uFCk2.z, fCk), fCov * uFCk2.w);     // (some plates are thin and still dull red)
   #endif
 `;
