@@ -11,16 +11,19 @@ not read into it and are never written while it runs; when it ends you are back 
 
 ## Run it
 
-1. Start the game as usual (double-click `start.command`, or `python3 serve.py 8642` in the
-   project folder) and open <http://localhost:8642/> in Chrome.
+1. Open the game in Chrome: the hosted one at <https://jsmith0475.github.io/Starwright/>, with
+   nothing to install, or your own copy (double-click `start.command`, or `python3 serve.py 8642`
+   in the project folder, then open <http://localhost:8642/>).
 2. Click **Demo tour** on the title screen. (Inside a game: the menu button in the Flight Center,
    then **Demo tour**.)
 
-Or open the tour directly from the address bar:
+Or open the tour directly from the address bar. Every address below works the same on the hosted
+game: put <https://jsmith0475.github.io/Starwright/> in place of `http://localhost:8642/`.
 
 | Address | What it does |
 | --- | --- |
-| `http://localhost:8642/?demo=1` | starts the tour as soon as the page has loaded |
+| `https://jsmith0475.github.io/Starwright/?demo=1` | starts the tour on the hosted game as soon as the page has loaded |
+| `http://localhost:8642/?demo=1` | the same, on your own copy |
 | `…/?demo=1&clean=1` | the same, with no control strip and no mouse cursor: use this for recording |
 | `…/?demo=1&chapter=landing` | starts at one chapter (ids in the table below) and carries on from there |
 | `…/?demo=1&pointer=0` | hides the scripted pointer in the assembly chapters |
@@ -130,7 +133,9 @@ You need nothing but macOS and Chrome. Plan for two or three takes.
    wants the graphics card to itself for a smooth 60 frames a second.
 2. **Turn on Do Not Disturb**: Control Centre (top right of the menu bar) → Focus → Do Not Disturb,
    so no notification slides into the picture.
-3. **Start the game**: double-click `start.command` and leave its Terminal window open.
+3. **Start the game**: double-click `start.command` and leave its Terminal window open. (To
+   record from the hosted game instead, skip this step and use
+   `https://jsmith0475.github.io/Starwright/` wherever `http://localhost:8642/` appears below.)
 4. **Open a clean Chrome window**: File → New Window, and open
    `http://localhost:8642/` once so the game is loaded and cached. Leave it on the title screen.
 5. **Make the picture exactly 1920×1080.** Pick one:

@@ -11,6 +11,10 @@ Real orbital mechanics. A solar system of nineteen bodies. No account, no downlo
 
 <p align="center"><b>Built with AI, and said plainly:</b> directed by one person, written by 20+ Claude AI agents and independently reviewed by Grok AI agents. <a href="#how-it-was-built">How it was built</a>.</p>
 
+<h2 align="center"><a href="https://jsmith0475.github.io/Starwright/">▶ Play Starwright now</a></h2>
+
+<p align="center">In your browser. Nothing to install.</p>
+
 <p align="center"><sub>An independent, original game. Not affiliated with or endorsed by the makers of Kerbal Space Program or by SpaceX.</sub></p>
 
 <!--
@@ -113,7 +117,8 @@ And around the flying:
   ripped from their clamps, antennas and open solar panels are stripped, nose cones go, and
   the pieces fly on as debris. A clean climb loses nothing.
 - **Landing legs with real suspension** that compress and settle on touchdown.
-- **A self-running demo tour** if you just want to watch the game fly itself for six minutes.
+- **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
+  [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
 
 <p align="center">
   <a href="media/structure-breakup.mp4">
