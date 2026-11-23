@@ -643,7 +643,8 @@ export class Vessel {
         const ref = 0.5 * Math.PI * rM * rM;
         p._eUp = Math.min(1, aUp / ref); p._eDown = Math.min(1, aDown / ref);
       } else {
-        p._aRad = (d.wing || d.fin) ? 0 : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
+        // (a part that lies flat against the hull, the folding leg, states its own area: its box is long, what it shows the air is not)
+        p._aRad = (d.wing || d.fin) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
         if (d.fin) this._fins.push(p);
       }
     }

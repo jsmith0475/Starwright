@@ -190,7 +190,8 @@ async function flight(A, aspect, plan) {
   if (!plan) {
     await run(liftoffAt); await begin(); await page.evaluate(() => window.__cap.mark('liftoff'));
     await run(260, 'C.ev.sep !== undefined'); await run(2); await toBarge();
-    await run(900, 'C.ev.landed !== undefined || C.ev.splashed !== undefined || C.ev.lost !== undefined'); await run(3);
+    await run(900, 'C.ev.landed !== undefined || C.ev.splashed !== undefined || C.ev.lost !== undefined');
+    await run(15, 'B && (B.dead || B.landed)'); await run(1);      // (on long legs a stage takes a few seconds to settle after its pads touch)
     const out = await page.evaluate(() => { const C = window.__cap, w = window.__sw.world, b = C.booster; const here = b && !b.dead ? b.body.inertialToSurfaceDir(b.pos.clone(), w.ut) : null; return { ev: C.ev, sep: C.sep, touch: C.touch, log: C.log, miss: here ? Math.acos(Math.min(1, here.dot(C.target))) * b.body.radius : null, landed: !!(b && b.landed && !b.splashed), dv: b && !b.dead ? b.estimateDeltaV() : 0 }; });
     await ctx.close();
     return out;

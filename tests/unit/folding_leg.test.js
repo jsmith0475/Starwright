@@ -4,10 +4,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { World } from '../../js/core/world.js';
 import { SYSTEM } from '../../js/core/bodies.js';
+import { Craft } from '../../js/core/craft.js';
+import * as AP from '../../js/core/autopilot.js';
 import { partDef } from '../../js/core/parts.js';
 import { Vector3 } from '../../js/lib/three.module.min.js';
 import { boosterRecovery } from '../../js/core/booster.js';
-import { dropped, heronBooster } from '../tools/booster_dev.mjs';
+import { dropped, heronBooster, boosterCraft } from '../tools/booster_dev.mjs';
 
 const home = SYSTEM.home;
 test('the part: a long leg whose pad, once down, stands well below the engine and wide of the tank', () => {
@@ -33,6 +35,14 @@ test('stowed, the legs add nothing below or beside their boxes; down, the craft 
   assert.ok(r0 < 1.6, 'folded, nothing reaches further out than the grid fins: ' + r0.toFixed(2));
   v.setLegs(true);
   assert.ok(low() < y0 - 0.4 && wide() > 3, `down: ${(y0 - low()).toFixed(2)} m below the engine, ${wide().toFixed(2)} m out`);
+});
+
+test('folded flat, the legs barely change what the stage shows the air', () => {
+  const area = craft => { const w = new World(), v = w.launch(craft, { crew: [] }); return v.axialDragArea(true); };
+  const bare = boosterCraft(), withLegs = heronBooster();
+  const a0 = area(bare), a1 = area(withLegs);
+  assert.ok(a1 < a0 * 1.6, `drag area ${a0.toFixed(2)} m² on small legs, ${a1.toFixed(2)} m² on folding legs`);
+  assert.equal(partDef('leg_heron').aRad, 0.2);
 });
 
 test('a return: legs folded all the way down, out below 60 m, and the stage lands and stands on them', () => {
@@ -61,4 +71,35 @@ test('a return: legs folded all the way down, out below 60 m, and the stage land
   const pad = v.legParts[0], gap = (pad.def.legs.reach - (pad._comp || 0)) - (pad.pos.y - (eng.pos.y - eng.def.h / 2));
   assert.ok(v.landed && gap > 0.1, `engine ${gap.toFixed(2)} m clear of the ground with the struts loaded`);
   assert.ok(v.legParts.every(p => p._comp > 0.005 && p._comp < p.def.legs.stroke), 'every strut carries load and none is bottomed: ' + v.legParts.map(p => p._comp.toFixed(3)));
+});
+
+test('a whole flight on folding legs: it stages where a stage can turn round, lands by the pad, and is at rest within seconds', () => {
+  const c = new Craft('Homecoming');
+  const [pod] = c.setRoot('probe_wisp');
+  let cur = pod, first = null, last = null;
+  const lower = ['tank_m800', 'tank_m800', 'tank_m400'];
+  for (const t of ['tank_m400', 'eng_sparrow', 'dec_m', 'probe_wisp', ...lower, 'eng_goshawk']) {
+    const [p] = c.attachStack(t, cur.id, 'bottom'); assert.ok(p, 'attach ' + t);
+    if (lower.includes(t)) { if (cur.type === 'probe_wisp') first = p; last = p; }
+    cur = p;
+  }
+  c.attachRadial('fin_grid', first.id, first.pos.y + 0.6, Math.PI / 4, 4);
+  c.attachRadial('leg_heron', last.id, last.pos.y - partDef('tank_m400').h / 2 + 1.9, Math.PI / 4, 4);
+  c.autoStage();
+  const w = new World(), v = w.launch(c, { crew: [] }), target = home.sites.landing.dir;
+  let b = null, rec = null, sep = null, touched = null, rest = null;
+  w.on('decouple', d => { if (d.debris.type !== 'ship' || !d.debris.engines.length) return; b = d.debris; rec = boosterRecovery(w, b, { target }); b.updateTelemetry(w.ut); sep = { alt: b.altitude, speed: b.airspeed }; });
+  w.on('landed', d => { if (d.vessel === b && touched === null) touched = w.ut; });
+  const asc = AP.ascentProgram(w, { vessel: v, targetAlt: 80000, useWarp: false, recover: { target } });
+  for (let i = 0; i < 60000 && !(rec && rec.done && rest !== null); i++) {
+    if (!asc.done) asc.update(0.02);
+    if (rec && !rec.done) rec.update(0.02);
+    w.step(0.02);
+    if (touched !== null && rest === null && b.landed) rest = w.ut;
+    if (touched !== null && w.ut - touched > 30) break;
+  }
+  // (with the legs counted at the size of their boxes the climb was so draggy that it staged at 15 km and 380 m/s)
+  assert.ok(sep && sep.alt > 17000 && sep.speed > 600, 'separation: ' + JSON.stringify(sep));
+  assert.ok(rec.done && !rec.failed && b.landed && rec.miss < 10, rec.log.map(l => l.msg).join('\n'));
+  assert.ok(rest !== null && rest - touched < 8, `at rest ${(rest - touched).toFixed(1)} s after the pads touched`);
 });
