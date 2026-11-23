@@ -375,7 +375,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
 
 /**
  * The stage the next staging event would drop, if it is one built to come back: it carries a guidance part, a
- * liquid engine that is burning, and landing legs. → { ids (Set of part ids), dry (kg without propellant),
+ * liquid engine that is burning, and landing legs or two catch pins. → { ids (Set of part ids), dry (kg without propellant),
  * prop (kg of propellant in it now) } or null.
  */
 export function recoverableStage(vessel) {
@@ -383,18 +383,19 @@ export function recoverableStage(vessel) {
   const firing = v.stages[v.stageIndex] || [];
   const ids = v.dropSet(firing);
   if (!ids.size) return null;
-  let core = false, engine = false, legs = false, dry = 0, prop = 0;
+  let core = false, engine = false, legs = false, pins = 0, dry = 0, prop = 0;
   for (const id of ids) {
     const p = v.parts.get(id), d = p.def;
     if (d.shape === 'decoupler' && firing.includes(id)) continue;      // the separator ring leaves as a third piece: not the stage's to carry home
     if (d.command) core = true;
     if (d.legs) legs = true;
+    if (d.catchPin) pins++;
     if (d.engine && d.engine.type === 'liquid' && p.ignited && !p.flameout) engine = true;
-    const fuel = (p.res.fuel || 0) + (p.res.ox || 0);
+    const fuel = (p.res.fuel || 0) + (p.res.ox || 0) + (p.res.lox || 0) + (p.res.ch4 || 0);
     prop += fuel;
     dry += (p.mass || d.mass * 1000) - fuel - (p.res.mono || 0) - (p.res.solid || 0);
   }
-  return core && engine && legs ? { ids, dry, prop } : null;
+  return core && engine && (legs || pins >= 2) ? { ids, dry, prop, legs, pins } : null;
 }
 
 /**

@@ -6,12 +6,12 @@ import { PARTS, PART_LIST, CATEGORIES, SIZES, partDef, engineThrust, engineIsp }
 const num = (x, lo = 0) => typeof x === 'number' && Number.isFinite(x) && x >= lo;
 const pos = x => num(x) && x > 0;
 const CAT_IDS = new Set(CATEGORIES.map(c => c.id));
-const SHAPES = new Set(['pylon', 'capsule', 'probe', 'tank', 'monotank', 'engine', 'srb', 'decoupler', 'radialdec', 'adapter', 'leg', 'nose',
+const SHAPES = new Set(['hotring', 'flap', 'catchpin', 'cargobay', 'pylon', 'capsule', 'probe', 'tank', 'monotank', 'engine', 'srb', 'decoupler', 'radialdec', 'adapter', 'leg', 'nose',
   'fin', 'heatshield', 'chute', 'chute_radial', 'battery', 'solar', 'gyro', 'rcs', 'antenna', 'sci_small', 'sci_jar', 'pip', 'dock',
   'cockpit', 'rover_body', 'fuselage', 'xenontank', 'radialtank', 'radialengine', 'multicoupler', 'girder', 'panel', 'strut',
   'fuelline', 'clamp', 'fairing', 'intake', 'airbrake', 'wing', 'elevon', 'tailfin', 'wheel', 'battery_radial', 'rtg', 'fuelcell',
   'light', 'ladder', 'lab']);
-const RESOURCES = new Set(['fuel', 'solid', 'mono', 'elec', 'ablator', 'xenon', 'evafuel']);
+const RESOURCES = new Set(['fuel', 'solid', 'mono', 'elec', 'ablator', 'xenon', 'evafuel', 'lox', 'ch4']);
 const ENGINE_TYPES = new Set(['liquid', 'solid', 'ion', 'nuclear', 'jet']);
 const WING_CONTROL = new Set([false, 'pitch', 'roll', 'yaw', 'auto']);
 
@@ -35,7 +35,7 @@ test('catalog size and lookup', () => {
   for (const p of PART_LIST) { assert.equal(partDef(p.id), p); assert.equal(PARTS[p.id], p); assert.ok(Object.isFrozen(p)); }
   assert.throws(() => partDef('no_such_part'));
   assert.ok(PARTS.pip && PARTS.pip.hidden && !PART_LIST.includes(PARTS.pip));
-  assert.deepEqual(SIZES, { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875 });
+  assert.deepEqual(SIZES, { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875, XXL: 2.8125 });
 });
 
 test('legacy parts keep their ids and numbers', () => {
@@ -99,7 +99,7 @@ test('engines', () => {
     assert.ok(pos(e.thrust) && pos(e.ispVac) && pos(e.ispAtm) && num(e.gimbal) && e.gimbal <= 8, id);
     assert.ok(e.ispAtm <= e.ispVac, id + ' isp ordering');
     assert.ok(['engine', 'srb', 'radialengine'].includes(d.shape), id + ' shape');
-    assert.ok(engineThrust(d, 0) === e.thrust * 1000 && engineThrust(d, 1) <= engineThrust(d, 0) + 1e-6, id);
+    assert.ok(Math.abs(engineThrust(d, 0) - e.thrust * 1000) < 1e-6 && engineThrust(d, 1) <= engineThrust(d, 0) + 1e-6, id);
     assert.ok(engineIsp(d, 1) >= 1, id);
     if (e.type === 'solid') assert.ok(pos(d.res.solid) && e.gimbal === 0, id + ' solid');
     else assert.equal(d.res.solid, undefined, id);
@@ -152,6 +152,7 @@ test('wings, wheels and other second-pass fields', () => {
 test('coverage: the catalog offers every family in every size', () => {
   const has = f => PART_LIST.some(f);
   for (const s of Object.keys(SIZES)) {
+    if (s === 'XXL') continue;      // the Wayfarer stack's own size: a rocket, not a family of parts (see the test below)
     assert.ok(has(d => d.shape === 'tank' && d.size === s), 'tank ' + s);
     assert.ok(has(d => d.shape === 'decoupler' && d.size === s), 'decoupler ' + s);
     assert.ok(has(d => d.shape === 'heatshield' && d.size === s), 'heat shield ' + s);

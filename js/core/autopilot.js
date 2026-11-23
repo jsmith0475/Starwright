@@ -136,6 +136,16 @@ export function ascentProgram(world, opts = {}) {
           const f = clamp((alt - o.turnStart) / (o.turnEnd - o.turnStart), 0, 1);
           el = 90 - (90 - o.finalPitch) * Math.pow(f, o.turnShape);
         }
+        // A stage that cannot hold its own weight (an upper stage with thrust below its weight, as on the Wayfarer)
+        // sinks if it flies the turn the altitude asks for: it keeps its nose up enough to hold a climb rate until
+        // its sideways speed carries it. Stages that can lift themselves are not touched.
+        const accNow = v.maxThrust / v.mass, rNow = v.pos.length(), gNow = body.gm / (rNow * rNow);
+        if (alt > o.turnStart && accNow > 0 && accNow < gNow) {
+          const vsN = v.vel.dot(up), vh2 = v.vel.lengthSq() - vsN * vsN;
+          const want = clamp((o.targetAlt - alt) / 90, 0, 400);
+          const sn = clamp((gNow - vh2 / rNow - (vsN - want) / 10) / accNow, 0, 0.94);
+          el = Math.max(el, Math.asin(sn) / DEG);
+        }
         const h = o.heading * DEG;
         hd.copy(east).multiplyScalar(Math.sin(h)).addScaledVector(north, Math.cos(h));
         dir.copy(up).multiplyScalar(Math.sin(el * DEG)).addScaledVector(hd, Math.cos(el * DEG));
