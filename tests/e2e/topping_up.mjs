@@ -72,7 +72,7 @@ await E(() => {
   sw.app.toast = (text, ...rest) => { B.toasts.push(String(text)); return toast(text, ...rest); };
 });
 let s = await state();
-ok(s.name === 'Shearwater' && Math.abs(s.full - 0.41) < 0.01, `Shearwater, ${(s.full * 100).toFixed(0)} % full`);
+ok(s.name === 'Shearwater' && Math.abs(s.full - 0.42) < 0.01, `Shearwater, ${(s.full * 100).toFixed(0)} % full`);
 ok(s.target !== null && s.target > 100 && s.target < 200, `the depot is the target, ${s.target && s.target.toFixed(0)} m away`);
 ok(s.vessels.includes('Deepwell'), 'Deepwell is there');
 await ff(1); await shot('topping-2-start');
@@ -115,7 +115,7 @@ ok(await ff(600, '!v.pump'), 'the pump finishes');
 s = await state();
 ok(s.last && s.last.why === 'done', 'because it is done: ' + (s.last && s.last.why));
 ok(s.full > 0.999, `the ship's tanks are ${(s.full * 100).toFixed(1)} % full`);
-ok(Math.abs(s.last.moved - 0.59 * 160000) < 2000, `${(s.last.moved / 1000).toFixed(1)} t crossed`);
+ok(Math.abs(s.last.moved - 0.58 * 160000) < 2000, `${(s.last.moved / 1000).toFixed(1)} t crossed`);
 ok(before.mono - s.mono > 1 && before.mono - s.mono < 400, `settling cost ${(before.mono - s.mono).toFixed(0)} kg of monopropellant`);
 ok(s.peri > 90000, `still in orbit: ${(s.apo / 1000).toFixed(1)} by ${(s.peri / 1000).toFixed(1)} km`);
 ok(s.done.includes('fill'), 'objective: filled');

@@ -246,7 +246,7 @@ with 33 Peregrine engines and a ship with 6. Three things about it are new.
   the thrusters push gently along the stack; liquid in free fall floats in its tank, and the
   push holds it on the outlet. Stop the push and the flow stops.
 
-Launch it with the ascent assist and it reaches an 80 km orbit with about 41 % of the ship's
+Launch it with the ascent assist and it reaches an 80 km orbit with about 42 % of the ship's
 propellant left. That is not enough to go to Pell and come back, which is what the depot is
 for. The ship's return is not built yet: [SHEARWATER.md](SHEARWATER.md) has the numbers and
 the plan. In career mode it needs the launch pad at its top level (772 t).

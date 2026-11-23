@@ -58,13 +58,13 @@ Flown by the ascent assist to an 80 km orbit of Verda with two crew and a loaded
 | Staging | 104 s after lift-off, 29.5 km up, 1,110 m/s |
 | Propellant left in the booster at staging | 61 t of 400 t |
 | Orbit reached | 80.3 by 79.4 km |
-| Propellant left in the ship in orbit | 66 t of 160 t (41 %) |
-| Delta-v left in the ship in orbit | 1,400 m/s |
+| Propellant left in the ship in orbit | 67 t of 160 t (42 %) |
+| Delta-v left in the ship in orbit | 1,415 m/s |
 | Delta-v of the ship with full tanks | 2,800 m/s |
 
 The last three rows are the reason for the depot. Leaving low orbit for Pell, braking into
 orbit there, leaving again and keeping about 250 m/s for the landing burn at home costs about
-2,020 m/s. The ship arrives with 1,400. Filled up in orbit it has 2,750.
+2,020 m/s. The ship arrives with 1,415. Filled up in orbit it has 2,750.
 
 ## The tower and the catch
 
@@ -114,8 +114,8 @@ game says which limit it broke, and the stage goes on down onto the mount.
 | Landing burn lights | 1,920 m up, 334 m/s |
 | Off the mount when the fall is stopped | 2 m |
 | Caught | 324 s after lift-off, at 1.4 m/s, 2 cm from the mount's axis |
-| Propellant left in the booster | 3 t |
-| Ship in orbit | 44 % full, 1,495 m/s left |
+| Propellant left in the booster | 2.4 t |
+| Ship in orbit | 42 % full, 1,415 m/s left |
 
 **Honest limits of the catch.**
 
@@ -130,7 +130,7 @@ game says which limit it broke, and the stage goes on down onto the mount.
 
 ## Refuelling in orbit
 
-The ship reaches orbit 41 % full. To go anywhere it has to be filled up, and that is done at a
+The ship reaches orbit 42 % full. To go anywhere it has to be filled up, and that is done at a
 **propellant depot**: *Deepwell*, an avionics nose on two long steel tanks holding 400 t of liquid
 oxygen and methane, with no engines. The scenario **Topping Up** starts with Shearwater 150 m
 from it, 100 km up.
@@ -157,7 +157,7 @@ mm/s² itself. Main engines do as well. With no push for 20 seconds the pump giv
 why. If the two ships are docked nose to tail, the push has to suit the ship being emptied, and
 the pump works that out.
 
-The push is real thrust. Filling the ship moves 94 t in 5 minutes 15 seconds, costs about 260 kg
+The push is real thrust. Filling the ship moves 93 t in 5 minutes 10 seconds, costs about 260 kg
 of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 
 **Measured** (`node tests/e2e/topping_up.mjs`, the scenario in the real game):
@@ -165,11 +165,11 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 | | |
 |---|---|
 | Docking assist, 150 m to latched | 132 s, about 900 kg of the ship's 3,000 kg of monopropellant |
-| Pumped | 94 t at 300 kg/s |
+| Pumped | 93 t at 300 kg/s |
 | Push while pumping | 3.0 mm/s² |
 | Monopropellant spent settling | 260 kg |
 | Orbit afterwards | 100.8 by 99.9 km (from 100 by 100) |
-| Ship delta-v, before and after | 1,400 m/s, 2,750 m/s |
+| Ship delta-v, before and after | 1,415 m/s, 2,750 m/s |
 
 **Honest limits of the refuelling.**
 
@@ -197,7 +197,7 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
   about 3.8 km/s, not 9.4, so a rocket in real proportions would arrive almost full and the
   depot would have nothing to do.
 - **The booster does more of the work.** On Earth the booster gives roughly a quarter of the
-  speed to orbit. Here it gives nearer a third, and the ship arrives 41 % full where a real
+  speed to orbit. Here it gives nearer a third, and the ship arrives 42 % full where a real
   Starship arrives nearly empty. The cargo (49 t in the bay, on a 45 t forward section) is
   chosen so that the ship cannot fly on to Pell and back without refuelling and can when full.
 - **One refuelling, not ten or more.** For the same reason.
