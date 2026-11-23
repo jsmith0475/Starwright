@@ -54,7 +54,7 @@ export const DEFAULT_KEYS = {
   pitchDown: 'KeyW', pitchUp: 'KeyS', yawLeft: 'KeyA', yawRight: 'KeyD', rollLeft: 'KeyQ', rollRight: 'KeyE',
   fullThrottle: 'KeyZ', cutThrottle: 'KeyX', stage: 'Space', sas: 'KeyT', rcs: 'KeyR', gear: 'KeyG', lights: 'KeyU', brakes: 'KeyB',
   abort: 'Backspace', map: 'KeyM', missions: 'KeyO', camera: 'KeyV', speedMode: 'KeyC', target: 'KeyY',
-  warpUp: 'Period', warpDown: 'Comma', warpStop: 'Slash', nextVessel: 'BracketRight', prevVessel: 'BracketLeft',
+  warpUp: 'Period', warpDown: 'Comma', warpStop: 'Slash', nextVessel: 'BracketRight', prevVessel: 'BracketLeft', hopVessel: 'Backslash',
   screenshot: 'F1', hideHud: 'F2', quicksave: 'F5', quickload: 'F9',
   rcsForward: 'KeyH', rcsBack: 'KeyN', rcsUp: 'KeyI', rcsDown: 'KeyK', rcsLeft: 'KeyJ', rcsRight: 'KeyL',
   board: 'KeyF', flag: 'KeyP',
@@ -65,7 +65,7 @@ const KEY_HELP = [
     [null, 'Throttle up / down', ['Shift', 'Ctrl']], ['fullThrottle', 'Full throttle'], ['cutThrottle', 'Cut throttle'], ['stage', 'Fire the next stage'], [null, 'Fine controls', ['Caps Lock']]]],
   ['Systems', [['sas', 'SAS (stability assist)'], ['rcs', 'RCS thrusters'], ['gear', 'Landing legs and gear'], ['lights', 'Lights and solar panels'], ['brakes', 'Brakes (hold)'], ['abort', 'Abort group'], [null, 'Action groups', ['1', '…', '9']]]],
   ['RCS translation', [['rcsForward', 'Forward'], ['rcsBack', 'Back'], ['rcsUp', 'Up'], ['rcsDown', 'Down'], ['rcsLeft', 'Left'], ['rcsRight', 'Right']]],
-  ['Navigation', [['map', 'Orbital map'], ['missions', 'Missions: program and contracts'], ['speedMode', 'Speed read-out: surface / orbit / target'], ['target', 'Next target (with Shift: clear)'], ['nextVessel', 'Next vessel'], ['prevVessel', 'Previous vessel']]],
+  ['Navigation', [['map', 'Orbital map'], ['missions', 'Missions: program and contracts'], ['speedMode', 'Speed read-out: surface / orbit / target'], ['target', 'Next target (with Shift: clear)'], ['nextVessel', 'Next vessel'], ['prevVessel', 'Previous vessel'], ['hopVessel', 'Hop between booster and upper stage']]],
   ['Time', [['warpUp', 'Warp faster'], ['warpDown', 'Warp slower'], ['warpStop', 'Stop warp'], [null, 'Physics warp (engines may run)', ['Alt', '.']], ['quicksave', 'Quicksave (or Shift+K)'], ['quickload', 'Load quicksave (or Shift+L)']]],
   ['View', [['camera', 'Camera: orbital / chase / free / locked'], ['stress', 'Stress overlay: mark the load on every joint'], ['hideHud', 'Hide the instruments'], ['screenshot', 'Save a screenshot'], [null, 'Orbit the camera', ['Right-drag']], [null, 'Zoom', ['Wheel']], [null, 'Pause menu', ['Esc']]]],
   ['On a spacewalk', [[null, 'Walk / fly', ['W', 'A', 'S', 'D']], [null, 'Jump, or jetpack up', ['Space']], [null, 'Jetpack up / down', ['Shift', 'Ctrl']], ['rcs', 'Jetpack on / off'], ['board', 'Grab a hatch and board'], ['flag', 'Plant a flag']]],
@@ -105,6 +105,12 @@ export function createFlightScreen(app) {
 
   const active = () => (world && world.active && !world.active.dead ? world.active : null);
   const flyable = v => v && !v.dead && (v.type === 'ship' || v.type === 'eva');
+  // Guidance programs that keep flying their vessel while the player watches another one (a booster and its upper
+  // stage): vessel id → { ctl, kind }. Only programs that never touch time warp may be parked.
+  const parked = new Map();
+  const PARKABLE = new Set(['ascent']);
+  // The vessels of this flight that the hop key steps between: the one launched and every flyable stage it drops.
+  const family = new Set();
 
   function toast(text, kind = 'info') {
     const now = performance.now();
@@ -122,6 +128,8 @@ export function createFlightScreen(app) {
     assist = null; assistKind = ''; lostInfo = null; lostCrew = []; aboveLine = null; lastVesselId = null;
     lastTarget = null; state.approach = null; caKey = ''; caAcc = 1;
     strain.clear(); sepUt = -1;
+    parked.clear(); family.clear();
+    for (const x of w.vessels) x.program = null;      // a program does not outlive the screen that was running it
     if (!active()) { const next = w.vessels.find(flyable); if (next) w.switchTo(next); }
     controlled = active();
     if (app.flight) app.flight.world = w;
@@ -170,6 +178,11 @@ export function createFlightScreen(app) {
         // which has its own sound: a separation without a part waits until the step is over to find out which it was)
         if (mine && p.part == null) sepUt = world.ut;
         else if (mine) { app.audio.play('decouple'); if (cam) cam.kick(0.35); }
+        // a dropped stage that can still be flown: it stays in the flight, and the hop key reaches it
+        if (p.debris && p.debris.type === 'ship' && p.vessel && (mine || family.has(p.vessel.id))) {
+          family.add(p.vessel.id); family.add(p.debris.id);
+          if (p.debris.engines && p.debris.engines.length) toast(p.debris.name + ' is flying on its own. Press ' + keyLabel(K('hopVessel')) + ' to fly it.', 'info');
+        }
         break;
       case 'structure':
         // a joint broke: say where and why in plain words (the sparks are the scene's, flightscene.onWorldEvent)
@@ -459,7 +472,8 @@ export function createFlightScreen(app) {
     const list = world.vessels.filter(v => flyable(v));
     list.sort((x, y) => x.id - y.id);
     if (!a) return list;
-    const near = list.filter(v => v === a || (v.body === a.body && v.pos.distanceTo(a.pos) < 2500));
+    const far = world.tracked || [];                  // a booster or an upper stage flown at any distance counts as nearby
+    const near = list.filter(v => v === a || far.includes(v) || family.has(v.id) || (v.body === a.body && v.pos.distanceTo(a.pos) < 2500));
     return near.length > 1 ? near : list;
   }
   function switchVessel(dir) {
@@ -469,9 +483,25 @@ export function createFlightScreen(app) {
     const next = list[(i + dir + list.length) % list.length];
     takeControl(next);
   }
+  /** The hop key: step between the vessels of this flight (the upper stage and the boosters it dropped). */
+  function hopVessel() {
+    const a = active();
+    const list = world.vessels.filter(v => flyable(v) && v.type === 'ship' && (v === a || family.has(v.id) || (world.tracked || []).includes(v)));
+    list.sort((x, y) => x.id - y.id);
+    if (list.length < 2) { toast('No booster or upper stage to hop to', 'info'); return; }
+    takeControl(list[(list.indexOf(a) + 1) % list.length]);
+  }
   function takeControl(v) {
+    const from = active(), fromAssist = assist, fromKind = assistKind;
     if (!v || !world.switchTo(v)) return false;
+    // a program that can fly on by itself keeps flying the vessel that is being left
+    if (from && from !== v && !from.dead && fromAssist && !fromAssist.done && PARKABLE.has(fromKind) && (fromAssist.vessel || from) === from) {
+      parked.set(from.id, { ctl: fromAssist, kind: fromKind });
+      from.program = fromKind;
+    }
     controlled = v; assist = null; assistKind = ''; lostInfo = null;
+    const back = parked.get(v.id);
+    if (back) { parked.delete(v.id); v.program = null; if (!back.ctl.done) { assist = back.ctl; assistKind = back.kind; } }
     lastTarget = world.getTarget(v); caKey = ''; caAcc = 1; state.approach = null;
     cam.frame(v, { keepAngles: true });
     hud.invalidate(); hud.hideCenter();
@@ -1393,6 +1423,7 @@ export function createFlightScreen(app) {
     if (hit('camera') && !mapOpen) actions.cycleCamera();
     if (hit('nextVessel')) switchVessel(1);
     if (hit('prevVessel')) switchVessel(-1);
+    if (hit('hopVessel')) hopVessel();
     if (hit('speedMode')) actions.toggleSpeedMode();
     if (hit('target')) { if (shift) { shiftBlocked = true; if (!actions.clearTarget()) toast('No target set', 'info'); } else actions.cycleTarget(1); }
     // Caps Lock: fine controls (gentler steering and translation)
@@ -1575,6 +1606,23 @@ export function createFlightScreen(app) {
     }
   }
 
+  /** One tick of the programs flying vessels that are not being watched; a program that ends says so. */
+  function tickParked(dt) {
+    if (!parked.size) return;
+    for (const [id, pk] of parked) {
+      const pv = world.getVessel(id);
+      if (!pv || pv.dead) { parked.delete(id); continue; }
+      try { pk.ctl.update(dt); } catch (err) { console.warn('[flight] background program stopped:', err && err.message); pk.ctl.done = true; pk.ctl.failed = true; }
+      if (!pk.ctl.done) continue;
+      parked.delete(id); pv.program = null;
+      const last = pk.ctl.log && pk.ctl.log.length ? pk.ctl.log[pk.ctl.log.length - 1].msg : '';
+      const name = PROGRAM_NAME[pk.kind] || 'Guidance';
+      pv.ctrl.sas = true; pv.ctrl.sasMode = 'hold'; pv.sasTarget = null;
+      if (!pk.ctl.failed) pv.ctrl.throttle = 0;
+      toast(pv.name + ': ' + name + (pk.ctl.failed ? ' gave up' : ' complete') + (last ? ' (' + last + ')' : ''), pk.ctl.failed ? 'warn' : 'good');
+    }
+  }
+
   function finishAssist(v) {
     if (!assist || !assist.done) return;
     const last = assist.log && assist.log.length ? assist.log[assist.log.length - 1].msg : '';
@@ -1736,11 +1784,12 @@ export function createFlightScreen(app) {
         try { assist.update(dt); } catch (err) { console.warn('[flight] assist stopped:', err && err.message); assist.done = true; assist.failed = true; }
         finishAssist(v);
       }
-      if (assist && !assist.done) {
+      if ((assist && !assist.done) || parked.size) {
         // keep the guidance loop tight under physics warp / slow frames (≤ 0.2 s of flight per update)
         const n = Math.min(8, Math.max(1, Math.ceil(dt * (world.rate || 1) / 0.2)));
+        tickParked(dt / n);
         world.step(dt / n);
-        for (let i = 1; i < n && assist && !assist.done && active(); i++) { try { assist.update(dt / n); } catch { break; } world.step(dt / n); }
+        for (let i = 1; i < n && ((assist && !assist.done) || parked.size) && active(); i++) { if (assist && !assist.done) { try { assist.update(dt / n); } catch { break; } } tickParked(dt / n); world.step(dt / n); }
         // the docking assist finishes on the `dock` event, which arrives inside world.step
         if (assist && assistKind === 'dock') { try { assist.update(0); } catch { assist.done = true; assist.failed = true; } finishAssist(active()); }
       } else world.step(dt);

@@ -458,8 +458,11 @@ what the game does today, and what building it involves.
    crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
    air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
    move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
-5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** Flip, boost back, steer on the
-   grid fins and land the first stage on its legs while the upper stage flies on to orbit.
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **First part built.** Flip,
+   boost back, steer on the grid fins and land the first stage on its legs while the upper stage
+   flies on to orbit. Today a first stage with a guidance ring keeps flying under full physics
+   after separation and one key hops between it and the upper stage. Landing guidance, a barge
+   at sea and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
 7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,

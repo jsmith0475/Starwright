@@ -12,6 +12,7 @@ export const WARP_RATES = Object.freeze([1, 2, 3, 4, 5, 10, 50, 100, 1000, 10000
 export const PHYSICS_WARP_MAX = 3;          // highest physics-warp index
 export const LOAD_RANGE = 2500;             // m: vessels this close to the active one get full physics
 export const MAX_SUBSTEPS = 400;            // per World.step call
+export const MAX_TRACKED = 4;               // vessels besides the active one that keep full physics at any distance (see World.isTrackable)
 export const MAX_DEBRIS = 24;               // loose pieces flown near the active vessel at once (the lightest go first)
 export const SCRAP_MASS = 1000;             // kg: debris lighter than this is removed without a message when it falls behind
 // Minimum altitude for each rails-warp index, as a fraction of the body radius (never below the atmosphere top,
@@ -75,6 +76,8 @@ export class World {
     this._unloaded = [];
     this._limitReason = 'limit';
     this._dvClock = 0;
+    this._before = new Set();
+    this._tracked = [];           // vessels flown under full physics far from the active one (rebuilt by _classify)
     this.events = { on: (t, f) => this.on(t, f), off: (t, f) => this.off(t, f), emit: (t, d) => this.emit(t, d) };
   }
 
@@ -191,6 +194,10 @@ export class World {
     const top = WARP_RATES.length - 1;
     if (!a || a.dead) return top;
     if (a.wouldThrust()) { this._limitReason = 'thrust'; return PHYSICS_WARP_MAX; }
+    // a vessel being flown under full physics somewhere else (a booster on its way down, an upper stage still
+    // climbing) cannot be put on rails: fast warp waits for it, or the player lets it go (World.release)
+    const held = this.trackedInFlight();
+    if (held) { this._limitReason = `${held.name} in flight`; return PHYSICS_WARP_MAX; }
     if (a.landed) return top;
     if (a.grounded) {
       // rolling or sliding on the ground: physics warp only; once it has all but stopped it is parked and may warp
@@ -245,9 +252,10 @@ export class World {
   cancelWarpTo() { this.warpTarget = null; }
 
   // ------------------------------------------------------------------ player actions
-  stage() {
-    const a = this.active;
-    if (!a || a.dead) return [];
+  /** Fire the next stage of `vessel` (default: the one being flown; a guidance program may stage a tracked vessel). */
+  stage(vessel = this.active) {
+    const a = vessel;
+    if (!a || a.dead || !this.vessels.includes(a)) return [];
     if (this.warpIndex > PHYSICS_WARP_MAX) this._setWarp(0, 'stage');
     if (a.onRails) this._leaveRails(a);
     const before = this._ev.length;
@@ -691,14 +699,86 @@ export class World {
     return v.pos.distanceToSquared(a.pos) < LOAD_RANGE * LOAD_RANGE;
   }
 
+  // ------------------------------------------------------------------ tracked vessels (reusable boosters)
+  /**
+   * Should this vessel keep full physics however far it is from the one being flown? Yes for a ship that can be
+   * controlled (a guidance ring or a crew aboard), is in flight, has not been let go, and is either running a
+   * guidance program, under thrust, inside an atmosphere, or on a path that comes down into the air or the ground.
+   * A ship coasting on a closed orbit clear of both rides on rails as before, and so does every piece of debris.
+   * Only a vessel that is under full physics already is ever kept there (see _classify): nothing that is on rails
+   * is woken up by this rule.
+   */
+  isTrackable(v) {
+    if (!v || v.dead || v.type !== 'ship' || v.landed || v.released || v.stranded || !v._commands.length) return false;
+    if (v.program) return true;
+    if (v.wouldThrust()) return true;
+    const body = v.body;
+    const r2 = v.pos.lengthSq();
+    const top = body.radius + (body.atmo ? body.atmo.height : Math.max(0, body.maxElevation || 0));
+    if (r2 < top * top) return true;
+    // the path: the lowest point of the conic through the present state (a hyperbola that is leaving has already
+    // passed its own)
+    const mu = body.gm, r = Math.sqrt(r2), v2 = v.vel.lengthSq();
+    const rv = v.pos.dot(v.vel);
+    const energy = v2 / 2 - mu / r;
+    _a.crossVectors(v.pos, v.vel);
+    const h2 = _a.lengthSq();
+    const ecc = Math.sqrt(Math.max(0, 1 + 2 * energy * h2 / (mu * mu)));
+    const rp = h2 / (mu * (1 + ecc));
+    if (rp >= top) return false;
+    return energy < 0 || rv < 0;
+  }
+  /** The vessels (not the active one) being flown under full physics far away, in the order they were taken on. */
+  get tracked() { return this._tracked.filter(v => !v.dead && this.vessels.includes(v)); }
+  /** A tracked vessel that is still in flight (it holds fast warp off), or null. */
+  trackedInFlight() {
+    const a = this.active;
+    for (const v of this._tracked) {
+      if (v === a || v.dead || v.landed || v.onRails || !this.vessels.includes(v)) continue;
+      if (this._near(v, a)) continue;
+      if (this.isTrackable(v)) return v;
+    }
+    return null;
+  }
+  /**
+   * Let a tracked vessel go: it is no longer kept under full physics away from the active vessel, so it meets the
+   * fate of anything left behind (on rails if it is clear of the air and the ground, removed if it is not).
+   * `release(v, false)` takes it back. → true if the vessel is in this world.
+   */
+  release(v, released = true) {
+    if (!v || !this.vessels.includes(v)) return false;
+    v.released = !!released;
+    if (released && v.program) v.program = null;
+    return true;
+  }
+
   _classify() {
     const a = this.active && !this.active.dead ? this.active : null;
     const loaded = this._loaded, unloaded = this._unloaded;
+    const before = this._before;                    // what had full physics in the step before this one
+    before.clear();
+    for (const v of loaded) before.add(v);
     loaded.length = 0; unloaded.length = 0;
     if (a) {
       if (a.landed) a.syncLanded(this.ut);
       else if (a.onRails) this._leaveRails(a);
       loaded.push(a);
+    }
+    const was = this._tracked;
+    const tracked = this._tracked = [];
+    // those already tracked keep their place (oldest first); a vessel that has just fallen behind joins at the end
+    for (let pass = 0; pass < 2; pass++) {
+      for (const v of (pass === 0 ? was : this.vessels)) {
+        if (v === a || v.dead || v.onRails || v.landed || !before.has(v) || tracked.includes(v)) continue;
+        if (pass === 0 && !this.vessels.includes(v)) continue;
+        if (this._near(v, a) || !this.isTrackable(v)) continue;
+        tracked.push(v);
+      }
+    }
+    if (tracked.length > MAX_TRACKED) {
+      // too many: the oldest without a guidance program are let fall behind
+      for (let i = 0; i < tracked.length && tracked.length > MAX_TRACKED; ) { if (!tracked[i].program) tracked.splice(i, 1); else i++; }
+      tracked.length = Math.min(tracked.length, MAX_TRACKED);
     }
     for (const v of this.vessels) {
       if (v === a || v.dead) continue;
@@ -707,7 +787,7 @@ export class World {
         if (this._near(v, a)) loaded.push(v);
         continue;
       }
-      if (this._near(v, a)) {
+      if (this._near(v, a) || tracked.includes(v)) {
         if (v.onRails) this._leaveRails(v);
         loaded.push(v);
       } else {
@@ -1113,6 +1193,7 @@ export class World {
     return {
       version: 1, ut: this.ut, warpIndex: this.warpIndex, warpTarget: this.warpTarget, nextId: this._nextId,
       activeId: this.active && !this.active.dead ? this.active.id : null,
+      tracked: this._tracked.length ? this._tracked.filter(v => !v.dead).map(v => v.id) : undefined,
       flags: this.flags.map(f => ({ ...f, dir: { ...f.dir } })),
       vessels: this.vessels.filter(v => !v.dead).map(v => v.toJSON()),
     };
@@ -1130,6 +1211,8 @@ export class World {
       w._nextId = Math.max(w._nextId, v.id + 1);
     }
     w.active = w.vessels.find(v => v.id === o.activeId) || null;
+    // vessels that were being flown under full physics far from the active one go on being flown
+    for (const id of o.tracked || []) { const v = w.getVessel(id); if (v && !v.onRails) { w._tracked.push(v); w._loaded.push(v); } }
     for (const v of w.vessels) { if (v.landed) v.syncLanded(w.ut); v.updateTelemetry(w.ut); }
     return w;
   }
