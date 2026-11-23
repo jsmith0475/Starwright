@@ -8,7 +8,7 @@ import { World, SYSTEM, A, spawn, run } from './harness.mjs';
 import * as R from './ref.mjs';
 import { Vector3 } from '../../js/lib/three.module.min.js';
 import { predictFall, groundDistance, boosterRecovery } from '../../js/core/booster.js';
-import { dropped } from '../tools/booster_dev.mjs';
+import { dropped, heronBooster } from '../tools/booster_dev.mjs';
 import { flyReturn } from '../tools/booster_sweep.mjs';
 const V3 = a => new Vector3(a[0], a[1], a[2]);
 
@@ -297,6 +297,38 @@ function bargeCheck(S) {
   S.check('worst tilt at touchdown', 0, worstTilt, 3, { max: true, unit: '°' });
 }
 
+// 9h. The folding leg. Its numbers are worked here from the part's own dimensions and from the flight, not read from
+// the code that draws or deploys it.
+function foldingLegCheck(S) {
+  const { w, v } = dropped({ alt: 30000, speed: 1000, pitch: 45, east: 20000, fuel: 0.3, craft: heronBooster() });
+  const c = boosterRecovery(w, v, { target: home.dirFromLatLon(600 / home.radius, 0) });
+  const leg = v.legParts[0], d = leg.def, L = d.legs, eng = v.partList.find(p => p.type === 'eng_goshawk');
+  // one rigid swing about a hinge 10 cm inside the foot of the box: the leg is as long folded as it is down
+  const hx = -d.rw / 2 + 0.1, hy = -d.h / 2 + 0.1, len = Math.hypot(L.spread - hx, -L.reach + 0.3 * L.foot - hy);
+  S.ok('folded, the leg ends inside its own box', hy + len < d.h / 2, `${(d.h / 2 - hy - len).toFixed(2)} m of room at the top`);
+  S.check('down, the leg stands this far from straight down', 56, Math.atan2(L.spread - hx, L.reach - 0.3 * L.foot + hy) * 180 / Math.PI, 6, { unit: '°' });
+  let tDown = null, altDown = null, tTouch = null, lowFolded = Infinity, vsDown = 0;
+  const t0 = w.ut;
+  while (!c.done && w.ut - t0 < 1200) {
+    c.update(0.02);
+    if (!v.legsDown) lowFolded = Math.min(lowFolded, v.radarAlt);
+    else if (tDown === null) { tDown = w.ut; altDown = v.radarAlt; vsDown = v.verticalSpeed; }
+    w.step(0.02);
+    if (v.dead) break;
+    if (tTouch === null && (v.landed || v.grounded)) tTouch = w.ut;
+  }
+  S.check('the return ends landed', 1, c.done && !c.failed && v.landed ? 1 : 0, 0);
+  S.check('the legs stay folded until below this height', 60, lowFolded, 20, { unit: 'm' });
+  S.ok('the legs are fully out before first contact (the swing takes 2.4 s)', tTouch - tDown > 2.4, `told down at ${altDown.toFixed(0)} m, falling at ${(-vsDown).toFixed(0)} m/s, ${(tTouch - tDown).toFixed(1)} s before contact`);
+  for (let i = 0; i < 500; i++) w.step(0.02);
+  // standing height from the dimensions: centre of mass above the pads' soles, less what the struts have closed
+  const comp = v.legParts.reduce((a, p) => a + p._comp, 0) / v.legParts.length;
+  const dir = v.pos.clone().normalize(), ground = home.radius + home.surfaceHeight(home.inertialToSurfaceDir(dir, w.ut));
+  S.check('standing height of the centre of mass above the ground', v.com.y - (leg.pos.y - L.reach) - comp, v.pos.length() - ground, 0.02, { unit: 'm' });
+  { const gap = (eng.pos.y - eng.def.h / 2) - (leg.pos.y - L.reach) - comp; S.ok('the engine bell clears the ground with the struts loaded', gap > 0.1, gap.toFixed(2) + ' m'); }
+  { const used = Math.max(...v.legParts.map(p => p._comp)) / L.stroke; S.ok('no strut is closed to its stop', used < 1, (used * 100).toFixed(0) + ' % of the stroke used'); }
+}
+
 export const groups = [
   { name: '9a. Separation: mass, momentum, and what the dropped stage becomes', fast: true, run: S => separation(S) },
   { name: '9b. A booster far from the vessel being flown vs two-body motion', fast: true, run: S => farKepler(S) },
@@ -305,4 +337,5 @@ export const groups = [
   { name: '9e. The landing burn against the rocket equation', fast: true, run: S => landingBurnCheck(S) },
   { name: '9f. Returns from varied separations', fast: false, run: S => dispersion(S) },
   { name: '9g. The landing barge: where it is, how it holds a stage, returns that end on it', fast: false, run: S => bargeCheck(S) },
+  { name: '9h. The folding leg: one rigid swing, out before touchdown, and how the stage stands on it', fast: false, run: S => foldingLegCheck(S) },
 ];

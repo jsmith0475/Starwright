@@ -127,7 +127,9 @@ And around the flying:
   goes on to orbit. It lands on the Return Pad beside the launch site, or on the barge
   *Patient Tide* 40 km out to sea. Press `\` to watch it or take over. See
   [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
-- **Landing legs with real suspension** that compress and settle on touchdown.
+- **Landing legs with real suspension** that compress and settle on touchdown, and long
+  **folding legs** for a booster: flat against the tank all the way up and back, swung out a few
+  seconds before it lands.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
   [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
 
@@ -449,7 +451,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 469 tests, including scripted flights flown by the autopilot
+npm test            # 472 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 

@@ -66,7 +66,7 @@ const state = () => page.evaluate(() => {
     const up = b.pos.clone().normalize(), ax = B.axis(b);
     tilt = Math.acos(Math.min(1, Math.abs(up.dot(ax)))) * 180 / Math.PI;
   }
-  return { active: w.active ? w.active.id : null, upperId: B.upperId, boosterId: b ? b.id : null, name: b ? b.name : '', dead: b ? !!b.dead : null, landed: b ? !!b.landed : null,
+  return { active: w.active ? w.active.id : null, upperId: B.upperId, boosterId: b ? b.id : null, name: b ? b.name : '', dead: b ? !!b.dead : null, landed: b ? !!b.landed : null, legsDown: b ? !!b.legsDown : null,
     alt: b ? b.altitude : 0, radar: b ? b.radarAlt : 0, speed: b ? b.airspeed : 0, vs: b ? b.verticalSpeed : 0, program: b ? b.program : null, miss, tilt,
     dv: b && !b.dead ? b.estimateDeltaV() : 0, sepAlt: B.sep ? B.sep.alt : 0, sepSpeed: B.sep ? B.sep.speed : 0, touch: B.touch,
     upperApo: u ? u.apoapsis : 0, upperPeri: u ? u.periapsis : 0, upperProgram: u ? u.program : null, assist: f.assist ? f.assist.phase : null, assistKind: f.assistKind,
@@ -92,7 +92,7 @@ await page.evaluate(async () => {
     cur = p;
   }
   c.attachRadial('fin_grid', first.id, first.pos.y + 0.6, Math.PI / 4, 4);
-  c.attachRadial('leg_sprig', last.id, last.pos.y - 0.3, Math.PI / 4, 4);
+  c.attachRadial('leg_heron', last.id, last.pos.y - 3.75 / 2 + 1.9, Math.PI / 4, 4);      // folding legs, hinged at the foot of the last tank
   c.autoStage();
   window.__sw.app.goto('flight', { craft: c.toJSON(), crew: [] });
 });
@@ -132,13 +132,21 @@ ok(await ff(400, 'B.booster.verticalSpeed < -50 && B.booster.altitude < 30000'),
 await shot('return-3-falling');
 ok(await ff(400, 'B.booster.dead || (B.booster.radarAlt < 900 && B.booster.ctrl.throttle > 0)'), 'the landing burn lights');
 await ff(1.5);
+s = await state();
+ok(s.legsDown === false, 'the legs are still folded against the tank as the landing burn lights');
 await shot('return-4-landing-burn');
+ok(await ff(120, 'B.booster.dead || B.booster.legsDown'), 'the legs swing out on the way down');
+s = await state();
+ok(!s.dead && !s.landed && s.radar < 62 && s.radar > 20, `they come out just before touchdown (${s.radar.toFixed(0)} m up)`);
+await ff(1.2);
+await shot('return-4b-legs-swinging');
 ok(await ff(300, 'B.booster.dead || B.booster.landed'), 'it reaches the ground');
 await ff(6);
 s = await state();
 ok(!s.dead && s.landed, 'the booster is down in one piece');
 ok(s.miss !== null && s.miss < 10, `it stands ${s.miss === null ? '?' : s.miss.toFixed(1)} m from the landing zone`);
 ok(s.tilt !== null && s.tilt < 3, `upright (tilt ${s.tilt === null ? '?' : s.tilt.toFixed(1)}°)`);
+ok(s.legsDown === true && s.toasts.some(t => /landing legs down at \d+ m/.test(t)), 'it stands on its legs, and their deployment was called out');
 ok(s.dv > 50, `with propellant to spare (${s.dv.toFixed(0)} m/s)`);
 ok(s.toasts.some(t => /boostback|Boostback/.test(t)) && s.toasts.some(t => /landing burn|Landing burn/i.test(t)), 'the return was called out step by step');
 await shot('return-5-landed');

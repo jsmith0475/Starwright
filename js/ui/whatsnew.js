@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'folding-legs', date: '2026-11-23', title: 'Booster legs that fold',
+    text: 'The new Heron Folding Leg is made for a booster that comes back. It lies flat against the tank on the pad and for the whole flight up and down, then swings out 60 m above the ground, a few seconds before touchdown, and the stage stands on a wide stance. Mount four low on the last tank. G still lowers and raises them by hand.' },
   { id: 'return-pad-barge', date: '2026-11-22', title: 'A Return Pad and a barge at sea',
     text: 'A booster flying back now has two places to land. The Return Pad is a marked concrete pad 600 m north of the launch pad. The barge Patient Tide is a steel deck anchored 40 km out to sea: hop to the booster, open Guidance and choose Land on the barge. Its deck is solid and its edge is real, and the map marks both sites.' },
   { id: 'booster-return', date: '2026-11-22', title: 'Boosters that fly back and land',

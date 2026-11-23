@@ -163,7 +163,7 @@ amount of travel, and how fast you touch down decides what happens:
 | about 7 m/s and up | The legs collapse. |
 
 The Stilt Heavy Leg has 55 cm of travel and takes 2 to 3 m/s more; the Sprig has 18 cm and less
-margin. Land level and slow across the ground: a lander leaning past the line of its feet, or
+margin. The Heron Folding Leg has 40 cm and by far the widest stance. Land level and slow across the ground: a lander leaning past the line of its feet, or
 arriving sideways, goes over. A wide stance and a low centre of mass stand steeper.
 
 Once you are standing on the ground with the throttle closed, the attitude hold (T) lets go so
@@ -187,7 +187,9 @@ own that keeps flying under full physics however far it gets from the upper stag
 ### Bringing it back
 
 Give that first stage **landing legs** near the bottom and **grid fins** (Lattice Vanes) near the
-top as well, and it comes home by itself:
+top as well, and it comes home by itself. The **Heron Folding Leg** is the one made for a
+booster: it lies flat against the tank for the whole flight and swings out 60 m above the
+ground, a few seconds before touchdown.
 
 1. Launch with the ascent assist. It stages early, when the booster has just enough propellant
    left to return, and tells you so.

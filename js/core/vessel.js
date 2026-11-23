@@ -779,7 +779,7 @@ export class Vessel {
         cp.push({ p, x: p.pos.x, y: p.pos.y + hr, z: p.pos.z, r });
         add(p.pos.x + p._ox * r, p.pos.y - hr, p.pos.z + p._oz * r, 0);
         add(p.pos.x + p._ox * r, p.pos.y + hr, p.pos.z + p._oz * r, 0);
-        if (d.legs && !p.deployed) {
+        if (d.legs && !p.deployed && d.variant !== 'fold') {   // (a folding leg lies inside its box: the box's own points are all of it)
           // stowed, the pad hangs under the housing: its sole 3 cm (of the strut's scale) below the box, its rim out
           // to 0.24 from the part's middle (render/partmesh.js applyAnim, shapes_aero.js leg). A lander that stands
           // on its stowed legs (Moonstep on the pad) stood 9 cm into the slab.
@@ -799,7 +799,7 @@ export class Vessel {
           // The foot is a dished pad, not a point (render/parts/shapes_aero.js leg: radius 0.2 of the strut's scale,
           // 0.26 on the heavy one, its rim 2.5 cm above its sole). Without the rim a craft lying on its side had the
           // pads standing 20 cm into the ground, and on a slope the downhill edge of each pad was buried.
-          const ls = d.h / 1.2, fr = (d.variant === 'heavy' ? 0.26 : 0.2) * ls, ry = fy + 0.025 * ls * (p.flip ? -1 : 1);
+          const ls = d.legs.foot ? d.legs.foot / 0.2 : d.h / 1.2, fr = (d.variant === 'heavy' ? 0.26 : 0.2) * ls, ry = fy + 0.025 * ls * (p.flip ? -1 : 1);
           add(fx + p._ox * fr, ry, fz + p._oz * fr, 1); add(fx - p._ox * fr, ry, fz - p._oz * fr, 1);
           add(fx - p._oz * fr, ry, fz + p._ox * fr, 1); add(fx + p._oz * fr, ry, fz - p._ox * fr, 1);
           // (and the four points between: a square in a round pad leaves 29 % of its radius outside, 6 cm of the pad

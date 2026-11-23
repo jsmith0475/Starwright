@@ -20,7 +20,7 @@ Build the first stage with four things, all below the separator:
 
 - a **guidance ring** (a Wisp, Mote or Facet probe core, or a Beacon or Keystone ring);
 - a liquid **engine** that can be throttled (the Goshawk does well);
-- **landing legs** near the bottom;
+- **landing legs** near the bottom. The **Heron Folding Leg** is made for this: see "Legs that fold" below;
 - **grid fins** (Lattice Vanes) near the top. It will try without them and miss by kilometres.
 
 Then launch with the **ascent assist**. Three things happen without you:
@@ -39,6 +39,30 @@ the air over Verda: Guidance, **Fly back and land**.
 
 The target is the **Return Pad**, 600 m north of the launch pad: a concrete disc 90 m across with
 two rings and an amber aim point, a road to it from the launch pad, and four light masts.
+
+## Legs that fold
+
+The **Heron Folding Leg** is a long leg for a stage that comes back. Mount four of them low on the
+last tank, with the foot of each leg's box about level with the foot of the tank.
+
+- **On the pad and all the way up and back down, the legs are folded.** Each lies flat against
+  the tank, inside its own outline, its smooth back to the airflow. Folded, a leg adds nothing
+  below the engine and nothing beside the tank that the ground could catch.
+- **Just before touchdown they swing out.** The booster's own landing lowers them when it is
+  60 m above the ground, in the landing burn, and says so ("landing legs down at 60 m"). The
+  swing takes 2.4 seconds; in the flights measured the legs were told down 7 seconds or more
+  before the pads touched.
+- **Down, each leg is one rigid swing about its hinge**, about 57° from straight down. The pad
+  stands 2.9 m out from the leg's mount and 3.8 m below its middle, which puts it 1.9 m below the
+  foot of the tank: about half a metre below a Goshawk's bell. The stance is far wider than the
+  small legs give, so the stage stands steadier.
+- The struts are sprung like every other leg in the game: 40 cm of travel, and a telescoping
+  strut from high on the tank to the middle of the leg, drawn closing as the leg takes the load.
+- `G` lowers and raises them by hand, as with any leg. If you fly the stage down yourself,
+  lowering them is yours to remember.
+
+The small Sprig and the heavy Stilt still work on a booster; they are stowed and lowered at the
+same moments. They are simply too small to see from any distance.
 
 ## Landing on the barge
 
@@ -260,7 +284,14 @@ What this says (it was measured before guidance was written, and guidance was bu
 - `tests/e2e/booster.mjs`, in a real browser through the real flight screen: launch with the
   ascent assist, separation, the hop key, the stages 14 km apart and both flying, the warp hold and
   its message, the hop back, and the upper stage reaching an 83 × 81 km orbit by itself.
-- The whole verification passes: 1,321 checks, 0 failed. 469 unit tests pass.
+- The folding leg: `tests/unit/folding_leg.test.js` (3 tests: the leg fits its box and its pad
+  stands below the engine; folded it adds nothing below or beside; a whole return with the legs
+  folded down to 60 m, then landed and standing on them with the engine clear) and verification
+  group 9h (8 checks: the rigid swing worked from the part's dimensions, the legs fully out
+  before first contact, the standing height from the dimensions to within 2 cm, no strut on its
+  stop). `tests/e2e/booster_return.mjs` now flies the folding legs in a real browser: folded as
+  the landing burn lights, out just before touchdown, standing afterwards.
+- The whole verification passes: 1,329 checks, 0 failed. 472 unit tests pass.
 
 ## For developers
 
