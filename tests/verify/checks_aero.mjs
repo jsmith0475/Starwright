@@ -287,6 +287,26 @@ function shadows(S) {
   S.check('the shadow rule: ahead of the wide part there is no shadow', 0, RA.shade([0, 2, 0], 0.3, [0, 0, 0], 1.3, [0, 1, 0]), 0);
 }
 
+function foldedArrays(S) {
+  // A folded solar array is a flat package against the hull: h tall, t wide, rw thick. Two of them on opposite sides
+  // of a tank; the same tank without them is flown at the same state, and the difference is the force on the pair.
+  const b = sys.byId.verda, d = PARTS.solar_wing, CD = 0.8;
+  const faces = { 'along the stack (edge on)': d.t * d.rw, 'straight at its big face': d.h * d.t, 'along the curve of the hull (side on)': d.h * d.rw };
+  const withWings = rot => { const c = new Craft('tank with arrays'); const r = c.setRoot('tank_m400')[0]; c.attachRadial('solar_wing', r.id, r.pos.y, rot, 2); c.autoStage(); return c; };
+  const cases = [['along the stack (edge on)', 0, 0], ['straight at its big face', 0, 90], ['along the curve of the hull (side on)', Math.PI / 2, 90]];
+  for (const M of [0.5, 3]) for (const [what, rot, alpha] of cases) {
+    if (M > 0.7 && alpha !== 0) continue;                         // across the flow above Mach 0.7 the lee array is in the tank's wake
+    const alt = 30000, speed = M * R.soundSpeed(b, alt);
+    const g1 = measure(withWings(rot), alt, speed, alpha), g0 = measure(single('tank_m400'), alt, speed, alpha);
+    const q = 0.5 * g1.rho * speed * speed, u = g1.vb.map(x => x / speed);
+    const F = R.sub(g1.F, g0.F), along = -R.dot(F, u), across = R.norm(R.sub(F, R.scale(u, -along)));
+    const want = 2 * q * CD * faces[what] * RA.riseBlunt(M);
+    S.check(`two folded ${d.name}s, Mach ${M}, flow ${what}: drag = 2 q x ${CD} x ${faces[what].toFixed(3)} m2${M > 0.7 ? ' x the blunt rise' : ''}`, want, along, 1e-6, { rel: true, unit: 'N' });
+    S.check(`  the same: no force across the flow (fraction of the drag)`, 0, across / want, 1e-9, { max: true });
+  }
+  S.info(`${d.name} folded: the area it showed the air from every side before this step`, d.h * d.t * CD, 'm2', `now ${(d.t * d.rw * CD).toFixed(3)} edge on, ${(d.h * d.rw * CD).toFixed(3)} side on, and the same ${(d.h * d.t * CD).toFixed(3)} face on`);
+}
+
 export const groups = [
   { name: '10a. The air: gas, temperature and the speed of sound on every world', fast: true, run: S => gas(S) },
   { name: '10b. Mach number in flight vs airspeed over the true speed of sound', fast: true, run: S => mach(S) },
@@ -295,4 +315,5 @@ export const groups = [
   { name: '10e. Force and torque on single parts at every attitude, Mach 0.5 to 8, vs the reference', fast: true, run: S => partForces(S) },
   { name: '10f. The capsule: drag by Mach number, and lift when it is held at an angle', fast: true, run: S => capsuleNumbers(S) },
   { name: '10g. Shadow: parts in the wake of a wider part, and parts that are not', fast: true, run: S => shadows(S) },
+  { name: '10h. Folded solar arrays: a flat package shows each direction its own face', fast: true, run: S => foldedArrays(S) },
 ];

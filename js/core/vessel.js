@@ -680,6 +680,11 @@ export class Vessel {
       } else {
         // (a part that lies flat against the hull, the folding leg, states its own area: its box is long, what it shows the air is not)
         p._aRad = (d.wing || d.fin) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
+        // a solar array is a flat package against the hull: h tall, t wide, rw thick. It shows the air its big face
+        // (h x t, the area above) only from the side it is mounted on; end on along the stack it shows t x rw, and
+        // from along the hull's curve h x rw.
+        if (d.shape === 'solar' && d.aRad === undefined && d.rw > 0 && d.t > 0) { p._aAx = d.t * d.rw * 0.8; p._aTan = d.h * d.rw * 0.8; }
+        else p._aAx = -1;
         p._rM = 0.25 * d.h;
         if (d.fin) this._fins.push(p);
       }
@@ -2268,7 +2273,11 @@ export class Vessel {
           if (d.wheel && !p.deployed) aR = 0;
           else if (d.airbrake && p.deployed) aR += d.airbrake.area;
           const k = qdm * aR / sp * keep;
-          fx = -k * vx; fy = -k * vy; fz = -k * vz;
+          if (p._aAx >= 0) {
+            // a flat package: each direction of the flow meets its own face (outward, along the stack, along the curve)
+            const ox = p._ox, oz = p._oz, vo = vx * ox + vz * oz, vt = vz * ox - vx * oz, kt = k * p._aTan / aR;
+            fx = -k * vo * ox + kt * vt * oz; fz = -k * vo * oz - kt * vt * ox; fy = -k * p._aAx / aR * vy;
+          } else { fx = -k * vx; fy = -k * vy; fz = -k * vz; }
           Ax += fx; Ay += fy; Az += fz;
           ATx += ry * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - ry * fx;
           if (p._pA > 0 && p.deployed) {

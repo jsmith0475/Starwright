@@ -120,13 +120,14 @@ It slows higher up, so on the steep 2 km/s test entry the peak heat flux falls f
 away from the side it leans to. It still trims at zero angle by itself: an offset centre of
 mass and steering by roll are step C.
 
-**Rockets going up.** A pointed rocket has less drag above Mach 1.5 than before. Nine of the
-ten stock rockets that fly to orbit get there on 3 to 82 m/s less propellant, and all ten meet
-a 5 to 11 % higher maximum dynamic pressure, because they are going faster where the air is
-thick. The Whisper Probe, a light probe with a blunt top and no nose cone, pays 200 m/s more.
-Colossus reaches its 80 km apoapsis three seconds sooner, while its solid boosters are still
-burning and cannot be throttled, and ends in an 87 by 88 km orbit where it used to end at 80.
-The fleet table is in the pull request.
+**Rockets going up.** A pointed rocket has less drag above Mach 1.5 than before, and a folded
+solar array no longer counts as a barn door (below). All ten stock rockets that fly to orbit
+get there on less propellant: 58 to 145 m/s less for eight of them, 223 m/s for the Latch
+Target and 630 m/s for the Whisper Probe, the two that carry the most array for their size.
+Maximum dynamic pressure is 5 to 26 % higher, because they are going faster where the air is
+thick. Colossus reaches its 80 km apoapsis three seconds sooner, while its solid boosters are
+still burning and cannot be throttled, and ends in a 90 by 91 km orbit where it used to end
+at 80. The fleet table is in the pull request.
 
 **Long bodies lean more easily at speed.** Under the old law a leaning tank felt a side force
 in proportion to the lean. Under Newton's it goes as the square, so at a few degrees there is
@@ -145,10 +146,34 @@ almost none. Cones and fins keep theirs. Two consequences were found and dealt w
 **Sheltered parts.** A stage behind a wider heat shield or a wider tank feels a tenth of the
 stream above Mach 1.5, until the vessel turns far enough to put it back in the open.
 
+## Found on the way: folded solar arrays
+
+The full verification run failed one older check on this step: the Whisper Probe, flown
+straight up at full throttle, tumbled when its upper stage separated at Mach 4.5. The cause
+was not new. A radial part's drag area was its height times its width times 0.8, the same
+from every direction. For most small parts that is fair. A folded Sunfoil Wing is a flat
+package 1.2 m tall, 0.9 m wide and 0.18 m thick, so it was counted as 0.86 m² to the air even
+end on, where it shows 0.13 m². Two of them near the nose of the Whisper Probe's upper stage
+made 60 kN of drag at staging, against an engine of 65 kN, and a turning moment larger than
+everything else on the stage together. Until this step the body's own side force hid it in
+that test; on the autopilot's climb the stage already tumbled at separation on `main`.
+
+Solar arrays (every part of shape `solar`) now show each direction of the flow its own face:
+height times width from the side they are mounted on (unchanged), width times thickness along
+the stack, height times thickness along the curve of the hull. This is the one place where
+this step changes a force below Mach 0.7. An opened array is unchanged. Check group 10h
+measures all three directions.
+
+The Whisper Probe now flies the straight-up test at under one degree off the wind. On the
+autopilot's climb its upper stage still swings wide at separation, because that climb stages
+at 10 degrees angle of attack with a small engine; it recovers and reaches orbit as before.
+That is the rocket's design and the climb profile, not the air model, and it is left alone
+here.
+
 ## Verification
 
-Chapter 10 of the independent checks (`tests/verify/checks_aero.mjs`, 190 checks) carries
-this step in four groups. The reference types the rules a second time from the
+Chapter 10 of the independent checks (`tests/verify/checks_aero.mjs`, 198 checks) carries
+this step in five groups. The reference types the rules a second time from the
 specification and finds the Newtonian force a different way from the game: it cuts each
 part's surface into about 42,000 flat triangles and sums the pressure at the exact angle
 asked for, where the game integrates rings into a table and interpolates.
@@ -159,6 +184,7 @@ asked for, where the game integrates rings into a table and interpolates.
 | 10e | Force and torque on single parts at Mach 0.5 to 8, every 15 degrees of attitude, game against reference | 40 |
 | 10f | The capsule: drag at Mach 8 and lift over drag at 20 degrees against closed forms | 3 |
 | 10g | Shadow: a tank behind a wide heat shield at Mach 0.5 to 6 and six attitudes, three equal tanks that must cast none, the rule near, far and ahead of the caster | 29 |
+| 10h | Two folded solar arrays on a tank against the bare tank: drag with the flow along each of the package's three axes | 8 |
 
 Older checks that restated the old drag law now use the independent aerodynamics: the
 capsule entries of chapter 4, the pod drag in the structure chapter and the booster fall

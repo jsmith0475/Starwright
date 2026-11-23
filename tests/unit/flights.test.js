@@ -476,14 +476,23 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   const hop = AP.planHohmannToMoon(w, v, dray);
   assert.ok(hop, 'transfer to Dray planned');
   fly(AP.executeNode(w, v), 'transfer to Dray');
-  const fix2 = AP.planCorrection(w, v, dray, { periapsis: 12000 });
-  assert.ok(fix2, 'on an encounter course');
-  if (fix2.node) fly(AP.executeNode(w, v), 'Dray correction');
+  // a burn of a few m/s on this engine does not come out exact (each trim here leaves several m/s to correct), and
+  // 0.3 m/s is 10 km of periapsis at Dray: so trim up to four times, as a flight controller would, and then judge
+  // the arrival itself
+  for (let k = 0; k < 4; k++) {
+    const fix2 = AP.planCorrection(w, v, dray, { periapsis: 12000 });
+    assert.ok(fix2, 'on an encounter course');
+    log(`Dray correction ${k + 1}: ${fix2.dv.toFixed(2)} m/s → periapsis ${fix2.periapsis === null ? 'none' : km(fix2.periapsis)}`);
+    if (!fix2.node) break;
+    fly(AP.executeNode(w, v), 'Dray correction');
+  }
   coast(() => v.body === dray, 3e6);
   assert.equal(v.body, dray, 'reached Dray');
+  log(`DRAY arrival periapsis ${km(v.periapsis)} at ${v.orbitalSpeed.toFixed(0)} m/s`);
+  assert.ok(v.periapsis > 6000 && v.periapsis < 20000, 'arrives near the 12 km it aimed for: ' + v.periapsis);
   AP.planCircularize(w, v, 'periapsis');
   fly(AP.executeNode(w, v), 'Dray capture');
-  assert.equal(v.situation, 'orbit');
+  assert.equal(v.situation, 'orbit', `Dray orbit ${km(v.apoapsis)} × ${km(v.periapsis)}, e ${v.getOrbit(w.ut).e.toFixed(3)}\n` + m.lines.slice(-8).join('\n'));
   log(`DRAY ORBIT ${km(v.apoapsis)} × ${km(v.periapsis)}; ${v.deltaV.toFixed(0)} m/s left`);
   // 6. down
   // The landing autopilot does not choose its site: it comes down on whatever ground is under the ship, and Dray is

@@ -122,7 +122,7 @@ the body model in [AERODYNAMICS.md](AERODYNAMICS.md)). The reference has its own
 its own body aerodynamics in `tests/verify/ref_aero.mjs`: the curves and rules typed a second time,
 and the Newtonian force summed over a part's surface cut into about 42,000 flat triangles at the
 exact angle asked for (the game integrates rings into a table every 2.5 degrees and interpolates).
-190 checks pass, 0 fail.
+198 checks pass, 0 fail.
 
 | Group | What | Checks | Representative numbers |
 |---|---|---|---|
@@ -133,6 +133,7 @@ exact angle asked for (the game integrates rings into a table every 2.5 degrees 
 | 10e | Force and torque on single parts (a tank, a nose cone, the capsule, a heat shield, an adapter) at Mach 0.5 to 8 and every 15 degrees of attitude, from one step of the game against the reference | 40 | see the run |
 | 10f | The capsule: drag coefficient at Mach 8 against C_p,max (1 + cos^2 25 deg) / 2, and lift over drag held 20 degrees off at Mach 5 and 8 against the closed form for its cap | 3 | lift over drag 0.322 against 0.324; before this step the game gave 0.20 |
 | 10g | Shadow: a tank behind a wide heat shield at Mach 0.5, 1.1, 2 and 6 and six attitudes, three equal tanks that must cast none, and the rule near, far and ahead of the caster | 29 | see the run |
+| 10h | Two folded solar arrays on a tank against the bare tank: drag with the flow along the stack, straight at the big face and along the curve of the hull | 8 | 2e-10 relative; a folded Sunfoil Wing shows 0.130 m2 end on where it was counted as 0.864 |
 
 What moved in the game, measured on the stock rockets flown by the same ascent autopilot before
 and after: every rocket that reached orbit still does, on 1 to 10 m/s less propellant (the
@@ -141,10 +142,11 @@ under 300 m; the height at which each rocket passes Mach 1 fell by 400 to 900 m;
 booster returns of `tests/tools/booster_sweep.mjs` still land inside their targets with about
 10 m/s more left. `tests/tools/fleet_report.mjs` prints these numbers for any checkout.
 
-What step B moved, measured the same way against step A: nine of the ten rockets that fly to
-orbit use 3 to 82 m/s less propellant (a pointed rocket has less drag above Mach 1.5) and the
-Whisper Probe, blunt on top, 200 m/s more; maximum dynamic pressure is 5 to 11 % higher;
-Colossus ends in an 87 by 88 km orbit where it used to end at 80, because it reaches its
+What step B moved, measured the same way against step A: all ten rockets that fly to orbit
+use less propellant (58 to 145 m/s for eight of them, 223 m/s for the Latch Target and 630 m/s
+for the Whisper Probe), from the lower drag of pointed shapes above Mach 1.5 and from folded
+solar arrays now showing the air their edge; maximum dynamic pressure is 5 to 26 % higher;
+Colossus ends in a 90 by 91 km orbit where it used to end at 80, because it reaches its
 apoapsis three seconds sooner with its solid boosters still burning; the capsule's peak heat
 flux on the steep 2 km/s test entry falls from 126.7 to 119.2 kW/m2; the twelve booster returns
 still land inside their targets. The checks of chapters 4, 7 and 9 that restated the old drag

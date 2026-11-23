@@ -109,7 +109,7 @@ Only the exposed part of an end face counts. A tank in the middle of a stack has
 
 A blunt face that leads also gets a small righting moment (its centre of pressure shifts toward the windward edge) and resists pitching. That is why a capsule settles heat shield first.
 
-Small attached parts (antennas, lights, legs, ladders) take plain drag on one small area, straight against the flow at that part.
+Small attached parts (antennas, lights, legs, ladders) take plain drag on one small area, straight against the flow at that part. A folded solar array is the exception: it is a flat package against the hull, and each direction of the flow meets its own face, the big one only from the side it is mounted on.
 
 > example: A bare ${tank.name} (${tank.h} m long, ${(2 * tank.r).toFixed(2)} m wide) has a face area of $${sig(face, 3)}$ m² and a side area of $${sig(side, 3)}$ m² after their coefficients. At a dynamic pressure of ${q0 / 1000} kPa below Mach 0.7, flying end on it feels $${sig(q0 * face * (1 + T.BASE_DRAG) / 1000, 3)}$ kN of drag. Broadside it feels $${sig(q0 * side / 1000, 3)}$ kN.
 
