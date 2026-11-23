@@ -5,10 +5,11 @@ A two-stage rocket on methane and liquid oxygen, modelled on SpaceX's Starship (
 its size to suit Starwright's small worlds. The names are our own: the ship is the
 **Shearwater**, the booster is the **Stalwart**, the engine is the **Peregrine**.
 
-It is being built in steps. **Step 1 is in the game: the rocket itself.** It stands on the pad,
-flies to orbit on its own two liquids, and hot-stages. The tower that catches it, the propellant
-depot, the transfer of propellant in orbit and the ship's belly-first return come next (see
-"What is not built yet").
+It is being built in steps. **Two are in the game: the rocket, and the tower that launches and
+catches it.** The stack stands on the tower's mount, flies to orbit on its own two liquids and
+hot-stages, and the booster flies back and is caught by its two pins. The propellant depot, the
+transfer of propellant in orbit and the ship's belly-first return come next (see "What is not
+built yet").
 
 ## What is new in the game because of it
 
@@ -57,13 +58,75 @@ Flown by the ascent assist to an 80 km orbit of Verda with two crew and a loaded
 | Staging | 104 s after lift-off, 29.5 km up, 1,110 m/s |
 | Propellant left in the booster at staging | 61 t of 400 t |
 | Orbit reached | 80.3 by 79.4 km |
-| Propellant left in the ship in orbit | 70 t of 160 t (44 %) |
-| Delta-v left in the ship in orbit | 1,500 m/s |
+| Propellant left in the ship in orbit | 69 t of 160 t (43 %) |
+| Delta-v left in the ship in orbit | 1,480 m/s |
 | Delta-v of the ship with full tanks | 2,800 m/s |
 
 The last three rows are the reason for the depot. Leaving low orbit for Pell, braking into
 orbit there, leaving again and keeping about 250 m/s for the landing burn at home costs about
-2,020 m/s. The ship arrives with 1,500. Filled up in orbit it has 2,800.
+2,020 m/s. The ship arrives with 1,480. Filled up in orbit it has 2,800.
+
+## The tower and the catch
+
+The **Catch Tower** stands 500 m north-west of the launch pad: a 91 m steel tower (five-eighths of
+the real 146 m), a launch mount beside it, and two long arms that ride up and down its face. A
+stack with catch pins and no legs is rolled out to this mount, not to the launch pad. The map
+marks it.
+
+**What you do.** Launch with the ascent assist, as before. Nothing else: the assist stages early
+enough for the booster to get home, and the booster flies itself back while the ship goes on to
+orbit. Press **\\** to watch it or take over. To fly it yourself, open Guidance on the booster and
+choose **Fly back to the tower**, or do it by hand: the arms take anything that meets the limits
+below.
+
+**How the return is flown.** Flip, then a boostback burn on the inner 13 engines until the
+predicted end of the fall is on the mount. A long fall engine first, steering on the three grid
+fins. A landing burn on the inner 13 that stops the stage about 20 m above the arms. Then the
+centre 3 alone: it slides over the mount, waits until it is steady, and comes down at 1.2 m/s
+until the arms have it.
+
+One thing in this is new, and a booster this heavy needs it. On the way down the guidance aims
+the point where the landing burn will *stop* the stage, not the point where it would hit the
+ground with no burn. This stage lights 1.9 km up while it still has sideways speed, and stops
+well short of its unpowered impact point: aimed the old way it arrived 50 to 70 m off the mount,
+aimed this way 4 m.
+
+**What the arms will take.** The base of the stage must come down to 3 m above the mount:
+
+| | Limit |
+|---|---|
+| Distance from the mount's axis | 2.5 m (the arms swing to meet it) |
+| Sink rate | 5 m/s |
+| Sideways speed | 2 m/s |
+| Lean | 8° |
+| Turning rate | 0.25 rad/s |
+
+Inside all five, the arms have it: the stage is held where it is, stood upright, and stays
+until its own engines lift it out again. Outside any one of them the arms cannot take it, the
+game says which limit it broke, and the stage goes on down onto the mount.
+
+**Measured** (`node tests/tools/tower_dev.mjs`, 80 km orbit, with the drag model of re-entry step B):
+
+| | |
+|---|---|
+| Staging | 104 s, 29.5 km, 62 t left in the booster |
+| Boostback burn | 40 s, from 37 km |
+| Landing burn lights | 1,920 m up, 334 m/s |
+| Off the mount when the fall is stopped | 2 m |
+| Caught | 324 s after lift-off, at 1.4 m/s, 2 cm from the mount's axis |
+| Propellant left in the booster | 3 t |
+| Ship in orbit | 44 % full, 1,495 m/s left |
+
+**Honest limits of the catch.**
+
+- The arms are not solid. Nothing can hit them on the way in or on the way out, and a stage
+  that misses does not strike an arm: it falls to the mount. The five limits are the whole model.
+- The pins are not checked one by one. The stage has to carry two; where they sit sets how high
+  the arms are drawn, not whether the catch works.
+- A stage is taken wherever it is within 2.5 m, and is turned in the arms, the shorter way round, until its two pins lie north and south, one on each rail. The drawn arms move to it.
+- The mount is at ground level. There is no flame trench, no water deluge and no damage to the
+  pad from 33 engines.
+- A caught booster cannot be put back on the mount, refuelled or flown again yet.
 
 ## Where this differs from the real thing
 
@@ -74,7 +137,7 @@ orbit there, leaving again and keeping about 250 m/s for the landing burn at hom
   about 3.8 km/s, not 9.4, so a rocket in real proportions would arrive almost full and the
   depot would have nothing to do.
 - **The booster does more of the work.** On Earth the booster gives roughly a quarter of the
-  speed to orbit. Here it gives nearer a third, and the ship arrives 44 % full where a real
+  speed to orbit. Here it gives nearer a third, and the ship arrives 43 % full where a real
   Starship arrives nearly empty. The cargo (49 t in the bay, on a 45 t forward section) is
   chosen so that the ship cannot fly on to Pell and back without refuelling and can when full.
 - **One refuelling, not ten or more.** For the same reason.
@@ -91,14 +154,12 @@ orbit there, leaving again and keeping about 250 m/s for the landing burn at hom
 | Step | What | Status |
 |---|---|---|
 | 1 | The rocket: two liquids, ring engines, hot staging, flies to orbit | in the game |
-| 2 | A launch tower with catch arms, and the booster flying back to be caught by its two pins | next |
-| 3 | A propellant depot in low orbit, docking side by side, and a transfer that needs the tanks settled | planned |
+| 2 | A launch tower with catch arms, and the booster flying back to be caught by its two pins | in the game |
+| 3 | A propellant depot in low orbit, docking side by side, and a transfer that needs the tanks settled | next |
 | 4 | The ship's return: belly first on its four flaps, the flip, and the catch | planned, after the re-entry model (roadmap item 6) |
 | 5 | The whole mission as one scenario, and a Science chapter on orbital refuelling | planned |
 
-Until step 2, the booster has catch pins and no legs, so it is not flown home: after staging it
-flies on as its own vessel (press **\\** to hop to it) and comes down in the sea. The four flaps
-are fitted and weighed and do not steer yet.
+The four flaps are fitted and weighed and do not steer yet.
 
 ## For people reading the code
 
@@ -110,7 +171,10 @@ are fitted and weighed and do not steer yet.
   `vessel.js` and `craft.js` treat the pair as one propellant whose mass is the smaller of what
   the two can make up.
 - Hot staging: `hotDue` and `finishHotStage` in `vessel.js`.
+- The tower: `TOWER` and the site in `js/core/bodies.js`, the catch in `js/core/tower.js`, the held state
+  (`surface.held`) in `vessel.js`, the return in `boosterRecovery` (`js/core/booster.js`, options `floor`,
+  `sets`, `aimBurn`), the drawing in `js/render/tower.js`.
 - The stock design: `shearwater()` in `js/core/craft.js`.
-- Checks: `tests/unit/shearwater.test.js`, and group 2e of the independent verification
+- Checks: `tests/unit/shearwater.test.js`, `tests/unit/tower.test.js`, and group 2e of the independent verification
   (`tests/verify/checks_burns.mjs`): mass flow, mixture ratio and the rocket equation for each
   engine set.

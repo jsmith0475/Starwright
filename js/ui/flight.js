@@ -15,7 +15,8 @@ import * as THREE from '../lib/three.module.min.js';
 import { World } from '../core/world.js';
 import { stallSpeed, roverCruiseSpeed } from '../core/vessel.js';
 import { Craft } from '../core/craft.js';
-import { SYSTEM, BARGE } from '../core/bodies.js';
+import { SYSTEM, BARGE, TOWER } from '../core/bodies.js';
+import { PARTS } from '../core/parts.js';
 import { EXPERIMENTS, programStep } from '../core/career.js';
 import { closestApproach } from '../core/trajectory.js';
 import { el, fmt, showModal, isModalOpen } from './dom.js';
@@ -173,6 +174,14 @@ export function createFlightScreen(app) {
         app.audio.play('stage');
         if (mine && hud) hud.invalidate();
         break;
+      case 'caught':
+        app.audio.play('gear'); if (mine && cam) cam.kick(0.3);
+        toast(p.vessel.name + ' is caught: the arms have it, ' + p.speed.toFixed(1) + ' m/s, ' + p.offset.toFixed(1) + ' m from the mount', 'good');
+        if (hud) hud.invalidate();
+        break;
+      case 'catchMissed':
+        toast(p.vessel.name + ': the arms could not take it. It was ' + p.reason, 'warn');
+        break;
       case 'hotstage':
         if (mine) { app.audio.play('stage'); toast('Hot staging: the ship lights its engines, then the ring lets go', 'info'); if (cam) cam.kick(0.5); }
         break;
@@ -186,11 +195,12 @@ export function createFlightScreen(app) {
           family.add(p.vessel.id); family.add(p.debris.id);
           const b = p.debris;
           // a stage built to come back (engine, propellant and legs) starts flying itself home at once
-          if (autopilot && b.engines && b.engines.length && (b.legParts || []).length && b.body === SYSTEM.home && b.enginePower().thrust > 0 && !parked.has(b.id)) {
+          const toTower = towerCraft(b);
+          if (autopilot && b.engines && b.engines.length && ((b.legParts || []).length || toTower) && b.body === SYSTEM.home && b.enginePower().thrust > 0 && !parked.has(b.id)) {
             try {
-              parked.set(b.id, { ctl: autopilot.boosterRecovery(world, b, { target: landingTarget() }), kind: 'recovery' });
+              parked.set(b.id, { ctl: returnProgram(b), kind: 'recovery' });
               b.program = 'recovery';
-              toast(b.name + ' is flying itself back to land. Press ' + keyLabel(K('hopVessel')) + ' to watch it or take over.', 'good');
+              toast(b.name + (toTower ? ' is flying itself back to the tower to be caught. Press ' : ' is flying itself back to land. Press ') + keyLabel(K('hopVessel')) + ' to watch it or take over.', 'good');
             } catch (err) { console.warn('[flight] booster return failed to start:', err && err.message); }
           } else if (b.engines && b.engines.length) toast(b.name + ' is flying on its own. Press ' + keyLabel(K('hopVessel')) + ' to fly it.', 'info');
         }
@@ -361,6 +371,7 @@ export function createFlightScreen(app) {
       return null;
     }
     if (v.landed) {
+      if (body === SYSTEM.home && v.surface && v.surface.held) return { id: 'recover', items: [[null, 'Held by the tower. Press Recover (top right) to get the parts back.']] };
       if (body === SYSTEM.home) return { id: 'recover', items: [[null, 'Down safe. Press Recover (top right) to bank the science and get the parts back.']] };
       return null;
     }
@@ -951,7 +962,8 @@ export function createFlightScreen(app) {
           if (body === SYSTEM.home) add('land', 'Land at the runway', 'flies the approach, flares and brakes', wheels >= 2 || v.hasGear, 'No landing gear');
         }
         if (rocket && body === SYSTEM.home && v.engines.length) {
-          add('recovery', 'Fly back and land', 'boostback to the Return Pad by the launch pad, then a landing burn on the engine', v.enginePower().thrust > 0, 'No propellant');
+          if (towerCraft(v)) add('recovery', 'Fly back to the tower', 'boostback to the catch tower, a landing burn, then down between the arms on the centre engines', v.enginePower().thrust > 0, 'No propellant');
+          else add('recovery', 'Fly back and land', 'boostback to the Return Pad by the launch pad, then a landing burn on the engine', v.enginePower().thrust > 0, 'No propellant');
           if (SYSTEM.sites.barge) add('recoverybarge', 'Land on the barge', 'steer to the barge ' + SYSTEM.sites.barge.name + ', ' + Math.round(BARGE.east / 1000) + ' km east of the pad, and land on its deck', v.enginePower().thrust > 0, 'No propellant');
         }
         if (rocket && v.verticalSpeed > -5) add('ascent', 'Ascent to orbit', 'takes over the climb to a ' + Math.round((atmoH + 10000) / 1000) + ' km orbit');
@@ -1001,7 +1013,7 @@ export function createFlightScreen(app) {
         else if (id === 'drive') ctl = autopilot.roverDrive(world, v, { distance: 1000, speed: 8 });
         else if (id === 'node') ctl = autopilot.executeNode(world, v, { useWarp: true });
         else if (id === 'landhere') { if ((v.legParts || []).length && !v.legsDown) v.toggleLegs(); ctl = autopilot.hoverslamLanding(world, v, { useWarp: true }); }
-        else if (id === 'recovery') ctl = autopilot.boosterRecovery(world, v, { target: landingTarget() });
+        else if (id === 'recovery') ctl = returnProgram(v);
         else if (id === 'recoverybarge') { ctl = autopilot.boosterRecovery(world, v, { target: SYSTEM.sites.barge.dir, targetName: 'the barge' }); id = 'recovery'; }
         else if (id === 'deorbit') ctl = autopilot.deorbit(world, v, { periapsis: Math.min(atmoH * 0.45, 35000) });
         if (!ctl) return false;
@@ -1019,7 +1031,7 @@ export function createFlightScreen(app) {
       if (!autopilot || !v || v.type !== 'ship') return;
       if (!(v.situation === 'prelaunch' || v.situation === 'landed' || v.situation === 'flying' || v.situation === 'suborbital')) { toast('Ascent assist only flies from the ground to orbit', 'info'); return; }
       try {
-        assist = autopilot.ascentProgram(world, { targetAlt: ascentAlt(v.body), useWarp: false, recover: v.body === SYSTEM.home ? { target: landingTarget() } : null });
+        assist = autopilot.ascentProgram(world, { targetAlt: ascentAlt(v.body), useWarp: false, recover: v.body === SYSTEM.home ? { target: towerCraft(v) ? SYSTEM.sites.tower.dir : landingTarget() } : null });
         assistKind = 'ascent';
         // already flying: skip the program's own "ignite and release" step (it would fire the next stage)
         if (v.stageIndex > 0 && !v.landed) { assist.phase = 'ascent'; v.ctrl.throttle = 1; }
@@ -1080,7 +1092,7 @@ export function createFlightScreen(app) {
       if (!launchSnap) { toast('This flight was resumed: there is no launch to go back to', 'info'); return false; }
       restoreCareer(launchSnap.career);
       const w = launchSnap.base ? World.fromJSON(JSON.parse(launchSnap.base)) : new World({ ut: launchSnap.ut });
-      w.launch(Craft.fromJSON(launchSnap.craft), { crew: launchSnap.crew, site: launchSnap.site === 'runway' ? runwaySite().start : 'pad' });
+      w.launch(Craft.fromJSON(launchSnap.craft), { crew: launchSnap.crew, site: launchSnap.site === 'runway' ? runwaySite().start : towerCraft(Craft.fromJSON(launchSnap.craft)) ? 'tower' : 'pad' });
       bindWorld(w);
       brakeLock = false; brakeHeld = false;
       cam.reset(); cam.frame(world.active);
@@ -1638,6 +1650,19 @@ export function createFlightScreen(app) {
 
   /** Where a returning booster is sent: the landing zone by the pad. */
   function landingTarget() { const s = SYSTEM.sites && SYSTEM.sites.landing; return (s || SYSTEM.launchSite).dir; }
+  /** Is this craft (or vessel) one whose stages come back to the tower: two catch pins or more, and no legs? */
+  function towerCraft(c) {
+    if (!SYSTEM.sites || !SYSTEM.sites.tower || !c) return false;
+    const parts = c.partList || c.parts || [];
+    let pins = 0, legs = 0;
+    for (const p of parts) { const d = p.def || PARTS[p.type]; if (!d) continue; if (d.catchPin) pins++; if (d.legs) legs++; }
+    return pins >= 2 && !legs;
+  }
+  /** The return program for a stage: to the tower's arms for one with pins, to the Return Pad for one with legs. */
+  function returnProgram(b) {
+    if (towerCraft(b)) return autopilot.boosterRecovery(world, b, { target: SYSTEM.sites.tower.dir, targetName: 'the tower', floor: TOWER.hang - 0.5, sets: { burn: 1, final: 2 }, aimBurn: true });
+    return autopilot.boosterRecovery(world, b, { target: landingTarget() });
+  }
   /** A booster's return is called out step by step, whichever vessel is being watched. */
   function callouts(ctl, kind, pv) {
     if (!ctl.log) return;
@@ -1728,8 +1753,9 @@ export function createFlightScreen(app) {
       runwayCache = null;
       scene = createFlightScene(app);
       const rs = site === 'runway' ? runwaySite() : null;
-      const siteArg = rs ? rs.start : 'pad';
-      const siteDir = rs ? rs.start.dir : SYSTEM.launchSite.dir;
+      // a stack built to be caught (catch pins, no legs) is rolled out to the catch tower's mount, not the launch pad
+      const siteArg = rs ? rs.start : towerCraft(craft) ? 'tower' : 'pad';
+      const siteDir = rs ? rs.start.dir : siteArg === 'tower' ? SYSTEM.sites.tower.dir : SYSTEM.launchSite.dir;
       let base = null;
       if (baseJSON) {
         try {

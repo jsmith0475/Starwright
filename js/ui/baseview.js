@@ -17,6 +17,8 @@
 import * as THREE from '../lib/three.module.min.js';
 import { createBase, baseMaterials, BASE_LAYOUT } from '../render/basegfx.js';
 import { createLocalGround, createSkyRig, skyAt } from '../render/baseenv.js';
+import { createTower } from '../render/tower.js';
+import { TOWER } from '../core/bodies.js';
 import { VERDA_DAY } from './dom.js';
 import { createPostChain } from '../render/post.js';
 
@@ -54,6 +56,8 @@ export function getBaseView(app) {
   const ground = createLocalGround({ quality: low ? 'low' : 'high' });
   const rig = createSkyRig({ quality: low ? 'low' : 'high' });
   scene.add(ground.group, base.group, rig.group);
+  // the catch tower stands at its own site, north-west of the pad, its arms parked open (scenery here: nothing to pick)
+  try { const tower = createTower({ quality: low ? 'low' : 'high' }); tower.position.set(TOWER.east, 0, -TOWER.north); scene.add(tower); } catch (err) { console.warn('[base] the catch tower could not be built:', err && err.message); }
   if (base.pavedMask && ground.setPaved) ground.setPaved(base.pavedMask);
   const byId = Object.fromEntries(base.buildings.map(b => [b.id, b]));
   const pickRoots = base.buildings.map(b => b.pick);

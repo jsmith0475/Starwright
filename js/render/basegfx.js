@@ -926,9 +926,38 @@ function buildReturnPad(k) {
   }
 }
 
+/** The Catch Tower's compound (SYSTEM.sites.tower; the tower itself and the Tall Bay are js/render/tower.js, which
+ *  keeps the same numbers): the mount, the Tall Bay's spot, and the two ways in. */
+export const TOWER_SITE = { x: -420, z: -260, half: 62, bay: [-545, -340], road: [[-358, -232], [-160, -152]] };
+function nearSeg(x, z, a, b, r) { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) < r; }
+/** Nothing grows on the tower's compound, round the Tall Bay or on the ways between them. */
+function onTowerSite(x, z) {
+  const T = TOWER_SITE;
+  return inRect(x, z, [T.x - T.half - 8, T.z - T.half - 8, T.x + T.half + 8, T.z + T.half + 8]) || Math.hypot(x - T.bay[0], z - T.bay[1]) < 52
+    || nearSeg(x, z, T.bay, [T.x, T.z], 16) || nearSeg(x, z, T.road[0], T.road[1], 12);
+}
+function buildTowerSite(k) {
+  const T = TOWER_SITE, { x, z } = T, bx = T.bay[0], bz = T.bay[1], ry = Math.atan2(bz - z, x - bx), len = Math.hypot(bx - x, bz - z);
+  k.flat('slab', x, z, T.half * 2, T.half * 2, 0.03, 0xa9a59b);                          // the apron
+  k.flat('slab', (x + bx) / 2, (z + bz) / 2, len, 16, 0.045, C.gravel, ry);             // the transporter's way from the Tall Bay's door
+  k.flat('slab', bx, bz, 66, 60, 0.035, C.conc, ry);                                    // the Tall Bay's own slab
+  k.disc('concrete', x, z, 24, 0.06, C.conc, 48);                                       // the mount's deck
+  k.disc('mark', x, z, 22.4, 0.085, C.amber, 48, 21.6); k.disc('mark', x, z, 12.6, 0.085, C.teal, 48, 11.8);
+  k.disc('mark', x, z, 4.4, 0.085, C.scorch, 24);                                       // the flame hole, under the stack
+  k.flat('mark', x + 15, z, 16, 9, 0.085, 0x57534d);                                    // where the flame is turned out, east, away from the tower
+  for (const s of [-1, 1]) k.flat('mark', x + 15, z + s * 4.9, 16, 0.5, 0.09, C.amber);
+  { const [a, b] = T.road, dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); k.flat('asphalt', (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, L, 9, 0.06, C.asphalt, Math.atan2(-dz, dx)); }
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {                         // four light masts at the apron's corners
+    const mx = x + sx * (T.half - 6), mz = z + sz * (T.half - 6);
+    k.box('concrete', mx, 0, mz, 1.6, 0.4, 1.6, C.concDark); k.beam('metal', [mx, 0, mz], [mx, 18, mz], 0.24, C.white); k.glow(mx, 18.4, mz, 0xfff1c9, 1.8); k.pool(mx, mz, 20);
+  }
+  k.glow(x - 11, 107.6, z, 0xff3524, 3, 1, 1.6, 0.2);                                   // the beacon on the tower's lightning rod
+}
+
 function buildScenery(k, quality) {
   const rnd = k.rnd, cars = [], lamps = [];
   buildReturnPad(k);
+  buildTowerSite(k);
   // crawlerway: two gravel tracks from the VAB door to the pad
   const z0 = 40, z1 = 470, len = z1 - z0, zc = (z0 + z1) / 2;
   for (const s of [-1, 1]) { k.flat('slab', s * 11, zc, 12, len, 0.06, C.gravel); k.flat('slab', s * 17.6, zc, 1.2, len, 0.07, C.concDark); k.flat('slab', s * 4.4, zc, 1.2, len, 0.07, C.concDark); }
@@ -1214,7 +1243,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
       list.push({ x, y: drop(x, z), z, species: 'bush', scale: 0.3 + 0.4 * rnd(), tall: 0.9 + 0.7 * rnd(), yaw: rnd() * TAU, leanX: 0, leanZ: 0, tint: [v * 1.18, v * 1.06, v * 0.7] });
       placed++;
     }
-    for (let i = list.length - 1; i >= 0; i--) if (onReturnPad(list[i].x, list[i].z)) list.splice(i, 1);      // (taken out afterwards, so that every other tree stands where it did)
+    for (let i = list.length - 1; i >= 0; i--) if (onReturnPad(list[i].x, list[i].z) || onTowerSite(list[i].x, list[i].z)) list.splice(i, 1);      // (taken out afterwards, so that every other tree stands where it did)
     flora = createTreeSystem({ trees: list, detail: vegNow, planetRadius, shadows: !low });
     group.add(flora.group);
     // field stones: lumpy boulders in the open and at the edges of the stands (one instanced mesh; not at low quality)
@@ -1229,6 +1258,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
         if (x > 2260 || !clearGround(x, z) || onReturnPad(x, z) || fbm(noise, (x + 5100) / 210, (z + 100) / 210, 3, 2) < 0.55) continue;
         const sc = 0.25 + 1.3 * rnd() * rnd(), g = 0.36 + 0.2 * rnd();
         m4.compose(V3(x, drop(x, z) - 0.05 * sc, z), _q.setFromEuler(_e.set((rnd() - 0.5) * 0.5, rnd() * TAU, (rnd() - 0.5) * 0.5)), V3(sc * (0.8 + 0.5 * rnd()), sc * (0.6 + 0.4 * rnd()), sc * (0.8 + 0.5 * rnd())));
+        if (onTowerSite(x, z)) continue;                                                 // (after the draws, so that every other stone lies where it did)
         rocks.setMatrixAt(n, m4); rocks.setColorAt(n, col.setRGB(g * 1.04, g, g * 0.92)); n++;
       }
       rocks.count = n; rocks.name = 'rocks'; rocks.castShadow = true; rocks.receiveShadow = true; rocks.instanceMatrix.needsUpdate = true; if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;

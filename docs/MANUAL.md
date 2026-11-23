@@ -248,10 +248,18 @@ with 33 Peregrine engines and a ship with 6. Three things about it are new.
 - **Hot staging.** Press Space at booster burn-out and the ship lights its engines first. The
   ring between the stages lets go 0.8 s later and stays on the booster.
 
-Launch it with the ascent assist and it reaches an 80 km orbit with about 44 % of the ship's
+- **The Catch Tower.** A stack with catch pins and no legs launches from the tower's mount,
+  500 m north-west of the launch pad, not from the pad. Launch with the ascent assist and the
+  booster flies itself back and is caught by the tower's arms about five minutes after
+  lift-off, while the ship goes on to orbit. Press **\\** to watch it. To fly the catch yourself,
+  bring the booster's base down to 3 m above the mount, within 2.5 m of its axis, slower than
+  5 m/s down and 2 m/s sideways, and upright to within 8°. Miss any of those and the game says
+  which.
+
+Launch it with the ascent assist and it reaches an 80 km orbit with about 43 % of the ship's
 propellant left. That is not enough to go to Pell and come back. The propellant depot that
-makes up the difference, the tower that catches the booster and the ship's return are not built
-yet: [SHEARWATER.md](SHEARWATER.md) has the numbers and the plan. In career mode it needs the
+makes up the difference and the ship's return are not built yet:
+[SHEARWATER.md](SHEARWATER.md) has the numbers and the plan. In career mode it needs the
 launch pad at its top level (769 t).
 
 ## Targeting, rendezvous and docking

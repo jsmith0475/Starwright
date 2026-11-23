@@ -38,6 +38,8 @@ import * as GFX from '../render/planetgfx.js';
 import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
 import { createPostChain } from '../render/post.js';
 import { createBarge } from '../render/barge.js';
+import { createTower } from '../render/tower.js';
+import { towerClient } from '../core/tower.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
@@ -263,6 +265,10 @@ export function createFlightScene(app) {
   // the landing barge (js/render/barge.js): its long side lies along `heading` (90 = east), which is the model's +X
   let barge = null, bargeSite = SYSTEM.sites && SYSTEM.sites.barge && SYSTEM.sites.barge.deck ? SYSTEM.sites.barge : null;
   const bargeQ = bargeSite ? World.padFrame(bargeSite.dir).multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (90 - (bargeSite.heading ?? 90)) * Math.PI / 180)) : null;
+  // the catch tower (js/render/tower.js): drawn in the space centre's frame at its own site; `towerArm` is the pose of
+  // its arms as drawn, gliding after what the physics says (closed fraction, pin level, the stage's axis from the mount's)
+  let tower = null, towerSite = SYSTEM.sites && SYSTEM.sites.tower ? SYSTEM.sites.tower : null;
+  const towerQ = towerSite ? World.padFrame(towerSite.dir) : null, towerArm = { k: 0, h: 45, x: 0, z: 0 };
   function useLegacyPad() { if (pad) return; pad = createLaunchPad(); pad.visible = false; shadowFlags(pad, false, true); near.add(pad); }
   function adoptBase(b) {
     if (!b || !b.group || disposed) { if (b && b.dispose) b.dispose(); return; }
@@ -957,6 +963,25 @@ export function createFlightScene(app) {
         if (seen) { barge.quaternion.setFromAxisAngle(Y_AXIS, body.rotationAngle(ut)).multiply(bargeQ); barge.position.copy(v2); }
       }
     } else if (barge) barge.visible = false;
+    // ---- the catch tower: built the first time the camera comes within sight of it; its arms follow the stage they take
+    if (towerSite && body === SYSTEM.home) {
+      body.surfaceDirToInertial(towerSite.dir, ut, v2).multiplyScalar(surfaceRadius(body, towerSite.dir)).sub(anchor.pos);
+      const seen = v2.lengthSq() < 3.6e7;                               // 6 km
+      if (seen && !tower) { try { tower = createTower({ quality: qualityName === 'low' ? 'low' : 'high' }); shadowFlags(tower, true, true); towerArm.h = tower.userData.plan.armPark; near.add(tower); } catch (err) { console.warn('[flight] the catch tower could not be built:', err && err.message); towerSite = null; } }
+      if (tower) {
+        tower.visible = seen;
+        if (seen) {
+          tower.quaternion.setFromAxisAngle(Y_AXIS, body.rotationAngle(ut)).multiply(towerQ); tower.position.copy(v2);
+          const c = towerClient(world), cv = c ? views.get(c.vessel) : null, f = 1 - Math.exp(-Math.min(dt, 0.1) * 2.5);
+          // open and parked when nothing is there. The level and the axis are followed faster than the arms close, so
+          // that the rails are under the pins before the pins reach them (the arms start to close 150 m up)
+          const k = c ? c.k : 0, h = c ? c.pinH + c.hang + (cv && cv.lift || 0) : tower.userData.plan.armPark, f2 = c ? 1 - Math.exp(-Math.min(dt, 0.1) * 6) : f;
+          towerArm.k += (k - towerArm.k) * f; towerArm.h += clamp((h - towerArm.h) * f2, -4 * Math.min(dt, 0.1), 4 * Math.min(dt, 0.1));     // (the carriage rides at 4 m/s at most)
+          towerArm.x += ((c ? c.east : 0) - towerArm.x) * f2; towerArm.z += ((c ? c.south : 0) - towerArm.z) * f2;
+          tower.userData.setArms(towerArm.k, towerArm.h, towerArm.x, towerArm.z);
+        }
+      }
+    } else if (tower) tower.visible = false;
 
     elAcc.set(0, 0, 0);
     for (const v of world.vessels) {
@@ -1375,6 +1400,7 @@ export function createFlightScene(app) {
     if (pad) pad.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.dispose) o.material.dispose(); });
     if (base) { near.remove(base.group); try { base.dispose(); } catch { /* ignore */ } base = null; }
     if (barge) { near.remove(barge); try { barge.userData.dispose(); } catch { /* ignore */ } barge = null; }
+    if (tower) { near.remove(tower); try { tower.userData.dispose(); } catch { /* ignore */ } tower = null; }
     if (sunNear.shadow.map) sunNear.shadow.map.dispose();
     if (probeOn) setProbe(false);
     if (probe) { probe.dispose(); probe = null; }

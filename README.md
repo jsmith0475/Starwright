@@ -129,8 +129,9 @@ And around the flying:
   [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
 - **A 39-engine rocket on methane and oxygen.** The stock *Shearwater* is modelled on SpaceX's
   Starship at five-eighths size: 33 engines under the booster, 6 under the ship, two real
-  liquids burnt 3.6 to 1, rings of engines you switch in flight, and hot staging. It is the first
-  step of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
+  liquids burnt 3.6 to 1, rings of engines you switch in flight, and hot staging. It launches
+  from a **Catch Tower**, and its booster flies back and is caught by the tower's arms on two
+  pins, with no legs. These are the first two steps of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
   where it differs from the real one, and what is not built yet.
 - **Three pieces at separation.** A stack separator fires at both ends: the upper stage goes
   on, the stage below falls back clean, and half a second later the ring between them is thrown clear as a piece of its own, with
