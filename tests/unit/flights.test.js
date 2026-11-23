@@ -486,11 +486,9 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   assert.equal(v.situation, 'orbit');
   log(`DRAY ORBIT ${km(v.apoapsis)} × ${km(v.periapsis)}; ${v.deltaV.toFixed(0)} m/s left`);
   // 6. down
-  // The landing autopilot does not choose its site: it comes down on whatever ground is under the ship, and Dray is
-  // rugged. Tried from five points of this orbit (0, 2, 5, 10 and 15 minutes on), it stood on three and came down
-  // on slopes of 25 and 40 degrees on the other two. So this flight does what a pilot would and waits ten minutes
-  // for gentler ground. (Until the climb from Verda changed by a few seconds this test passed with no wait, by luck.)
-  { const t0 = w.ut; AP.fly(w, null, { dt: 0.1, maxSim: 601, until: () => w.ut - t0 >= 600 }); }
+  // Dray is rugged: a fifth of its ground is gentle enough to stand on. The landing autopilot looks before it goes
+  // down (docs/LANDING_SITES.md). Until it did, this flight had to wait ten minutes in orbit for gentler ground,
+  // because from five points of this orbit the old program stood on three and fell on slopes of 25 and 40 degrees.
   const before = m.events.filter(e => e.type === 'explosion').length;
   const land = fly(AP.hoverslamLanding(w, v), 'landing');
   for (let i = 0; i < 200; i++) w.step(0.1);
@@ -504,6 +502,8 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   assert.equal(m.events.filter(e => e.type === 'crewLost').length, 0);
   const tilt = v.pos.clone().set(0, 1, 0).applyQuaternion(v.q).angleTo(v.pos);
   assert.ok(tilt < 0.5, 'standing on its legs: tilt ' + tilt + ' on a slope of ' + v.surface.slope);
+  assert.ok(land.site && land.site.ok && !land.warning, 'on ground it chose as fit to stand on: ' + land.log.map(l => l.msg).join(' | '));
+  assert.ok(Math.atan(v.surface.slope || 0) < 0.14, 'and the ground under it is gentle: ' + v.surface.slope);
   assert.ok(v.legsDown);
   assert.ok(m.events.filter(e => e.type === 'landed').length < 20, 'no endless skipping in the weak gravity');
   assert.ok(v.deltaV > 1200, 'fuel to get back up and out: ' + v.deltaV);

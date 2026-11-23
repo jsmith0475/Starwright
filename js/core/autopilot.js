@@ -10,6 +10,8 @@ import { predictPatches, applyManeuver, closestApproach } from './trajectory.js'
 import { SYSTEM } from './bodies.js';
 import { flightAngles, stallSpeed, surfaceAt, roverCruiseSpeed } from './vessel.js';
 import { returnReserve } from './booster.js';
+import { findSite, slopeLimit, footprint } from './landingsite.js';
+export { assessSite, findSite, slopeLimit, footprint } from './landingsite.js';
 export { boosterRecovery, predictFall, returnReserve, recoverableStage } from './booster.js';
 
 const TAU = Math.PI * 2;
@@ -349,57 +351,194 @@ function groundAt(body, x, y, z, t) {
   body.inertialToSurfaceDir(_d.set(x, y, z).normalize(), t, _d);
   return typeof body.surfaceHeight === 'function' ? body.surfaceHeight(_d) : body.terrainHeight(_d);
 }
-function stopAltitude(body, pos, vel, mass, thrust, ve, throttle, ut = 0) {
+// With `slack` (m) set it also looks at the ground under the whole of the braking path, not only under its end: the
+// answer is then the smaller of the height at the stop and the least clearance on the way plus `slack`. A burn that
+// would stop 40 m above a valley floor after brushing the ridge before it has no clearance to speak of.
+function stopAltitude(body, pos, vel, mass, thrust, ve, throttle, ut = 0, slack = -1) {
   const wy = TAU / body.rotPeriod, gm = body.gm;
   const floor = (body.minElevation || 0) - 5000;
+  const watch = slack >= 0 && typeof body.terrainHeight === 'function' ? (body.maxElevation || 0) + 400 : -Infinity;
   let x = pos.x, y = pos.y, z = pos.z, vx = vel.x, vy = vel.y, vz = vel.z, m = mass;
   const F = thrust * throttle, mdot = ve > 0 ? F / ve : 0;
-  let last = Infinity, t = 0;
+  let last = Infinity, t = 0, clear = Infinity, seen = -9, under = -Infinity;
+  const end = (r, sp) => {
+    const alt = r - body.radius - groundAt(body, x, y, z, ut + t);
+    return { alt: slack >= 0 ? Math.min(alt, clear + slack) : alt, t, speed: sp, stop: alt, clear, x, y, z };
+  };
   for (let i = 0; i < 400; i++) {
     const sx = vx - wy * z, sy = vy, sz = vz + wy * x;
     const sp = Math.sqrt(sx * sx + sy * sy + sz * sz);
     const r = Math.sqrt(x * x + y * y + z * z);
-    if (sp < 0.5 || (sp > last && sp < 20)) return { alt: r - body.radius - groundAt(body, x, y, z, ut + t), t, speed: sp };
+    if (sp < 0.5 || (sp > last && sp < 20)) return end(r, sp);
     last = sp;
+    // (ground far below is looked at every sixth step; within 2.5 km, every step)
+    if (r - body.radius < watch && (i - seen >= 6 || r - body.radius - under < 2500)) {
+      seen = i; under = groundAt(body, x, y, z, ut + t);
+      if (r - body.radius - under < clear) clear = r - body.radius - under;
+    }
     const a = F / m;
     let dt = Math.min(0.5, Math.max(0.02, 0.25 * sp / a));
     const g = -gm / (r * r * r);
     const ax = g * x - a * sx / sp, ay = g * y - a * sy / sp, az = g * z - a * sz / sp;
     vx += ax * dt; vy += ay * dt; vz += az * dt;
+    // (a fast step is hundreds of metres long: within a kilometre of the ground, look under it every 40 m, or a
+    // ridge passes between two looks)
+    if (seen === i && r - body.radius - under < 1000 && sp * dt > 60) {
+      const n = Math.min(12, Math.ceil(sp * dt / 40));
+      for (let k = 1; k < n; k++) {
+        const f = k / n * dt, px = x + vx * f, py = y + vy * f, pz = z + vz * f;
+        const h = Math.sqrt(px * px + py * py + pz * pz) - body.radius - groundAt(body, px, py, pz, ut + t + f);
+        if (h < clear) clear = h;
+      }
+    }
     x += vx * dt; y += vy * dt; z += vz * dt;
     m = Math.max(mass * 0.2, m - mdot * dt);
     t += dt;
-    if (r - body.radius < floor) return { alt: r - body.radius - groundAt(body, x, y, z, ut + t), t, speed: sp };
+    if (r - body.radius < floor) return end(r, sp);
   }
-  return { alt: Math.sqrt(x * x + y * y + z * z) - body.radius - groundAt(body, x, y, z, ut + t), t, speed: last };
+  return end(Math.sqrt(x * x + y * y + z * z), last);
 }
 
 /**
  * Suicide-burn landing on an airless body. From orbit it first lowers the periapsis below the surface,
  * coasts, then brakes so that the surface speed reaches zero `stopAlt` metres above the ground and
  * finally descends vertically. opts: stopAlt (m), touchdownSpeed (m/s), useWarp, deorbitPeriapsis (m, negative).
+ *
+ * It reads the ground (docs/LANDING_SITES.md; opts.terrain: false is the old program, which did not):
+ *   survey    from a closed orbit, with opts.survey (on when it may warp), it works out where a burn begun now
+ *             would bring it down and stays in orbit, for one orbit at most, until there is ground fit to stand on there;
+ *   brake     the braking burn keeps clear of the ground under the whole of its path, not only under its end;
+ *   final     at the hover it looks round (landingsite.js findSite, out to opts.reach metres or what
+ *             opts.siteBudget of the propellant will cross), flies across at opts.cruiseAlt to the nearest ground
+ *             no steeper than the lander can stand on (opts.slopeLimit, default slopeLimit(vessel)), and comes down there.
+ * c.site is the chosen ground, c.warning is set when it is not fit to stand on (none was in reach, or the propellant
+ * ran short), and log lines with a `call` field are the ones the flight screen reads out to the pilot.
  */
 export function hoverslamLanding(world, vessel = world.active, opts = {}) {
   const v = vessel;
   const body = v.body;
-  const o = { stopAlt: 40, touchdownSpeed: 1.5, useWarp: true, deorbitPeriapsis: -0.08 * body.radius, ...opts };
+  const o = { stopAlt: 40, touchdownSpeed: 1.5, useWarp: true, deorbitPeriapsis: -0.08 * body.radius,
+    terrain: true, reach: 400, siteBudget: 0.1, pullUpAt: 12, cruiseAlt: 25, cruiseSpeed: 12, ...opts };
+  // (waiting in orbit for better ground is only offered when it may warp through the wait)
+  if (o.survey === undefined) o.survey = o.terrain && o.useWarp;
   const c = base(world, v, 'hoverslam');
   const st = {};
-  const up = new Vector3(), dir = new Vector3();
+  const up = new Vector3(), dir = new Vector3(), toSite = new Vector3(), want = new Vector3();
   c.dvUsed = 0;
+  /** The chosen landing site: { dir (body-fixed), slope, rough, dist (m it was from the hover point), ok, limit } or null. */
+  c.site = null;
+  /** Set when the ground it is going down on is steeper or rougher than the lander should stand on. */
+  c.warning = null;
+  const deg = a => (a * 180 / Math.PI).toFixed(0) + '°';
+  // (a line the flight screen reads out to the pilot: what the program found on the ground)
+  const call = (msg, kind = 'info') => { c.log.push({ t: world.ut, msg, call: kind }); };
+  // Delta-v to hover across `d` metres leaning at most 0.3 rad: the hover itself, and the push there and back.
+  // (how far it leans to cross, and the sideways push that gives: where gravity is weak a hovering engine has little
+  // to lean with, so it leans further)
+  const crossLean = g => (g < 0.5 ? 0.5 : 0.3);
+  const crossAcc = g => 0.8 * g * Math.tan(crossLean(g));
+  const crossCost = (d, g) => { const a = crossAcc(g), t = 2 * Math.sqrt(d / a) + 6; return 1.05 * g * t + 2 * Math.min(o.cruiseSpeed, Math.sqrt(d * a)); };
+  // Looks at the ground round the hover point and picks where to stand (see landingsite.js). Once per landing.
+  const chooseSite = g => {
+    st.looked = true;
+    if (!o.terrain || typeof body.terrainHeight !== 'function') return;
+    const limit = o.slopeLimit || slopeLimit(v), radius = footprint(v);
+    const dvHave = v.estimateDeltaV();
+    // no further than it can cross in two and a half minutes (on the smallest worlds that is not far)
+    let reach = Math.min(o.reach, 5600 * crossAcc(g));
+    while (reach > 40 && crossCost(reach, g) > o.siteBudget * dvHave) reach *= 0.8;
+    body.inertialToSurfaceDir(_b.copy(v.pos).normalize(), world.ut, _b);
+    const here = _b.clone();
+    let s = findSite(body, here, { radius, reach, limit, samples: Math.round(clamp(reach * 1.5, 120, 700)) });
+    // nothing fit close by: look three times as far, if the propellant set aside for this will take it there
+    if (!s.ok && reach >= o.reach && crossCost(3 * reach, g) <= 2 * o.siteBudget * dvHave) {
+      const far = findSite(body, here, { radius, reach: 3 * reach, limit, samples: 1800 });
+      if (far.ok) { s = far; reach *= 3; }
+    }
+    st.reach = reach;
+    if (!s.dir) { c.warning = `no dry ground within ${reach.toFixed(0)} m`; call(c.warning + ': coming down here', 'warn'); return; }
+    c.site = { dir: s.dir, slope: s.slope, rough: s.rough, dist: s.dist, ok: s.ok, limit, here: s.here.slope, reach };
+    if (s.ok && s.dist < 1) c.note(`the ground here is fit to stand on (slope ${deg(s.slope)})`);
+    else if (s.ok) call(`the ground here slopes ${deg(s.here.slope)}: moving ${s.dist.toFixed(0)} m to ground that slopes ${deg(s.slope)}`);
+    else {
+      const why = s.slope > limit ? `the best slopes ${deg(s.slope)}, this lander's limit is ${deg(limit)}`
+        : s.rough > 0.08 * radius ? `the most level is broken ground, ${(s.rough * 100).toFixed(0)} cm out of flat`
+          : s.wide > 1.4 * limit ? `the most level sits on the edge of ground that slopes ${deg(s.wide)}`
+            : 'the most level has broken ground all round it';
+      c.warning = `no ground fit to stand on within ${reach.toFixed(0)} m: ${why}`;
+      call(c.warning + (s.dist < 1 ? ': coming down here' : `: going ${s.dist.toFixed(0)} m to it`), 'warn');
+    }
+  };
   const needThrottle = () => {
     const { thrust, ve } = v.enginePower();
     if (!(thrust > 0)) return 2;
     const cg = v._baseH || 0;
     const target = o.stopAlt + cg;
-    if (stopAltitude(body, v.pos, v.vel, v.mass, thrust, ve, 1, world.ut).alt < target) return 1.5;   // late: full power
+    // (with the terrain watch on, the path may pass half the hover height lower than it stops, and no lower)
+    const slack = o.terrain ? 0.5 * o.stopAlt : -1;
+    const at = thr => stopAltitude(body, v.pos, v.vel, v.mass, thrust, ve, thr, world.ut, slack).alt;
+    if (at(1) < target) return 1.5;   // late: full power
     let lo = 0.15, hi = 1;
-    if (stopAltitude(body, v.pos, v.vel, v.mass, thrust, ve, lo, world.ut).alt > target) return lo;
+    if (at(lo) > target) return lo;
     for (let i = 0; i < 7; i++) {
       const mid = 0.5 * (lo + hi);
-      if (stopAltitude(body, v.pos, v.vel, v.mass, thrust, ve, mid, world.ut).alt > target) hi = mid; else lo = mid;
+      if (at(mid) > target) hi = mid; else lo = mid;
     }
     return 0.5 * (lo + hi);
+  };
+  /**
+   * Where a deorbit burn begun now would leave the lander hovering: the descent orbit an instant burn here gives,
+   * followed to the point where the braking burn has to start and through that burn. → body-fixed direction, or null.
+   */
+  const predictHover = () => {
+    const ut = world.ut, { thrust, ve } = v.enginePower();
+    if (!(thrust > 0)) return null;
+    // the deorbit burn, flown here as the program flies it: against the motion, easing off as the periapsis comes down
+    const p = _a.copy(v.pos), u = _b.copy(v.vel);
+    const rp = body.radius + o.deorbitPeriapsis, r1 = p.length();
+    let m = v.mass, t = ut, down = null;
+    for (let i = 0; i < 3000; i++) {
+      down = Orbit.fromState(p, u, body.gm, t);
+      const gap = down.periapsis - rp;
+      if (gap <= 0) break;
+      const acc = thrust / m, thr = clamp(gap / (acc * 1500), 0.05, 1), dt = 0.2;
+      const r = p.length(), g = -body.gm / (r * r * r), k = -acc * thr / u.length();
+      u.x += (g * p.x + k * u.x) * dt; u.y += (g * p.y + k * u.y) * dt; u.z += (g * p.z + k * u.z) * dt;
+      p.addScaledVector(u, dt);
+      m -= thrust * thr / ve * dt; t += dt;
+    }
+    if (!down || down.periapsis > rp + 50) return null;
+    const tb = t - ut;
+    m = Math.max(m, v.mass * 0.2);
+    const target = o.stopAlt + (v._baseH || 0);
+    const at = tt => { const s = down.stateAt(tt); return stopAltitude(body, s.r, s.v, m, thrust, ve, 0.9, tt); };
+    let t0 = ut + tb, t1 = t0, hit = null;
+    const span = Math.min(down.period, 4 * Math.PI * Math.sqrt(r1 * r1 * r1 / body.gm)), step = span / 240;
+    for (let i = 1; i <= 240; i++) {
+      t1 = t0 + step;
+      if (down.posAt(t1, _a).length() < body.radius + (body.minElevation || 0) - 2000) { hit = at(t0); break; }
+      if (at(t1).alt < target) {
+        for (let k = 0; k < 12; k++) { const mid = 0.5 * (t0 + t1); if (at(mid).alt < target) t1 = mid; else t0 = mid; }
+        hit = at(t0); t1 = t0; break;
+      }
+      t0 = t1;
+    }
+    if (!hit) return null;
+    c.aimInfo = { burnEnd: ut + tb, brake: t1, stop: t1 + hit.t, pe: down.periapsis - body.radius };
+    return body.inertialToSurfaceDir(new Vector3(hit.x, hit.y, hit.z).normalize(), t1 + hit.t, new Vector3()).normalize();
+  };
+  /** How much of the ground round a body-fixed direction offers a place to stand: the middle and four points 500 m off. → 0..5 */
+  const groundScore = d => {
+    const limit = o.slopeLimit || slopeLimit(v), radius = footprint(v);
+    _b.crossVectors(Y_AXIS, d); if (_b.lengthSq() < 1e-10) _b.set(1, 0, 0); _b.normalize();
+    _c.crossVectors(d, _b);
+    let n = 0;
+    for (let i = 0; i < 5; i++) {
+      _d.copy(d);
+      if (i) _d.addScaledVector(i < 3 ? _b : _c, (i & 1 ? 500 : -500) / body.radius).normalize();
+      if (findSite(body, _d.clone(), { radius, reach: Math.min(o.reach, 300), limit, samples: 220 }).ok) n++;
+    }
+    return n;
   };
   c.update = () => {
     if (c.done) return;
@@ -422,12 +561,41 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
     switch (c.phase) {
       case 'init':
         c.phase = v.periapsis > o.deorbitPeriapsis ? 'deorbit' : 'coast';
-        if (c.phase === 'deorbit') c.note('deorbit burn');
+        // from a closed orbit there is a choice of where to come down: look before leaving it
+        if (c.phase === 'deorbit' && o.survey && typeof body.terrainHeight === 'function' && v.periapsis > (body.maxElevation || 0) + 500 && Number.isFinite(v.getOrbit(ut).period)) {
+          c.phase = 'survey'; st.t0 = ut; st.tLook = -Infinity; st.period = v.getOrbit(ut).period;
+        } else if (c.phase === 'deorbit') c.note('deorbit burn');
         break;
+      case 'survey': {
+        // Looks at the ground a burn begun now would bring it down over. Rough ground: stay in orbit and look again
+        // a little further round, for one orbit at most.
+        mode(v, 'retrograde');
+        v.ctrl.throttle = 0;
+        if (ut < st.tLook) break;
+        // (turned round first, so that the burn it predicts is the one it would fly)
+        if (pointingError(v, _b.copy(v.vel).normalize().negate()) > 0.08) break;
+        const where = predictHover();
+        const score = where ? groundScore(where) : 5;
+        const waited = ut - st.t0;
+        if (score >= 4 || waited > st.period) {
+          if (score < 4) { c.warning = 'no ground fit to stand on was found along this orbit'; call(c.warning + ': going down to look closer', 'warn'); }
+          else if (st.waiting) call(`the ground ahead looks fit to stand on after ${(waited / 60).toFixed(0)} min in orbit: deorbit burn`);
+          else c.note('deorbit burn');
+          c.aim = where;
+          c.phase = 'deorbit';
+          break;
+        }
+        if (!st.waiting) { st.waiting = true; call('the ground ahead is too steep to stand on: staying in orbit until there is better ground below'); }
+        st.tLook = ut + st.period / 90;
+        if (o.useWarp && world.warpTarget === null) world.warpTo(st.tLook);
+        break;
+      }
       case 'deorbit': {
         mode(v, 'retrograde');
-        _a.copy(v.vel).normalize().negate();
-        const err = pointingError(v, _a);
+        // (pointingError works in _a: the direction has to be in another vector, or the answer is always zero and
+        // the burn starts while the lander is still turning round, which is what it did until this was found)
+        _b.copy(v.vel).normalize().negate();
+        const err = pointingError(v, _b);
         const acc = Math.max(0.05, v.maxThrust / v.mass);
         const gap = v.periapsis - o.deorbitPeriapsis;
         v.ctrl.throttle = err < 0.1 ? clamp(gap / (acc * 1500), 0.05, 1) : 0;
@@ -467,6 +635,31 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
         _a.copy(v.surfaceVel).normalize().negate();
         const err = pointingError(v, _a);
         v.ctrl.throttle = err < 0.35 ? clamp(need, 0.1, 1) : 0.05;
+        // Ground proximity: where will it be over the next five seconds as it flies now, and how high is the
+        // ground there? Closer than opts.pullUpAt (12 m) is a pull-up: the thrust goes mostly upward until the path is clear again.
+        // (The stop-point prediction above sees the ground too, but it plans; this is the last line.)
+        if (o.terrain && o.pullUp !== false && v.airspeed > 8) {
+          const r0 = v.pos.length(), cg = v._baseH || 0, vs = v.verticalSpeed;
+          // (as it flies now: its velocity over the ground, and the push of the engine and of gravity on it)
+          want.set(0, 1, 0).applyQuaternion(v.q).multiplyScalar(v.ctrl.throttle * v.maxThrust / v.mass).addScaledVector(up, -body.gm / (r0 * r0));
+          let low = Infinity;
+          for (let i = 1; i <= 10; i++) {
+            const tt = i * 0.5;
+            _c.copy(v.pos).addScaledVector(v.surfaceVel, tt).addScaledVector(want, 0.5 * tt * tt);
+            low = Math.min(low, _c.length() - body.radius - cg - groundAt(body, _c.x, _c.y, _c.z, ut));
+          }
+          _b.copy(v.surfaceVel).addScaledVector(up, -vs);                   // level velocity
+          if (low < o.pullUpAt && vs < 0) st.pull = true;
+          else if (low > 60 || vs > 0.5) { if (st.pull) st.pulled = true; st.pull = false; }
+          if (st.pull) {
+            if (!st.pullSaid) { st.pullSaid = true; call('ground rising ahead: pulling up'); }
+            if (_b.lengthSq() > 1e-6) _b.normalize();
+            dir.copy(up).addScaledVector(_b, -0.5).normalize();
+            point(v, dir);
+            v.ctrl.throttle = 1;
+            break;
+          }
+        }
         if (v.airspeed < 6 || v.radarAlt < o.stopAlt * 0.5) { c.phase = 'final'; c.note(`final descent from ${v.radarAlt.toFixed(0)} m`); }
         break;
       }
@@ -475,23 +668,70 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
         // touch down no harder than a fall from one metre would be there (legs bounce a long way in weak gravity)
         const r = v.pos.length();
         const g = body.gm / (r * r);
+        const fast = !st.committed && v.groundSpeed > 5 && !c.site;        // (still carrying speed out of the braking burn)
+        if (!st.looked && !fast) chooseSite(g);
         let vsT = -clamp(v.radarAlt / 6, Math.min(o.touchdownSpeed, Math.max(0.4, Math.sqrt(2 * g))), 8);
         _a.copy(v.surfaceVel).addScaledVector(up, -v.verticalSpeed);       // horizontal drift
         // Leaning a hovering thrust of g sideways gives only g·tan(lean): in weak gravity lean harder for the same
         // drift, and do not go down the last metres until the drift is gone (a sideways touchdown there skips for minutes).
-        const drift = _a.length(), lean = 0.12 * clamp(1.6 / g, 1, 12);
+        const lean = 0.12 * clamp(1.6 / g, 1, 12);
+        // The chosen site: fly across to it at the hover height, then come down over it. `_a` becomes the error in
+        // the level velocity (the drift, less the speed it should be making towards the site), which is what the
+        // lean below works against.
+        let off = 0, crossing = false;
+        if (c.site && !st.committed) {
+          body.surfaceDirToInertial(c.site.dir, ut, toSite).normalize().multiplyScalar(r).sub(v.pos);
+          toSite.addScaledVector(up, -toSite.dot(up));
+          off = toSite.length();
+          // give the site up if what is left would not see it there and down
+          if (off > 6 && !st.siteLow && v.estimateDeltaV() < 1.5 * crossCost(off, g) + 4 * Math.sqrt(2 * g * Math.max(1, v.radarAlt)) + 20) {
+            st.siteLow = true; c.site = null;
+            c.warning = 'not enough propellant to reach the chosen ground';
+            call(c.warning + ': coming down here', 'warn');
+          }
+        }
+        if (c.site && !st.committed) {
+          const aLat = crossAcc(g);
+          const near = st.over ? 8 : 0.8;        // (there when it is within 0.8 m; it goes back up only if it is carried 8 m off)
+          // (in the last metres it only stops the drift: a lander still creeping towards its spot when the feet
+          // touch trips over them)
+          const vWant = Math.min(o.cruiseSpeed, Math.sqrt(0.9 * aLat * off), off * 0.3) * (st.over ? clamp((v.radarAlt - 6) / 8, 0, 1) : 1);
+          if (off > 1e-3) _a.addScaledVector(want.copy(toSite).normalize(), -vWant);
+          crossing = off > near || (!st.over && v.groundSpeed > 0.15 * clamp(Math.sqrt(g / 1.6), 0.4, 1));     // (and stopped there)
+          st.over = !crossing;
+          if (crossing) {
+            // hold the hover height above the highest ground on the way (looked at as far ahead as it takes to stop)
+            let top = groundAt(body, v.pos.x, v.pos.y, v.pos.z, ut);
+            const ahead = Math.min(off, 20 + v.groundSpeed * v.groundSpeed / aLat);
+            for (let i = 1; i <= 6; i++) { _b.copy(v.pos).addScaledVector(want, ahead * i / 6); top = Math.max(top, groundAt(body, _b.x, _b.y, _b.z, ut)); }
+            const feet = r - body.radius - (v._baseH || 0);
+            // (lower where gravity is weak: the way down from the hover is slow there, and the drift has that long to build)
+            const cruise = Math.min(o.cruiseAlt, Math.max(10, 8 + 10 * g));
+            // (climbing and sinking no faster than a ten metre hop would there: 6 m/s is most of the way to orbit on a comet)
+            vsT = clamp((top + cruise - feet) * 0.4, -Math.min(3, Math.sqrt(10 * g)), Math.min(6, Math.sqrt(20 * g)));
+          }
+        }
+        if (fast && o.terrain) {
+          // not over any one spot yet: stop first, and hold the hover height over the ground it is being carried across
+          crossing = true;
+          want.copy(_a).normalize();
+          let top = groundAt(body, v.pos.x, v.pos.y, v.pos.z, ut);
+          for (let i = 1; i <= 6; i++) { _b.copy(v.pos).addScaledVector(want, v.groundSpeed * i * 0.75); top = Math.max(top, groundAt(body, _b.x, _b.y, _b.z, ut)); }
+          vsT = clamp((top + o.cruiseAlt - (r - body.radius - (v._baseH || 0))) * 0.4, -Math.min(3, Math.sqrt(10 * g)), Math.min(6, Math.sqrt(20 * g)));
+        }
+        const drift = _a.length();
         // Committed: upright and slow a few metres up. From here it goes down whatever a brushing leg does to the
         // drift reading; climbing back to the hover height after first contact only makes it hop.
         if (v.radarAlt > 14) st.committed = false;
         let fastDrift = false;
-        if (st.committed) { /* straight down */ }
+        if (st.committed || crossing) { /* straight down, or holding the hover height on the way across */ }
         else if (g < 1.2) { if (drift > 0.35 && v.radarAlt < 16) { fastDrift = true; vsT = clamp((10 - v.radarAlt) * 0.3, -1, 1); } }
         else if (drift > 0.5 + 0.06 * v.radarAlt) { fastDrift = true; vsT = v.radarAlt < 14 ? clamp((9 - v.radarAlt) * 0.3, -1, 1) : Math.max(vsT, -1.5); }
         // A tall lander that touches down still leaning pivots over its first leg and falls (slowly, in weak gravity):
         // once the drift is small enough to land with, stand upright for the last metres, and wait above the ground
         // until it is upright.
-        let leanMax = 0.35;
-        if (v.radarAlt < 12 && !fastDrift) {
+        let leanMax = crossing ? crossLean(g) : 0.35;
+        if (v.radarAlt < 12 && !fastDrift && !crossing) {
           leanMax = 0.05;
           if (st.committed) leanMax = 0;
           else if (pointingError(v, up) > 0.1) vsT = clamp((9 - v.radarAlt) * 0.3, -1, 1);
@@ -500,7 +740,9 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
         dir.copy(up).addScaledVector(_a, -clamp(lean, 0, leanMax / Math.max(0.01, drift)));
         point(v, dir);
         const acc = v.maxThrust / v.mass;
-        v.ctrl.throttle = clamp((g + (vsT - v.verticalSpeed) * 1.5) / acc, 0, 1);
+        // (a leaning engine holds less of the weight: make it up, or the crossing sinks)
+        const tilt = c.site ? clamp(Math.cos(pointingError(v, up)), 0.7, 1) : 1;
+        v.ctrl.throttle = clamp((g + (vsT - v.verticalSpeed) * 1.5) / (acc * tilt), 0, 1);
         break;
       }
       default: break;

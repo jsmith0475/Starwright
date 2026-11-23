@@ -170,6 +170,23 @@ Once you are standing on the ground with the throttle closed, the attitude hold 
 the craft can settle onto all its feet. Your own stick input still works. The full description
 of the model is in [LANDING_LEGS.md](LANDING_LEGS.md).
 
+## The landing autopilot
+
+On a world with no air, Guidance offers **Land here**. It brakes out of orbit and sets the lander
+down on its engine, and it looks at the ground before it does:
+
+- From orbit it may say "the ground ahead is too steep to stand on" and stay in orbit under time
+  warp until there is better ground below. It waits one orbit at most.
+- On the way down it keeps clear of hills, and pulls up if one rises in front of it.
+- At the hover it tells you what is under you, flies across to the nearest level spot, and comes
+  down there.
+- If nothing in reach is fit to stand on it warns you and goes to the least steep ground it found.
+  Take that warning seriously: take over, or expect to end up on your side.
+
+How steep is too steep depends on the lander. A tall lander on narrow legs is held to about
+5 degrees, a squat one to 6. Any steering key gives you back control. The whole story, with what was
+checked, is in [LANDING_SITES.md](LANDING_SITES.md).
+
 ## Boosters that fly on
 
 ![A dropped first stage flown as its own vessel high above the coast](../media/shot-booster.jpg)

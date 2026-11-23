@@ -4,6 +4,7 @@
 // program in autopilot.js.
 import { Vector3 } from '../lib/three.module.min.js';
 import { TUNING, machDrag, surfaceAt } from './vessel.js';
+import { findSite, slopeLimit, footprint } from './landingsite.js';
 
 const TAU = Math.PI * 2;
 const G0 = 9.80665;
@@ -115,14 +116,17 @@ export function groundDistance(body, a, b) {
  *   entry       burns against the fall if the predicted heating would pass opts.heatLimit of any part's rating,
  *   landing     lights the engine at the height from which it stops just above the ground, drag and mass loss included,
  *   final       comes down the last metres upright over the target.
+ * A stage that cannot reach its target lands where it comes down, and looks at that ground first: it moves to the
+ * nearest spot fit to stand on that its propellant reaches (landingsite.js), and says so when there is none.
  * c.miss is the predicted (then actual) ground distance to the target in metres, c.prediction the last unpowered
- * prediction, c.result the touchdown record. Like every program it only moves the controls.
+ * prediction, c.result the touchdown record, c.site the ground it chose when it landed away from the target
+ * (c.warning when that ground is steeper than it should stand on). Like every program it only moves the controls.
  */
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, ...opts };
-  const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, terrain: true, siteReach: 150, ...opts };
+  const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target, site: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
   const st = { tPred: -Infinity, best: Infinity };
@@ -342,6 +346,30 @@ export function boosterRecovery(world, vessel, opts = {}) {
           st.far = off > o.reach;
           if (st.far && st.short) st.home = body.inertialToSurfaceDir(up, ut, new Vector3()).normalize();
           else if (st.far) { st.home = body.inertialToSurfaceDir(up, ut, new Vector3()).normalize(); c.note(`the target is ${off.toFixed(0)} m away, out of reach: landing here`); }
+        }
+        // Away from the target there is no prepared ground: look at what is below (once, with the legs down, so that
+        // the footprint is the one it will stand on) and move to the nearest spot fit to stand on that the propellant
+        // reaches. A hover costs a booster dearly, so that is not far.
+        if (st.far && o.terrain && !st.looked && (v.legsDown || !v.legParts.length) && typeof body.terrainHeight === 'function') {
+          st.looked = true;
+          const limit = o.slopeLimit || slopeLimit(v), radius = footprint(v), aLat = g * Math.tan(0.2), spare = v.estimateDeltaV() - 60;
+          const cost = d => 1.1 * g * (2 * Math.sqrt(d / aLat) + 4);
+          let reach = o.siteReach;
+          while (reach > 12 && cost(reach) > 0.6 * spare) reach *= 0.8;
+          const s = cost(reach) <= 0.6 * spare ? findSite(body, st.home, { radius, reach, limit, samples: 240 }) : null;
+          const deg = a => (a * 180 / Math.PI).toFixed(0) + '°';
+          if (s && s.here.water) { /* over the sea: nothing to choose */ }
+          else if (s && s.dir && (s.ok || s.slope < s.here.slope - 0.03)) {
+            c.site = { dir: s.dir, slope: s.slope, rough: s.rough, dist: s.dist, ok: s.ok, limit, here: s.here.slope, reach };
+            if (s.dist > 1) { st.home = s.dir.clone(); st.committed = false; }
+            if (s.ok) c.note(s.dist > 1 ? `the ground here slopes ${deg(s.here.slope)}: moving ${s.dist.toFixed(0)} m to ground that slopes ${deg(s.slope)}` : `the ground here is fit to stand on (slope ${deg(s.slope)})`);
+            else { c.warning = `no ground fit to stand on within ${reach.toFixed(0)} m: the best slopes ${deg(s.slope)}, this stage's limit is ${deg(limit)}`; c.note(c.warning); }
+          } else if (s && !s.here.ok) {
+            c.warning = `the ground here slopes ${deg(s.here.slope)}, steeper than this stage should stand on (${deg(limit)}), and there is none better within ${reach.toFixed(0)} m`; c.note(c.warning);
+          } else if (!s) {
+            const here = findSite(body, st.home, { radius, reach: 0, limit, samples: 1 }).here;
+            if (!here.water && !here.ok) { c.warning = `the ground here slopes ${deg(here.slope)}, steeper than this stage should stand on (${deg(limit)}), and there is no propellant to look for better`; c.note(c.warning); }
+          }
         }
         if (st.far) {      // land where it is: hold this spot instead
           body.surfaceDirToInertial(st.home, ut, _t).normalize().multiplyScalar(R).sub(v.pos); _t.addScaledVector(up, -_t.dot(up));

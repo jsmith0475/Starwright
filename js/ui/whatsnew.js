@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'autopilot-reads-terrain', date: '2026-11-23', title: 'The landing autopilot looks at the ground',
+    text: 'Land here now reads the terrain. From orbit it waits for ground the lander can stand on, the braking burn keeps clear of hills, and at the hover it flies across to the nearest level spot before it sets down. It warns you when nothing in reach is fit. In 288 test landings on the twelve airless worlds the old autopilot left 212 landers standing; this one left all 288.' },
   { id: 'true-speed-of-sound', date: '2026-11-23', title: 'A true speed of sound on every world',
     text: 'The game now flies on a true Mach number. Each world has its own gas and its own temperature with height, so sound is slower in cold thin air: 303 m/s on Verda\'s ground, 262 m/s at 10 km. Rockets meet the sound barrier a little sooner and a little lower than before. The top of every atmosphere now fades out smoothly in place of a hard edge. This is the first step of the re-entry work.' },
   { id: 'three-piece-separation', date: '2026-11-23', title: 'Separation leaves three pieces',
