@@ -37,8 +37,8 @@ const REASONS = {
   overheat: 'It overheated and broke apart.', heat: 'It overheated and broke apart.', explosion: 'It exploded.',
 };
 const TARGET_MODES = new Set(['target', 'antiTarget', 'relPrograde', 'relRetrograde']);
-const RES_NAME = { fuel: 'propellant', mono: 'monopropellant', elec: 'charge', xenon: 'xenon' };
-const RES_UNIT = { fuel: 'kg', mono: 'kg', elec: 'EC', xenon: 'kg' };
+const RES_NAME = { lox: 'liquid oxygen', ch4: 'methane', fuel: 'propellant', mono: 'monopropellant', elec: 'charge', xenon: 'xenon' };
+const RES_UNIT = { lox: 'kg', ch4: 'kg', fuel: 'kg', mono: 'kg', elec: 'EC', xenon: 'kg' };
 const DOCK_ASSIST_RANGE = 1500;   // m: the docking assist takes over from here
 /** Guidance programs (the Autopilot panel): what the alert line and the toasts call them. */
 const PROGRAM_NAME = { ascent: 'Ascent assist', dock: 'Docking assist', takeoff: 'Take-off', hold: 'Heading and altitude hold', land: 'Runway landing',
@@ -58,11 +58,11 @@ export const DEFAULT_KEYS = {
   screenshot: 'F1', hideHud: 'F2', quicksave: 'F5', quickload: 'F9',
   rcsForward: 'KeyH', rcsBack: 'KeyN', rcsUp: 'KeyI', rcsDown: 'KeyK', rcsLeft: 'KeyJ', rcsRight: 'KeyL',
   board: 'KeyF', flag: 'KeyP',
-  stress: 'Semicolon',
+  stress: 'Semicolon', engineSet: 'Equal',
 };
 const KEY_HELP = [
   ['Flying', [['pitchDown', 'Pitch down (wheels: drive forward)'], ['pitchUp', 'Pitch up (wheels: reverse)'], ['yawLeft', 'Yaw left (wheels: steer)'], ['yawRight', 'Yaw right (wheels: steer)'], ['rollLeft', 'Roll left'], ['rollRight', 'Roll right'],
-    [null, 'Throttle up / down', ['Shift', 'Ctrl']], ['fullThrottle', 'Full throttle'], ['cutThrottle', 'Cut throttle'], ['stage', 'Fire the next stage'], [null, 'Fine controls', ['Caps Lock']]]],
+    [null, 'Throttle up / down', ['Shift', 'Ctrl']], ['fullThrottle', 'Full throttle'], ['cutThrottle', 'Cut throttle'], ['stage', 'Fire the next stage'], ['engineSet', 'Cluster engines: next engine set'], [null, 'Fine controls', ['Caps Lock']]]],
   ['Systems', [['sas', 'SAS (stability assist)'], ['rcs', 'RCS thrusters'], ['gear', 'Landing legs and gear'], ['lights', 'Lights and solar panels'], ['brakes', 'Brakes (hold)'], ['abort', 'Abort group'], [null, 'Action groups', ['1', '…', '9']]]],
   ['RCS translation', [['rcsForward', 'Forward'], ['rcsBack', 'Back'], ['rcsUp', 'Up'], ['rcsDown', 'Down'], ['rcsLeft', 'Left'], ['rcsRight', 'Right']]],
   ['Navigation', [['map', 'Orbital map'], ['missions', 'Missions: program and contracts'], ['speedMode', 'Speed read-out: surface / orbit / target'], ['target', 'Next target (with Shift: clear)'], ['nextVessel', 'Next vessel'], ['prevVessel', 'Previous vessel'], ['hopVessel', 'Hop between booster and upper stage']]],
@@ -172,6 +172,9 @@ export function createFlightScreen(app) {
       case 'stage':
         app.audio.play('stage');
         if (mine && hud) hud.invalidate();
+        break;
+      case 'hotstage':
+        if (mine) { app.audio.play('stage'); toast('Hot staging: the ship lights its engines, then the ring lets go', 'info'); if (cam) cam.kick(0.5); }
         break;
       case 'decouple':
         // (the piece a broken joint lets go arrives here too, with no part, in the same step as its `structure` event,
@@ -541,6 +544,18 @@ export function createFlightScreen(app) {
     get stressOverlay() { return stressOn; },
     /** The key cap of a remappable action, as the controls dialog shows it. */
     keyLabel(name) { return keyLabel(K(name)); },
+    /** =: the cluster engines that are lit (or, with none lit, all of them) move on to their next set of engines. */
+    nextEngineSet() {
+      const v = active(); if (!v || v.type !== 'ship') return;
+      const all = (v.engines || []).map(e => e.part).filter(p => p.def.engine.modes && v.parts.has(p.id));
+      const lit = all.filter(p => p.ignited && !p.flameout), list = lit.length ? lit : all;
+      if (!list.length) return;
+      for (const p of list) v.doAction(p.id, 'engineMode', []);
+      app.audio.play('switch');
+      const p = list[0], en = p.def.engine;
+      toast((list.length > 1 ? 'Engines: ' : en.count + ' engine cluster: ') + en.modes[p.mode || 0].name, 'info');
+      if (hud) hud.invalidate();
+    },
     /** G: landing legs and retractable wheels together. */
     toggleLegs() {
       const v = active(); if (!v) return;
@@ -750,7 +765,7 @@ export function createFlightScreen(app) {
       }
       return out;
     },
-    transferResources() { return ['fuel', 'mono', 'elec'].filter(r => actions.transferParts(r).length >= 2); },
+    transferResources() { return ['fuel', 'lox', 'ch4', 'mono', 'elec'].filter(r => actions.transferParts(r).length >= 2); },
     /** amount: a number, 'all' (as much as fits) or 'balance' (equal fill level in both). → amount moved (signed for balance). */
     transfer(fromId, toId, resource, amount = 'all') {
       const v = active(); if (!v || v.type !== 'ship') return 0;
@@ -1463,6 +1478,7 @@ export function createFlightScreen(app) {
     if (hit('sas')) { actions.toggleSas(); app.audio.play('switch'); }
     if (hit('rcs')) { actions.toggleRcs(); app.audio.play('switch'); }
     if (hit('gear')) actions.toggleLegs();
+    if (hit('engineSet')) actions.nextEngineSet();
     if (hit('lights')) actions.toggleLightsAndPanels();
     if (hit('abort')) actions.fireGroup('abort');
     if (!shift && !ctrlKey && !alt) for (let i = 1; i <= 9; i++) if (inp.pressed('Digit' + i)) actions.fireGroup(i);
@@ -1626,7 +1642,7 @@ export function createFlightScreen(app) {
   function callouts(ctl, kind, pv) {
     if (!ctl.log) return;
     if (kind === 'ascent') {                                           // (the assist is quiet, except to say why it staged early)
-      for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
+      for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back|for its return/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
       ctl._said = ctl.log.length; return;
     }
     if (kind !== 'recovery') return;

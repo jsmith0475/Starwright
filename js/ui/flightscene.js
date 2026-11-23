@@ -448,7 +448,16 @@ export function createFlightScene(app) {
         // one plume per bell; they ride on the gimballed bell group when the mesh has one
         const exits = nozzleExits ? nozzleExits(p.def) : [null];
         const gim = mesh.userData.refs && mesh.userData.refs.gimbal && mesh.userData.refs.gimbal.parent === mesh ? mesh.userData.refs.gimbal : null;
-        e.plumes = exits.map(ex => { const pl = createPlume(p.def, exits.length > 1 ? ex : null); if (gim) { pl.object.position.sub(gim.position); gim.add(pl.object); } else mesh.add(pl.object); return pl; });
+        // a ring cluster (33 bells) gets one instanced plume per ring instead: it remembers its ring, so the rings
+        // the engine's mode has shut down can go out; a ring that does not swivel stays off the gimbal group
+        const rings = p.def.engine.rings && exits[0] && exits[0].ring !== undefined ? p.def.engine.rings.map((_, k) => exits.filter(ex => ex.ring === k)) : null;
+        e.plumes = (rings || exits).map((ex, k) => {
+          const pl = createPlume(p.def, rings || exits.length > 1 ? ex : null), fixed = rings ? ex[0].fixed : ex && ex.fixed;
+          if (rings) pl.ring = k;
+          if (gim && !fixed) { pl.object.position.sub(gim.position); gim.add(pl.object); } else mesh.add(pl.object);
+          return pl;
+        });
+        e.ringN = rings ? rings.map(r => r.length) : null;
         e.plume = e.plumes[0];
         e.rE = PM.nozzleExitRadius ? PM.nozzleExitRadius(p.def) : e.plume.info.radius;
       }
@@ -568,8 +577,16 @@ export function createFlightScene(app) {
 
       // ---- engines: plume, smoke, ground wash, light
       if (e.plume) {
-        for (const pl of e.plumes) pl.update(level, pAtm, dt);
-        const kind = e.plume.info.kind, rE = e.rE || e.plume.info.radius;
+        // a cluster burns only the rings of its mode: the others get no flame and their bells go dark
+        const lit = e.ringN && def.engine.modes ? (def.engine.modes[p.mode | 0] || def.engine.modes[0]).rings : null;
+        let burning = 1;
+        if (lit) {
+          let on = 0, all = 0;
+          for (const pl of e.plumes) { const is = lit.includes(pl.ring); pl.update(is ? level : 0, pAtm, dt); all += e.ringN[pl.ring]; if (is) on += e.ringN[pl.ring]; }
+          burning = Math.sqrt(on / Math.max(1, all));
+          if (PM.setEngineRings) PM.setEngineRings(mesh, lit);
+        } else for (const pl of e.plumes) pl.update(level, pAtm, dt);
+        const kind = e.plume.info.kind, rE = (e.rE || e.plume.info.radius) * burning;   // smoke, wash and light follow the lit share
         if (level > 0.03) {
           const sgn = p.flip ? -1 : 1;
           // nozzle exit and exhaust direction in scene space

@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'shearwater-rocket', date: '2026-11-23', title: 'Shearwater: 39 engines on methane and oxygen',
+    text: 'A new stock rocket modelled on SpaceX\'s Starship at five-eighths size, with 33 engines under the booster and 6 under the ship. It burns methane and liquid oxygen from separate gauges, and = chooses which rings of engines burn. The ship lights its engines before the staging ring lets go. It reaches orbit 44% full; the propellant depot comes next.' },
   { id: 'true-speed-of-sound', date: '2026-11-23', title: 'A true speed of sound on every world',
     text: 'The game now flies on a true Mach number. Each world has its own gas and its own temperature with height, so sound is slower in cold thin air: 303 m/s on Verda\'s ground, 262 m/s at 10 km. Rockets meet the sound barrier a little sooner and a little lower than before. The top of every atmosphere now fades out smoothly in place of a hard edge. This is the first step of the re-entry work.' },
   { id: 'three-piece-separation', date: '2026-11-23', title: 'Separation leaves three pieces',

@@ -21,7 +21,7 @@
 // each event is clamped and the total zoom per ~100 ms is budgeted, so a flick never teleports the camera.
 
 const GAME_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'F1', 'F2', 'F3', 'F5', 'F9',
-  'Slash', 'Quote', 'Backspace', 'Comma', 'Period', 'BracketLeft', 'BracketRight', 'Backslash']);
+  'Slash', 'Quote', 'Equal', 'Backspace', 'Comma', 'Period', 'BracketLeft', 'BracketRight', 'Backslash']);
 
 const LINE_PX = 16;
 const ZOOM_MIN = 0.8, ZOOM_MAX = 1.25;

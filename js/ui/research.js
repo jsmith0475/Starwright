@@ -152,7 +152,7 @@ export function createResearchScreen(app) {
   function partFacts(d) {
     const out = [[fmt.mass((d.mass || 0) * 1000), 'Dry mass']];
     if (d.engine) { out.push([fmt.num(d.engine.thrust) + ' kN', 'Thrust']); if (d.engine.ispVac) out.push([fmt.num(d.engine.ispVac) + ' s', 'Vacuum Isp']); }
-    if (d.res) for (const [k, v] of Object.entries(d.res)) if (v) out.push([fmt.num(v), { fuel: 'Fuel', mono: 'Monoprop', xenon: 'Xenon', elec: 'Charge', solid: 'Solid fuel', ox: 'Oxidiser' }[k] || k]);
+    if (d.res) for (const [k, v] of Object.entries(d.res)) if (v) out.push([fmt.num(v), { fuel: 'Fuel', mono: 'Monoprop', xenon: 'Xenon', elec: 'Charge', solid: 'Solid fuel', ox: 'Oxidiser', lox: 'Liquid oxygen', ch4: 'Methane' }[k] || k]);
     if (d.crew) out.push([String(d.crew), d.crew === 1 ? 'Seat' : 'Seats']);
     if (d.wing) out.push([fmt.num(d.wing.area, 1) + ' m²', 'Wing area']);
     return out.slice(0, 4);

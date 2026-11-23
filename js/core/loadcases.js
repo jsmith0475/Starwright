@@ -135,7 +135,7 @@ export function analyzeCraft(craft, { body = SYSTEM.home } = {}) {
     if (v.stageIndex >= v.stages.length) break;
     const before = v.partList.length, lit = v.engines.filter(e => e.part.ignited).length;
     let n = 0;
-    do { v.activateNextStage([]); n++; } while (v.partList.length === before && v.stageIndex < v.stages.length && n < 12);
+    do { v.activateNextStage([]); v.finishHotStage(); n++; } while (v.partList.length === before && v.stageIndex < v.stages.length && n < 12);
     for (const e of v.engines) { const p = e.part; if (p.ignited && p.def.engine.type !== 'solid') p.flameout = false; }
     // nothing left and nothing new lit: the remaining stages are parachutes and the like
     if (v.partList.length === before && v.engines.filter(e => e.part.ignited).length === lit) break;

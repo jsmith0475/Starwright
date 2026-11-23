@@ -279,6 +279,63 @@ export function tileMaps() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Brushed stainless sheet (the XXL "Wayfarer" hulls): 3 m tile. Fine brushing along u, faint rolling marks and
+// heat tint, and a soft low-frequency ripple in the normal map so the mirror finish wobbles like thin welded sheet.
+// ---------------------------------------------------------------------------------------------
+export const STEEL_TILE = 3;
+export function steelMaps() {
+  if (cache.has('steel')) return cache.get('steel');
+  const S = 512, r = rng(77), col = canvas(S, S), hgt = canvas(S, S), orm = canvas(S, S);
+  const c = ctxOf(col), hh = ctxOf(hgt), o = ctxOf(orm);
+  c.fillStyle = '#d3d6da'; c.fillRect(0, 0, S, S); hh.fillStyle = grey(128); hh.fillRect(0, 0, S, S); o.fillStyle = 'rgb(255,84,255)'; o.fillRect(0, 0, S, S);
+  // oil-canning: broad shallow dents between the stiffening rings (height only)
+  for (let i = 0; i < 26; i++) {
+    const x = r() * S, y = r() * S, rx = 50 + r() * 90, up = r() < 0.5;
+    wrapDraw(S, S, x, y, rx, (px, py) => { const g1 = hh.createRadialGradient(px, py, 0, px, py, rx); g1.addColorStop(0, grey(up ? 156 : 100, 0.5)); g1.addColorStop(1, grey(128, 0)); hh.fillStyle = g1; hh.fillRect(px - rx, py - rx, rx * 2, rx * 2); });
+  }
+  // brushing: thin streaks all the way round
+  for (let i = 0; i < 1300; i++) {
+    const y = r() * S, t = 0.4 + r() * 1.2, v = r();
+    c.fillStyle = grey(168 + v * 80, 0.05 + r() * 0.1); c.fillRect(0, y, S, t);
+    o.fillStyle = `rgba(255,${(58 + r() * 70) | 0},255,0.35)`; o.fillRect(0, y, S, t);
+  }
+  // rolling marks down the sheet and the odd straw / blue heat stain
+  for (let i = 0; i < 46; i++) { const x = r() * S, w = 2 + r() * 14; c.fillStyle = grey(120 + r() * 120, 0.03 + r() * 0.04); c.fillRect(x, 0, w, S); }
+  for (let i = 0; i < 34; i++) {
+    const x = r() * S, y = r() * S, rad = 24 + r() * 80, tint = r() < 0.5 ? '150,128,96' : '104,118,150', al = 0.03 + r() * 0.06;
+    wrapDraw(S, S, x, y, rad, (px, py) => {
+      const g1 = c.createRadialGradient(px, py, 0, px, py, rad); g1.addColorStop(0, `rgba(${tint},${al})`); g1.addColorStop(1, `rgba(${tint},0)`); c.fillStyle = g1; c.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+      const g2 = o.createRadialGradient(px, py, 0, px, py, rad); g2.addColorStop(0, 'rgba(255,120,255,0.22)'); g2.addColorStop(1, 'rgba(255,120,255,0)'); o.fillStyle = g2; o.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+    });
+  }
+  speckle(c, S, S, r, 1600, 110, 240, 0.08, 1.4);
+  const maps = { map: tex(col, { srgb: true }), normalMap: tex(normalFromHeight(hgt, 1.1)), ormMap: tex(orm) };
+  cache.set('steel', maps); return maps;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Black hexagonal heat tiles (the Wayfarer's belly): 1 m tile, 7 tiles across and 8 rows, so it wraps.
+// ---------------------------------------------------------------------------------------------
+export function hexTileMaps() {
+  if (cache.has('hextile')) return cache.get('hextile');
+  const S = 512, r = rng(93), col = canvas(S, S), hgt = canvas(S, S), orm = canvas(S, S);
+  const c = ctxOf(col), hh = ctxOf(hgt), o = ctxOf(orm), nx = 7, ny = 8, w = S / nx, rowH = S / ny, a = rowH / 1.5, gap = 1.6;
+  c.fillStyle = '#060607'; c.fillRect(0, 0, S, S); hh.fillStyle = grey(40); hh.fillRect(0, 0, S, S); o.fillStyle = 'rgb(255,240,0)'; o.fillRect(0, 0, S, S);
+  const hex = (g, cx, cy) => { const hw = w / 2 - gap, ha = a - gap; g.beginPath(); g.moveTo(cx, cy - ha); g.lineTo(cx + hw, cy - ha / 2); g.lineTo(cx + hw, cy + ha / 2); g.lineTo(cx, cy + ha); g.lineTo(cx - hw, cy + ha / 2); g.lineTo(cx - hw, cy - ha / 2); g.closePath(); g.fill(); };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const v = r(), tone = v < 0.04 ? 40 + r() * 8 : v < 0.2 ? 29 + r() * 7 : 19 + r() * 9, rough = 150 + r() * 70, cx = (i + (j % 2 ? 0.5 : 0)) * w, cy = j * rowH;
+    wrapDraw(S, S, cx, cy, w, (px, py) => {
+      c.fillStyle = `rgb(${tone | 0},${tone | 0},${(tone * 1.06) | 0})`; hex(c, px, py);
+      hh.fillStyle = grey(190 + v * 30); hex(hh, px, py);
+      o.fillStyle = `rgb(255,${rough | 0},0)`; hex(o, px, py);
+    });
+  }
+  speckle(c, S, S, r, 2200, 10, 70, 0.2, 1.6);
+  const maps = { map: tex(col, { srgb: true }), normalMap: tex(normalFromHeight(hgt, 1.6)), ormMap: tex(orm) };
+  cache.set('hextile', maps); return maps;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Tyre tread (u around the wheel, 12 lugs per tile) and woven canopy fabric.
 // ---------------------------------------------------------------------------------------------
 export function treadMaps() {
@@ -385,6 +442,7 @@ export function decalAtlas() {
   stamp('stripeTeal', 64, 64, (w, h) => { g.fillStyle = TEAL; g.fillRect(0, 0, w, h); });
   stamp('stripeDark', 64, 64, (w, h) => { g.fillStyle = INK; g.fillRect(0, 0, w, h); });
   stamp('target', 128, 128, (w, h) => { g.strokeStyle = WHITE; g.lineWidth = 7; for (const rr of [56, 34]) { g.beginPath(); g.arc(64, 64, rr, 0, TAU); g.stroke(); } g.fillStyle = WHITE; g.fillRect(60, 2, 8, 124); g.fillRect(2, 60, 124, 8); g.fillStyle = AMBER; g.beginPath(); g.arc(64, 64, 12, 0, TAU); g.fill(); });
+  word('sizeXXL', 'XXL·5.6', INK, 40);
   // weathering: knock tiny holes out of every marking
   g.save(); g.globalCompositeOperation = 'destination-out';
   for (let i = 0; i < 5200; i++) { g.fillStyle = `rgba(0,0,0,${0.25 + r() * 0.6})`; const s = 0.6 + r() * r() * 3.2; g.fillRect(r() * ATLAS, r() * ATLAS, s, s * (0.5 + r())); }

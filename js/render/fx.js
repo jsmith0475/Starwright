@@ -6,7 +6,8 @@
 // into the flight screen's linear HDR target (the chunks are no-ops there and the post chain tone-maps).
 // Colours are therefore LINEAR and may exceed 1.0 (that is what feeds the bloom).
 //
-//   createPlume(def, exit?)          → { object, update(throttle, pressureAtm, dt), dispose(), info, level }   exit: one nozzle of partmesh.nozzleExits(def)
+//   createPlume(def, exit?)          → { object, update(throttle, pressureAtm, dt), dispose(), info, level }   exit: one nozzle of partmesh.nozzleExits(def),
+//                                      or an array of them (same radius and exit plane): one instanced plume for all, three draw calls
 //   new SmokeTrail({max, additive})  → instanced billboard pool (alias: ParticleField); emit(), update(dt, shift, up)
 //   createExplosion(size, opts)      → { object, update(dt, gravity?) → alive, dispose() }
 //   createReentryGlow({radius,tail}) → { object, update(intensity, flowDirLocal, dt), setSize(r, tail), dispose() }
@@ -41,34 +42,42 @@ export function engineKind(def) {
 // ---------------------------------------------------------------------------------------------
 const PLUME_VS = `${LV0}
 uniform float uLen, uR0, uTail, uShape, uTime, uSeed, uPinch, uDiaN;
-varying float vV; varying float vAng; varying vec3 vNv; varying vec3 vPv;
+varying float vV; varying float vAng; varying vec3 vNv; varying vec3 vPv; varying float vSeed;
 void main(){
   float v = -position.y; vV = v;
   vAng = atan(position.z, position.x);
-  float flick = 1.0 + 0.04 * sin(uTime * 47.0 + uSeed) + 0.03 * sin(uTime * 31.0 + uSeed * 2.0);
+  float sd = uSeed;
+  #ifdef USE_INSTANCING
+    sd += dot(instanceMatrix[3].xz, vec2(3.1, 5.3));   // every bell of a cluster flickers on its own
+  #endif
+  vSeed = sd;
+  float flick = 1.0 + 0.04 * sin(uTime * 47.0 + sd) + 0.03 * sin(uTime * 31.0 + sd * 2.0);
   float len = uLen * flick;
   float prof = mix(1.0, uTail, pow(v, uShape));
   // over-expanded flow at sea level necks in and out between the shock diamonds
   prof *= 1.0 - uPinch * 0.16 * (0.5 - 0.5 * cos(v * uDiaN * 6.2832)) * (1.0 - v);
-  float rad = uR0 * prof * (1.0 + 0.035 * sin(uTime * 60.0 + v * 9.0 + uSeed));
+  float rad = uR0 * prof * (1.0 + 0.035 * sin(uTime * 60.0 + v * 9.0 + sd));
   vec3 p = vec3(position.x * rad, -v * len, position.z * rad);
   vec3 n = normalize(vec3(position.x, (uTail - 1.0) * uR0 / max(len, 0.001), position.z));
+  #ifdef USE_INSTANCING
+    p = (instanceMatrix * vec4(p, 1.0)).xyz;           // instances are only moved, never turned
+  #endif
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vNv = normalize(normalMatrix * n); vPv = mv.xyz;
   gl_Position = projectionMatrix * mv;
   ${LV1}
 }`;
 const PLUME_FS = `${LF0}${NOISE}
-uniform vec3 uCore, uEdge; uniform float uAlpha, uFall, uEdgePow, uDiamond, uDiaN, uTime, uSeed, uStreak, uSpeed;
-varying float vV; varying float vAng; varying vec3 vNv; varying vec3 vPv;
+uniform vec3 uCore, uEdge; uniform float uAlpha, uFall, uEdgePow, uDiamond, uDiaN, uTime, uStreak, uSpeed;
+varying float vV; varying float vAng; varying vec3 vNv; varying vec3 vPv; varying float vSeed;
 void main(){
   ${LF1}
   float facing = abs(dot(normalize(vNv), normalize(-vPv)));
   float body = pow(facing, uEdgePow);
   float along = pow(max(1.0 - vV, 0.0), uFall);
   // streaks racing down the flame, a little turbulence toward the tail
-  float st = fxNoise(vec2(vAng * 3.3 + uSeed, vV * 7.0 - uTime * uSpeed));
-  float tb = fxNoise(vec2(vAng * 7.0 - uSeed, vV * 16.0 - uTime * uSpeed * 1.7));
+  float st = fxNoise(vec2(vAng * 3.3 + vSeed, vV * 7.0 - uTime * uSpeed));
+  float tb = fxNoise(vec2(vAng * 7.0 - vSeed, vV * 16.0 - uTime * uSpeed * 1.7));
   float streak = 1.0 + uStreak * ((st - 0.5) * 1.3 + (tb - 0.5) * 0.9 * vV);
   // shock diamonds: bright knots at regular spacing, strongest near the nozzle
   float ph = fract(vV * uDiaN - 0.22) - 0.5;
@@ -80,13 +89,22 @@ void main(){
   ${OUT}
 }`;
 let plumeGeo = null, glowTex = null;
-function plumeLayer(u) {
+let plumeGeoLite = null;
+function plumeLayer(u, spots = null) {
   if (!plumeGeo) { plumeGeo = new THREE.CylinderGeometry(1, 1, 1, 28, 20, true); plumeGeo.translate(0, -0.5, 0); }
-  const m = new THREE.Mesh(plumeGeo, new THREE.ShaderMaterial({
+  // a cluster's flames are a third of a metre across and there may be twenty of them: a coarser tube is plenty
+  if (spots && !plumeGeoLite) { plumeGeoLite = new THREE.CylinderGeometry(1, 1, 1, 14, 16, true); plumeGeoLite.translate(0, -0.5, 0); }
+  const material = new THREE.ShaderMaterial({
     uniforms: u, vertexShader: PLUME_VS, fragmentShader: PLUME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
     forceSinglePass: true,            // additive: both faces in one draw give the same picture as three's two passes
-  }));
+  });
+  let m;
+  if (spots) {
+    m = new THREE.InstancedMesh(spots.length > 6 ? plumeGeoLite : plumeGeo, material, spots.length);
+    const mx = new THREE.Matrix4(); spots.forEach((s, i) => m.setMatrixAt(i, mx.makeTranslation(s.x, 0, s.z)));
+    m.instanceMatrix.needsUpdate = true;
+  } else m = new THREE.Mesh(plumeGeo, material);
   m.frustumCulled = false; m.renderOrder = 6; m.castShadow = false; m.receiveShadow = false;
   return m;
 }
@@ -106,6 +124,9 @@ const KINDS = {
   solid: { len: 22, lenVac: 1.3, tailSl: 1.0, tailVac: 3.4, coreSl: [5.0, 3.8, 1.8], edgeSl: [3.2, 1.3, 0.25], coreVac: [5.0, 4.2, 2.6], edgeVac: [2.4, 1.1, 0.3], aSl: 1.0, aVac: 0.55, dia: 0.0, streak: 0.8, speed: 12, light: [1.0, 0.78, 0.46] },
   nuclear: { len: 13, lenVac: 1.5, tailSl: 0.45, tailVac: 2.6, coreSl: [2.6, 1.7, 2.0], edgeSl: [1.4, 0.35, 0.6], coreVac: [1.9, 1.5, 2.4], edgeVac: [0.9, 0.3, 0.9], aSl: 0.55, aVac: 0.3, dia: 0.35, streak: 0.35, speed: 14, light: [1.0, 0.6, 0.7] },
   ion: { len: 26, lenVac: 1.0, tailSl: 0.75, tailVac: 0.75, coreSl: [1.6, 3.8, 5.0], edgeSl: [0.15, 0.9, 2.2], coreVac: [1.6, 3.8, 5.0], edgeVac: [0.15, 0.9, 2.2], aSl: 0.75, aVac: 0.75, dia: 0.0, streak: 0.15, speed: 20, light: [0.4, 0.8, 1.0] },
+  // methane and oxygen (engine.prop 'methalox'): a blue-violet core with strong shock diamonds at sea level; in
+  // vacuum it opens wider than a kerosene flame and nearly fades out. It is still a 'liquid' plume to the scene.
+  methalox: { len: 30, lenVac: 0.8, tailSl: 0.46, tailVac: 5.6, coreSl: [0.5, 0.58, 3.3], edgeSl: [0.8, 0.22, 1.7], coreVac: [0.45, 0.7, 2.6], edgeVac: [0.26, 0.28, 0.95], aSl: 0.56, aVac: 0.17, dia: 1.6, streak: 0.4, speed: 11, light: [0.74, 0.7, 1.0] },
   jet: { len: 5.5, lenVac: 1.2, tailSl: 0.55, tailVac: 1.4, coreSl: [2.2, 2.8, 4.2], edgeSl: [2.2, 0.8, 0.2], coreVac: [1.6, 2.0, 3.0], edgeVac: [1.2, 0.5, 0.2], aSl: 0.55, aVac: 0.3, dia: 1.3, streak: 0.4, speed: 16, light: [1.0, 0.7, 0.5] },
 };
 
@@ -117,8 +138,10 @@ const KINDS = {
  * let the scene drive smoke and ground light.
  */
 export function createPlume(def, exit = null) {
-  const kind = engineKind(def), K = KINDS[kind];
-  // `exit` ({x, y, z, r} from partmesh.nozzleExits) gives one plume per bell of a multi-nozzle engine
+  const kind = engineKind(def), look = kind === 'liquid' && def.engine && def.engine.prop === 'methalox' ? 'methalox' : kind, K = KINDS[look];
+  // `exit` ({x, y, z, r} from partmesh.nozzleExits) gives one plume per bell of a multi-nozzle engine; an array of
+  // exits gives one instanced plume that draws a flame at each of them (the bells of one ring of a cluster)
+  const spots = Array.isArray(exit) ? exit : null; if (spots) exit = { x: 0, y: spots[0].y, z: 0, r: spots[0].r };
   const rE = exit && exit.r > 0 ? exit.r : nozzleExitRadius(def), seed = Math.random() * 100;
   const mk = () => ({
     uLen: { value: 1 }, uR0: { value: rE }, uTail: { value: 1 }, uShape: { value: 0.75 }, uTime: { value: 0 }, uSeed: { value: seed },
@@ -127,14 +150,19 @@ export function createPlume(def, exit = null) {
   });
   const uo = mk(), ui = mk();
   const object = new THREE.Group(); object.name = 'plume'; if (exit) object.position.set(exit.x || 0, Number.isFinite(exit.y) ? exit.y : -def.h / 2, exit.z || 0); else object.position.set(0, -def.h / 2, 0); object.visible = false;
-  const outer = plumeLayer(uo), inner = plumeLayer(ui); object.add(outer, inner);
+  const outer = plumeLayer(uo, spots), inner = plumeLayer(ui, spots); object.add(outer, inner);
   const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDotTexture(), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 1 }));
   flare.renderOrder = 7; flare.position.y = -rE * 0.6; object.add(flare);
+  // one soft glow for a whole ring of flames: as wide as the ring, and dimmer, since it is spread thin
+  let spread = 0; if (spots) for (const s of spots) spread = Math.max(spread, Math.hypot(s.x, s.z));
+  // flames standing shoulder to shoulder add up on screen: thin each one so a full ring keeps its colour
+  const aK = spots ? 1 / (1 + 0.05 * (spots.length - 1)) : 1;
+  const fK = spots ? (spread + rE) / rE * 0.72 : 1, fA = spots ? Math.min(1, 0.3 + 1.6 * spots.length * rE * rE / ((spread + rE) * (spread + rE))) : 1;
   const cs = new THREE.Vector3(), es = new THREE.Vector3(), cv = new THREE.Vector3(), ev = new THREE.Vector3();
   cs.fromArray(K.coreSl); es.fromArray(K.edgeSl); cv.fromArray(K.coreVac); ev.fromArray(K.edgeVac);
   let time = 0;
   const api = {
-    object, light: null, level: 0, info: { kind, radius: rE, light: K.light },
+    object, light: null, level: 0, info: { kind, look, radius: rE, light: K.light },
     update(throttle, pressureAtm = 0, dt = 1 / 60) {
       time += dt;
       const target = clamp01(throttle);
@@ -145,7 +173,7 @@ export function createPlume(def, exit = null) {
       const p = Math.sqrt(clamp01(pressureAtm)), vac = 1 - p, pw = 0.28 + 0.72 * level;
       const L = rE * K.len * pw * lerp(1, K.lenVac, vac);
       const tail = lerp(K.tailSl, K.tailVac, Math.pow(vac, 1.5));
-      const alpha = lerp(K.aSl, K.aVac, vac) * (0.35 + 0.65 * level);
+      const alpha = lerp(K.aSl, K.aVac, vac) * (0.35 + 0.65 * level) * aK;
       uo.uLen.value = L; uo.uR0.value = rE * 0.98; uo.uTail.value = tail;
       uo.uAlpha.value = alpha; uo.uFall.value = 0.95 + 1.3 * vac; uo.uEdgePow.value = 1.25 + 1.1 * vac;
       uo.uDiamond.value = K.dia * p * level; uo.uPinch.value = K.dia > 0 ? p : 0; uo.uDiaN.value = ui.uDiaN.value = 4.2 + 2.0 * (1 - level);
@@ -156,10 +184,10 @@ export function createPlume(def, exit = null) {
       ui.uCore.value.copy(uo.uCore.value).multiplyScalar(1.35); ui.uEdge.value.copy(uo.uCore.value).lerp(uo.uEdge.value, 0.4);
       uo.uTime.value = ui.uTime.value = time;
       const fs = rE * (kind === 'ion' ? 3.2 : 3.4) * (0.5 + 0.5 * level) * (1 + 0.08 * Math.sin(time * 53 + seed));
-      flare.scale.set(fs, fs, 1);
+      flare.scale.set(fs * fK, fs * fK, 1);
       const fc = uo.uCore.value;
       flare.material.color.setRGB(fc.x * 0.32, fc.y * 0.32, fc.z * 0.32);
-      flare.material.opacity = (0.35 + 0.65 * level) * lerp(1, 0.55, vac);
+      flare.material.opacity = (0.35 + 0.65 * level) * lerp(1, 0.55, vac) * fA;
     },
     dispose() { outer.material.dispose(); inner.material.dispose(); flare.material.dispose(); },
   };

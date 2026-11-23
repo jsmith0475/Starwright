@@ -11,7 +11,7 @@
 //  - outward(a) = (cos a, 0, -sin a)
 //  - stats(): `twr` is thrust / (startMass * body.surfaceG). For the FIRST stage that produces thrust it uses
 //    sea-level thrust (liftoff); for every later stage it uses vacuum thrust. `twrVac` / `twrAtm` give both.
-import { partDef, currentPartId, engineThrust, engineIsp, G0, PARTS, wantsInterstage, interstageMass } from './parts.js';
+import { partDef, currentPartId, engineThrust, engineIsp, G0, PARTS, PROP_MIX, wantsInterstage, interstageMass } from './parts.js';
 import { partActions, ACTION_GROUPS, liftArea, liftSlope } from './vessel.js';
 
 const TAU = Math.PI * 2;
@@ -70,6 +70,8 @@ export function closedNode(p) { return partDef(p.type).topOnly ? (p.flip ? 'bott
 const isStageable = d => !!(d.engine || d.decoupler || d.chute);
 // Mass (kg) carried as resources: everything except electric charge.
 function resMass(def) { let m = 0; for (const k in def.res) if (k !== 'elec') m += def.res[k]; return m; }
+/** Kilograms of methane and oxygen a part holds that an engine can burn together (0 for a part without both). */
+function mixOf(def) { const mix = PROP_MIX.methalox; let a = Infinity; for (const k in mix) a = Math.min(a, (def.res[k] || 0) / mix[k]); return a > 0 && a < Infinity ? a : 0; }
 
 export class Craft {
   constructor(name = 'Untitled Craft') {
@@ -776,7 +778,7 @@ export class Craft {
   cost() { let c = 0; for (const p of this.parts) c += partDef(p.type).cost; return c; }
   /** Wet mass in kg. */
   mass() { let m = this.interstageMass(); for (const p of this.parts) { const d = partDef(p.type); m += d.mass * 1000 + resMass(d); } return m; }
-  dryMass() { let m = this.interstageMass(); for (const p of this.parts) { const d = partDef(p.type); m += d.mass * 1000 + resMass(d) - (d.res.fuel || 0) - (d.res.solid || 0) - (d.res.xenon || 0); } return m; }
+  dryMass() { let m = this.interstageMass(); for (const p of this.parts) { const d = partDef(p.type); m += d.mass * 1000 + resMass(d) - (d.res.fuel || 0) - (d.res.solid || 0) - (d.res.xenon || 0) - mixOf(d); } return m; }
   /** kg of interstage trusses on the craft (counted in mass(), dryMass(), centerOfMass() and stats()). */
   interstageMass() { let m = 0; for (const t of this.interstages()) m += t.mass; return m; }
 
@@ -805,6 +807,7 @@ export class Craft {
       if (d.engine) along.set(p.id, isTilted(p) ? partAxis(p).y : 1);
       if (d.res.fuel) fuel.set(p.id, d.res.fuel);
       if (d.res.xenon) fuel.set(-p.id, d.res.xenon);
+      if (mixOf(d) > 0) fuel.set(p.id + 0.5, mixOf(d));      // key id + ½: methane and oxygen as one propellant
       if (d.res.solid) solid.set(p.id, d.res.solid);
     }
     const ignited = new Set();
@@ -813,7 +816,7 @@ export class Craft {
       let m = 0;
       for (const id of alive) {
         const d = defs.get(id);
-        m += (truss.get(id) || 0) + d.mass * 1000 + resMass(d) - (d.res.fuel || 0) - (d.res.solid || 0) - (d.res.xenon || 0) + (fuel.get(id) || 0) + (fuel.get(-id) || 0) + (solid.get(id) || 0);
+        m += (truss.get(id) || 0) + d.mass * 1000 + resMass(d) - (d.res.fuel || 0) - (d.res.solid || 0) - (d.res.xenon || 0) - mixOf(d) + (fuel.get(id) || 0) + (fuel.get(-id) || 0) + (fuel.get(id + 0.5) || 0) + (solid.get(id) || 0);
       }
       return m;
     };
@@ -832,11 +835,12 @@ export class Craft {
     // Burning engines → [{id, def, mdot, tanks}] given the current propellant state.
     const burning = () => {
       const sec = this.sections(alive);
-      const tanksBySec = new Map(), xenonBySec = new Map();
+      const tanksBySec = new Map(), xenonBySec = new Map(), mixBySec = new Map();
       for (const id of alive) {
         const s = sec.get(id);
         if ((fuel.get(id) || 0) > EPS) { if (!tanksBySec.has(s)) tanksBySec.set(s, []); tanksBySec.get(s).push(id); }
         if ((fuel.get(-id) || 0) > EPS) { if (!xenonBySec.has(s)) xenonBySec.set(s, []); xenonBySec.get(s).push(-id); }
+        if ((fuel.get(id + 0.5) || 0) > EPS) { if (!mixBySec.has(s)) mixBySec.set(s, []); mixBySec.get(s).push(id + 0.5); }
       }
       const list = [];
       for (const id of ignited) {
@@ -845,7 +849,7 @@ export class Craft {
         const mdot = d.engine.thrust * 1000 / (d.engine.ispVac * G0);
         if (d.engine.type === 'jet') continue;           // air-breathers have range, not delta-v: see `jetThrust`
         if (d.engine.type === 'solid') { if ((solid.get(id) || 0) > EPS) list.push({ id, def: d, mdot, tanks: null }); }
-        else { const tanks = (d.engine.type === 'ion' ? xenonBySec : tanksBySec).get(sec.get(id)); if (tanks) list.push({ id, def: d, mdot, tanks }); }
+        else { const tanks = (d.engine.type === 'ion' ? xenonBySec : d.engine.prop === 'methalox' ? mixBySec : tanksBySec).get(sec.get(id)); if (tanks) list.push({ id, def: d, mdot, tanks }); }
       }
       return list;
     };
@@ -924,7 +928,7 @@ export class Craft {
       }
       if (defs.some(d => d.engine && d.engine.type === 'ion') && !defs.some(d => d.res && d.res.xenon > 0)) warnings.push('Ion engines need xenon.');
     }
-    if (defs.some(d => d.command === 'crew') && !defs.some(d => d.chute)) warnings.push('Crewed craft has no parachute.');
+    if (defs.some(d => d.command === 'crew') && !defs.some(d => d.chute || d.flap)) warnings.push('Crewed craft has no parachute.');
     this.stages.forEach((s, i) => { if (!s.length) warnings.push(`Stage ${i + 1} is empty.`); });
     return { ok: errors.length === 0, errors, warnings };
   }
@@ -1419,6 +1423,22 @@ function moonstep() {
   return c;
 }
 
+// The Shearwater stack (docs/SHEARWATER.md): a two-stage methane and oxygen rocket modelled on SpaceX's Starship. A booster
+// with thirty-three engines, three grid fins and two catch pins; on it, through a hot-staging ring, a ship with six.
+function shearwater() {
+  const c = new Craft('Shearwater');
+  const [pod] = c.setRoot('pod_shearwater');
+  const s = stackDown(c, pod, ['bay_shearwater', 'tank_xxl_ship', 'eng_peregrine6', 'ring_hotstage', 'tank_xxl_long', 'tank_xxl_long', 'eng_peregrine33']);
+  const ship = s[1], top = s[4];
+  const topY = top.pos.y + partDef(top.type).h / 2;
+  for (const a of [0, Math.PI / 2, Math.PI]) if (c.attachRadial('fin_grid_xxl', top.id, topY - 1.6, a, 1).length !== 1) throw new Error('stock craft: grid fin');
+  for (const a of [Math.PI / 4, Math.PI * 3 / 4]) if (c.attachRadial('pin_catch', top.id, topY - 3.4, a, 1).length !== 1) throw new Error('stock craft: catch pin');
+  if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
+  if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
+  c.autoStage();                                   // [33 engines] [ship engines + hot-staging ring]
+  return c;
+}
+
 /**
  * Ready-made designs. The first seven (Hopper I, Skylark II, Pell Runner, Ember Twin, Mote Sounder, Latch Target,
  * Latch Chaser) use the original catalog; the rest need the second-pass parts and are left out if any is missing.
@@ -1454,8 +1474,9 @@ const STOCK_NOTES = {
   'Whisper Probe': 'An ion probe on a two-stage launcher. Unfold the solar wings before lighting the Whisper drive.',
   'Hearthstone Core': 'A station core with a two-seat lab, Latch Rings fore and aft and its own power.',
   'Moonstep': 'A squat two-seat lander for small moons. No launcher: carry it on a Latch Ring.',
+  'Shearwater': 'Modelled on SpaceX\'s Starship: a 33-engine booster and a 6-engine ship on methane and oxygen. It reaches orbit with a loaded cargo bay and too little left to go on to Pell.',
 };
-const SECOND_PASS = [kiteTrainer, skimmer, trundleScout, trundleLander, colossus, farwind, whisperProbe, hearthstone, moonstep];
+const SECOND_PASS = [kiteTrainer, skimmer, trundleScout, trundleLander, colossus, farwind, whisperProbe, hearthstone, moonstep, shearwater];
 /** Where a stock design is meant to start: 'runway' for aircraft and rovers, else 'pad'. */
 export function stockSite(craft) {
   const defs = craft.parts.map(p => partDef(p.type));

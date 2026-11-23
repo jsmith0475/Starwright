@@ -214,7 +214,7 @@ function setFuel(v, frac, types = null) {
   for (const p of v.partList) {
     if (types && !types.includes(p.type)) continue;
     if (p.def.engine && p.def.engine.type === 'solid') continue;
-    if (p.res && p.res.fuel > 0) p.res.fuel = (p.def.res.fuel || p.res.fuel) * frac;
+    for (const k of ['fuel', 'lox', 'ch4']) if (p.res && p.res[k] > 0) p.res[k] = (p.def.res[k] || p.res[k]) * frac;
   }
   v._updateMass(false);
   v.updateResources();

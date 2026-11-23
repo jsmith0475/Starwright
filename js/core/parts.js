@@ -4,7 +4,7 @@
 // Radial parts: rw = radial extent (outward), h = vertical extent, t = tangential thickness.
 // thrust in kN, isp in seconds, torque in kN*m, cost in funds.
 export const G0 = 9.80665;
-export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875 };
+export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875, XXL: 2.8125 };
 //
 // Second-pass fields (see docs/SECOND_PASS.md for the contract, docs/PARTS_TECH.md for tech ids and extras):
 //   wing: { area, control: false|'pitch'|'roll'|'yaw'|'auto', sweep? }   on shape 'wing' | 'elevon' | 'tailfin'
@@ -26,6 +26,15 @@ export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875 };
 //   attach.surface on wings and tail fins (WING): surface parts may mount on them
 //   shape 'pylon' (attach.outer without a decoupler): a fixed hardpoint; a stack part (a jet, a pod, a tank) mounts
 //   on its outer face exactly like a booster on a radial clamp, shares fuel with the craft and never separates.
+// Methane and oxygen (docs/SHEARWATER.md):
+//   res.lox, res.ch4 (kg)      two real liquids. An engine with engine.prop: 'methalox' burns them together in the
+//                              proportion PROP_MIX.methalox (3.6 to 1 by mass) and stops when either runs out.
+//   engine.rings: [{ n, thrust (kN, vacuum, EACH engine), ispVac, ispAtm, gimbal }]   a cluster drawn bell by bell
+//   engine.modes: [{ name, rings: [ring indices lit] }]   which rings burn; mode 0 is every ring, and engine.thrust,
+//                              ispVac, ispAtm and gimbal are the totals of mode 0 so nothing else needs to know.
+//   joint: 2                   end rings this many times as strong as a plain part's (structure.js)
+//   decoupler.hot: true        a hot-staging ring: it lets go of the stage above and stays on the stage below
+//   shape 'flap' (flap: { area, where: 'fore' | 'aft' })   a body flap; it is drawn and weighed, and does not steer yet
 // Interstage trusses (not a catalog part; see the helpers at the bottom of this file and Craft.interstages()):
 //   whatever is stacked on the nozzle end of a rocket engine is joined to the engine's mount ring by an open
 //   lattice ring that surrounds the engine, so the load runs rim to rim and never through the bell. The truss
@@ -758,6 +767,52 @@ const defs = [
     shape: 'lab', h: 3.0, r: 1.25, attach: STACK, crew: 2, res: { elec: 200 }, experiment: 'lab_study', lab: { rate: 1, mult: 1.5, elecUse: 0.4 }, tolerance: 8, maxTemp: 1500,
     desc: 'A pressurised workshop for two. Benches, sample racks and a slightly sticky centrifuge.' },
 
+  // ---------- The Shearwater stack (docs/SHEARWATER.md): a two-stage methane and oxygen rocket, 5.6 m across ----------
+  { id: 'eng_peregrine33', name: 'Peregrine Cluster 33', cat: 'engines', tech: 'very_heavy', cost: 98000, mass: 17.0, size: 'XXL',
+    joint: 2, shape: 'engine', variant: 'cluster33', h: 3.2, r: 2.8125, attach: STACK,
+    engine: { type: 'liquid', prop: 'methalox', thrust: 0, ispVac: 0, ispAtm: 0, gimbal: 0,   // filled from the rings below
+      rings: [{ n: 3, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 8, radius: 0.36 }, { n: 10, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 8, radius: 1.22 },
+        { n: 20, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 0, radius: 2.38 }],
+      modes: [{ name: 'All 33', rings: [0, 1, 2] }, { name: 'Inner 13', rings: [0, 1] }, { name: 'Centre 3', rings: [0] }] },
+    tolerance: 8, maxTemp: 1900,
+    desc: 'Thirty-three Peregrine engines on one thrust plate: three in the centre, ten round them, twenty on the rim. The inner thirteen steer. It can burn all thirty-three, the inner thirteen, or the centre three.' },
+  { id: 'eng_peregrine6', name: 'Peregrine Mount 3+3', cat: 'engines', tech: 'very_heavy', cost: 26000, mass: 4.2, size: 'XXL',
+    joint: 2, shape: 'engine', variant: 'cluster6', h: 3.6, r: 2.8125, attach: STACK,
+    engine: { type: 'liquid', prop: 'methalox', thrust: 0, ispVac: 0, ispAtm: 0, gimbal: 0,
+      rings: [{ n: 3, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 8, radius: 0.5 }, { n: 3, thrust: 375, ispVac: 380, ispAtm: 200, gimbal: 0, radius: 1.75, vacuum: true }],
+      modes: [{ name: 'All 6', rings: [0, 1] }, { name: 'Sea-level 3', rings: [0] }, { name: 'Vacuum 3', rings: [1] }] },
+    tolerance: 8, maxTemp: 1900,
+    desc: 'Three steering sea-level Peregrines in the centre and three wide-belled vacuum Peregrines around them. Burn all six, or either three.' },
+  { id: 'tank_xxl_long', name: 'Stalwart Tank XXL-200', cat: 'tanks', tech: 'very_heavy', cost: 21000, mass: 25.0, size: 'XXL',
+    joint: 2, shape: 'tank', variant: 'steel', h: 18.75, r: 2.8125, attach: STACK, res: { lox: 156520, ch4: 43480 }, tolerance: 7, maxTemp: 1500,
+    desc: 'A stainless tank for two liquids: 157 tonnes of liquid oxygen above 43 tonnes of liquid methane, in the 3.6 to 1 the Peregrine burns.' },
+  { id: 'tank_xxl_ship', name: 'Shearwater Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 30.0, size: 'XXL',
+    joint: 2, tiles: true, shape: 'tank', variant: 'steel', h: 15, r: 2.8125, attach: STACK, res: { lox: 125220, ch4: 34780 }, tolerance: 7, maxTemp: 1700,
+    desc: 'The ship\'s own tank, tiled down one side: 125 tonnes of liquid oxygen and 35 tonnes of liquid methane.' },
+  { id: 'ring_hotstage', name: 'Hot-Stage Ring XXL', cat: 'structure', tech: 'very_heavy', cost: 4200, mass: 3.0, size: 'XXL',
+    joint: 2, shape: 'hotring', h: 2.2, r: 2.8125, attach: STACK, decoupler: { force: 40, hot: true }, command: 'probe', crew: 0, torque: 60, res: { elec: 600 }, elecDrain: 0.2,
+    tolerance: 9, maxTemp: 2000,
+    desc: 'A vented ring on top of a booster. The stage above lights its engines through the vents before it lets go, and the ring stays on the booster. It also carries the booster\'s guidance.' },
+  { id: 'pod_shearwater', name: 'Shearwater Forward Section', cat: 'command', tech: 'very_heavy', cost: 42000, mass: 45.0, size: 'XXL',
+    joint: 2, shape: 'capsule', variant: 'ogive', h: 9.0, r: 2.8125, rTop: 0.35, rBottom: 2.8125, attach: STACK,
+    command: 'crew', crew: 6, torque: 120, res: { mono: 600, elec: 2400 }, tolerance: 12, maxTemp: 2300,
+    drag: { top: 0.15, bottom: 0.9, side: 0.45 }, experiment: 'crew_report', comY: -1.5,
+    desc: 'The front of the ship: a long steel nose with the crew deck inside.' },
+  { id: 'bay_shearwater', name: 'Shearwater Cargo Bay', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 49.0, size: 'XXL',
+    joint: 2, shape: 'cargobay', h: 4.5, r: 2.8125, attach: STACK, tolerance: 10, maxTemp: 2300,
+    desc: 'A loaded cargo bay: about forty tonnes of freight bound for Pell behind a steel door. The ship is sized to carry it, and cannot reach Pell with it unless it is refuelled in orbit.' },
+  { id: 'fin_grid_xxl', name: 'Lattice Vane XXL', cat: 'aero', tech: 'very_heavy', cost: 2600, mass: 1.1,
+    joint: 2, shape: 'fin', variant: 'grid', h: 2.4, rw: 2.6, t: 0.3, attach: RADIAL, fin: { area: 6.2, control: true }, tolerance: 10, maxTemp: 2300,
+    desc: 'A grid fin the size of a garage door, for steering a very large booster on its way down.' },
+  { id: 'pin_catch', name: 'Catch Pin', cat: 'structure', tech: 'very_heavy', cost: 900, mass: 0.35,
+    shape: 'catchpin', h: 0.5, rw: 0.55, t: 0.5, attach: RADIAL, catchPin: true, aRad: 0.1, tolerance: 30, maxTemp: 2300,
+    desc: 'A stub of solid steel that sticks out of a stage near its top. A stage with two of these and no legs is built to be caught by its pins. There is nothing to catch it yet.' },
+  { id: 'flap_fore', name: 'Shearwater Forward Flap', cat: 'aero', tech: 'very_heavy', cost: 1800, mass: 1.0,
+    joint: 2, shape: 'flap', variant: 'fore', h: 4.6, rw: 2.3, t: 0.3, attach: RADIAL, flap: { area: 8, where: 'fore' }, aRad: 0.7, tolerance: 10, maxTemp: 2300,
+    desc: 'One of the ship\'s two forward flaps. Fitted and weighed; it does not steer yet.' },
+  { id: 'flap_aft', name: 'Shearwater Aft Flap', cat: 'aero', tech: 'very_heavy', cost: 2200, mass: 1.6,
+    joint: 2, shape: 'flap', variant: 'aft', h: 6.4, rw: 2.9, t: 0.3, attach: RADIAL, flap: { area: 15, where: 'aft' }, aRad: 0.9, tolerance: 10, maxTemp: 2300,
+    desc: 'One of the ship\'s two aft flaps. Fitted and weighed; it does not steer yet.' },
   // ---------- Internal (not in catalog) ----------
   { id: 'pip', name: 'Pip (EVA)', cat: 'internal', tech: 'start', cost: 0, mass: 0.09,
     shape: 'pip', h: 0.9, r: 0.25, attach: STACK, command: 'eva', crew: 1, torque: 0.1, res: { evafuel: 5 },
@@ -766,11 +821,33 @@ const defs = [
 ];
 
 const DEFAULT_DRAG = { top: 0.9, bottom: 0.9, side: 0.5 };
+/** Totals of the rings `lit` (indices) of a cluster engine: { n, thrust (kN, vacuum), ispVac, ispAtm, gimbal (degrees,
+ *  weighted by thrust: the steering the whole cluster gets from the rings that swivel) }. */
+export function ringTotals(engine, lit) {
+  let n = 0, F = 0, mdot = 0, Fa = 0, g = 0;
+  for (const i of lit) {
+    const r = engine.rings[i], f = r.n * r.thrust;
+    n += r.n; F += f; mdot += f / r.ispVac; Fa += f * r.ispAtm / r.ispVac; g += f * (r.gimbal || 0);
+  }
+  return { n, thrust: F, ispVac: mdot > 0 ? F / mdot : 0, ispAtm: mdot > 0 ? Fa / mdot : 0, gimbal: F > 0 ? g / F : 0 };
+}
+/** The figures an engine part burns with now: its own, or for a cluster those of the rings its mode has lit. */
+export function engineNow(def, mode) {
+  const e = def.engine;
+  if (!e.rings || !mode) return e;
+  const m = e.modes[mode];
+  if (!m) return e;
+  return m._t || (m._t = Object.freeze({ ...ringTotals(e, m.rings), type: e.type, prop: e.prop }));
+}
 export const PARTS = {};
 for (const d of defs) {
   d.res = d.res || {};
   d.drag = d.drag || DEFAULT_DRAG;
   if (d.attach.stack) { d.rTop = d.rTop ?? d.r; d.rBottom = d.rBottom ?? d.r; }
+  if (d.engine && d.engine.rings) {   // a cluster's own figures are the totals of all its rings (mode 0)
+    const t = ringTotals(d.engine, d.engine.modes[0].rings);
+    d.engine.thrust = t.thrust; d.engine.ispVac = t.ispVac; d.engine.ispAtm = t.ispAtm; d.engine.gimbal = t.gimbal; d.engine.count = t.n;
+  }
   PARTS[d.id] = Object.freeze(d);
 }
 export const PART_LIST = defs.filter(d => !d.hidden);
@@ -778,6 +855,8 @@ export const PART_LIST = defs.filter(d => !d.hidden);
 export const RENAMED_PARTS = Object.freeze({ srb_hammer: 'srb_maul', srb_spark: 'srb_flint', wing_dart: 'wing_arrow', eng_kestrel: 'eng_goshawk' });
 /** The current id for a part id read from a save (renamed ids are mapped, everything else is returned as it is). */
 export function currentPartId(id) { return !PARTS[id] && RENAMED_PARTS[id] ? RENAMED_PARTS[id] : id; }
+/** What an engine's named propellant is made of: resource → share by mass. Methane and oxygen burn 3.6 to 1. */
+export const PROP_MIX = Object.freeze({ methalox: Object.freeze({ lox: 3.6 / 4.6, ch4: 1 / 4.6 }) });
 export function partDef(id) { const d = PARTS[id]; if (!d) throw new Error('Unknown part ' + id); return d; }
 
 // ---------------------------------------------------------------------- air ratings (docs/AERO_BREAKUP.md)
@@ -808,7 +887,7 @@ export const INTERSTAGE = { kgPerM2: 12, minKg: 3, name: 'Interstage truss' };
 /** Does a part stacked on this engine's nozzle end need a truss around the engine? (Rocket engines with a bell that
  *  hangs below their mount: not jets, whose tailpipe is their body, and not solid boosters, whose casing is the wall.) */
 export function wantsInterstage(def) {
-  return !!(def && def.shape === 'engine' && def.attach && def.attach.stack && def.engine && def.engine.type !== 'jet');
+  return !!(def && def.shape === 'engine' && def.attach && def.attach.stack && def.engine && def.engine.type !== 'jet' && !def.engine.rings);      // (a ring cluster has its own skirt)
 }
 /** Mass in kg of a lattice ring `h` tall between rims of radius r0 and r1. */
 export function interstageMass(h, r0, r1) {
@@ -817,5 +896,5 @@ export function interstageMass(h, r0, r1) {
 }
 
 // Engine thrust (N) and isp (s) at ambient pressure in atmospheres (0 = vacuum, 1 = home sea level).
-export function engineIsp(def, pAtm) { const e = def.engine; const p = Math.min(Math.max(pAtm, 0), 4); return Math.max(e.ispVac + (e.ispAtm - e.ispVac) * p, 1); }
-export function engineThrust(def, pAtm) { const e = def.engine; return e.thrust * 1000 * engineIsp(def, pAtm) / e.ispVac; }
+export function engineIsp(def, pAtm, mode = 0) { const e = engineNow(def, mode); const p = Math.min(Math.max(pAtm, 0), 4); return Math.max(e.ispVac + (e.ispAtm - e.ispVac) * p, 1); }
+export function engineThrust(def, pAtm, mode = 0) { const e = engineNow(def, mode); return e.thrust * 1000 * engineIsp(def, pAtm, mode) / e.ispVac; }
