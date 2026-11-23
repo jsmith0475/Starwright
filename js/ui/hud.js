@@ -33,7 +33,7 @@ const SIT_TEXT = {
   orbit: 'Orbiting', escape: 'Escaping',
 };
 const RES = [
-  ['fuel', 'Propellant', 'kg', ''], ['lox', 'Liquid oxygen', 'kg', ''], ['ch4', 'Methane', 'kg', 'violet'], ['solid', 'Solid fuel', 'kg', 'amber'], ['mono', 'Monoprop', 'kg', ''], ['xenon', 'Xenon', 'kg', 'violet'],
+  ['fuel', 'Propellant', 'kg', ''], ['lox', 'Oxygen', 'kg', ''], ['ch4', 'Methane', 'kg', 'violet'], ['solid', 'Solid fuel', 'kg', 'amber'], ['mono', 'Monoprop', 'kg', ''], ['xenon', 'Xenon', 'kg', 'violet'],
   ['elec', 'Charge', 'EC', 'green'], ['ablator', 'Ablator', 'kg', 'amber'], ['evafuel', 'Jetpack', 'kg', ''],
 ];
 export const SAS_BUTTONS = [

@@ -127,7 +127,8 @@ export function ascentProgram(world, opts = {}) {
           if (need && need.have <= need.kg) {
             st.recovered = true; st.lastStage = ut;
             world.stage(v);
-            c.note(`staged with ${need.have.toFixed(0)} kg left in the booster to fly back`);
+            // (a stage with catch pins and no legs has nowhere to come down yet: say so, do not promise a return)
+            c.note(need.stage.legs ? `staged with ${need.have.toFixed(0)} kg left in the booster to fly back` : `staged with ${need.have.toFixed(0)} kg left in the booster for its return. There is no tower to catch it yet`);
           }
         }
         if (autoStage(world, v, st)) c.note('staged → stage ' + v.stageIndex);
