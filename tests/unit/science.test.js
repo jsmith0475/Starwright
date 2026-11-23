@@ -11,6 +11,7 @@ import { World } from '../../js/core/world.js';
 import { Craft } from '../../js/core/craft.js';
 import { Quaternion, Vector3 } from '../../js/lib/three.module.min.js';
 import { machRise } from '../../js/ui/scienceaero.js';
+import { dragRise, bluntness, wakeFraction, newtonWeight, pitotCp } from '../../js/core/aero.js';
 
 const ctx = scienceContext(SYSTEM, G0);
 
@@ -126,19 +127,33 @@ const close = (got, want, rel, what) => assert.ok(Math.abs(got - want) <= rel * 
 test('aerodynamics chapter: the body-drag formulas and the drag rise are what the flight code applies', () => {
   const t = PARTS.tank_m400, face = Math.PI * t.r * t.r * t.drag.top, side = 2 * t.r * t.h * t.drag.side;
   const one = new Craft('tank'); one.setRoot('tank_m400'); one.autoStage();
-  for (const speed of [200, 288, 400, 576, 960]) for (const broadside of [false, true]) {
+  for (const speed of [200, 288, 400, 576, 960, 1500]) for (const broadside of [false, true]) {
     const { w, v, q } = inAir(one, { alt: 1153, speed, tilt: broadside ? Math.PI / 2 : 0 });
     const m = v.mass; w.step(TUNING.DT_MAX);
     const mach = speed / SYSTEM.home.soundSpeed(1153);
-    // end on: q M (A_w + 0.25 A_l); broadside: q M A_s
-    close(v.gForce * G0 * m, q * machRise(mach) * (broadside ? side : face * (1 + TUNING.BASE_DRAG)), 1e-9, `Mach ${mach.toFixed(2)} ${broadside ? 'broadside' : 'end on'}`);
+    // the face-and-side law: end on q (M_w A_w + k_wake M_l A_l) with both faces alike; broadside q M_blunt A_s
+    const mFace = dragRise(mach, bluntness(t.drag.top));
+    const classic = broadside ? dragRise(mach, 1) * side : face * mFace * (1 + wakeFraction(mach));
+    // Newton's law by hand: a flat face head on C_p,max pi r², a cylinder across the flow (2/3) C_p,max (2 r h)
+    const newton = pitotCp(mach, SYSTEM.home.atmo.gamma) * (broadside ? 2 / 3 * 2 * t.r * t.h : Math.PI * t.r * t.r);
+    const wN = newtonWeight(mach);
+    close(v.gForce * G0 * m, q * ((1 - wN) * classic + wN * newton), wN > 0 ? 2e-3 : 1e-9, `Mach ${mach.toFixed(2)} ${broadside ? 'broadside' : 'end on'}`);
   }
+  assert.deepEqual([0.5, 0.7, 1.1, 2.5, 4, 8, 20].map(mm => dragRise(mm, 1)), [1, 1, 1.55, 1.9, 1.98, 2, 2]);
+  assert.deepEqual([0.5, 0.7, 1.1, 2.5, 4, 8, 20].map(mm => dragRise(mm, 0)), [1, 1, 1.9, 1.1, 0.9, 0.8, 0.8]);
+  assert.deepEqual([0.1, 0.2, 0.45, 0.7, 0.9].map(bluntness), [0, 0, 0.5, 1, 1]);
+  close(wakeFraction(0.5), 0.25, 1e-12, 'wake at low speed'); close(wakeFraction(5), 0.01, 1e-12, 'wake at Mach 5');
+  assert.deepEqual([1, 1.5, 4, 9].map(newtonWeight), [0, 0, 1, 1]);
+  close(pitotCp(1e3, 1.4), 1.839, 1e-3, 'the high Mach limit of C_p,max for air');
+  // wings, fins and panels keep the single curve
   assert.deepEqual([0.5, 0.7, 1.1, 2.5, 4].map(machRise), [1, 1, TUNING.MACH_PEAK, TUNING.MACH_HIGH, TUNING.MACH_HIGH]);
   close(machRise(0.9), 1.5, 1e-12, 'half way up the rise');
   // the worked example prints these two forces at 20 kPa
   const body = text('aeromodel');
   assert.ok(body.includes(ctx.sig(20000 * face * 1.25 / 1000, 3)) && body.includes(ctx.sig(20000 * side / 1000, 3)), 'the canister example');
   assert.ok(body.includes(String(Math.round(SYSTEM.home.soundSpeed(0)))) && body.includes(String(TUNING.WING_SLOPE)) && body.includes(String(TUNING.FIN_LIFT)));
+  // the capsule example: its drag coefficient at Mach 8 is C_p,max (1 + cos² 25°) / 2
+  assert.ok(body.includes(ctx.sig(pitotCp(8, 1.4) * (1 + Math.cos(TUNING.CAP_PHI * Math.PI / 180) ** 2) / 2, 3)), 'the capsule example');
 });
 
 test('aerodynamics chapter: fin lift, the stall and the flat plate are the game\'s', () => {

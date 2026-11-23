@@ -164,14 +164,21 @@ export function ascentProgram(world, opts = {}) {
         break;
       }
       case 'coast': {
-        // still in the atmosphere: hold prograde, top the apoapsis up against drag
-        mode(v, 'prograde');
+        // still in the atmosphere: keep the nose into the wind (the air moves with the ground, so that is surface
+        // prograde, a few degrees from orbital prograde; held off the wind, a rocket whose engine is out has only its
+        // reaction wheels against the air), and top the apoapsis up against drag
+        mode(v, alt < atmoH ? 'srfPrograde' : 'prograde');
         if (alt < atmoH) {
-          if (v.apoapsis < o.targetAlt - 250) {
+          _a.copy(v.surfaceVel).normalize();
+          const err = pointingError(v, _a);
+          if (v.apoapsis < o.targetAlt - 250) st.topUp = true;
+          // the engine's gimbal is what turns a big rocket: once a top-up burn is running it is not cut while the
+          // rocket is still swinging, or the swing is left for the reaction wheels to stop against the air
+          else if (v.apoapsis > o.targetAlt + (err > 0.02 || v.w.lengthSq() > 1e-4 ? 1500 : 0)) st.topUp = false;
+          if (st.topUp) {
             if (v.enginePower().thrust <= 0) autoStage(world, v, st);
-            _a.copy(v.vel).normalize();
-            v.ctrl.throttle = pointingError(v, _a) < 0.15 ? clamp((o.targetAlt - v.apoapsis) / 3000, 0.05, 0.5) : 0;
-          } else if (v.apoapsis > o.targetAlt) v.ctrl.throttle = 0;
+            v.ctrl.throttle = err < 0.15 ? clamp((o.targetAlt - v.apoapsis) / 3000, 0.05, 0.5) : 0;
+          } else v.ctrl.throttle = 0;
           break;
         }
         v.ctrl.throttle = 0;

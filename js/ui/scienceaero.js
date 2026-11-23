@@ -8,10 +8,14 @@ import { TUNING, wingCoefficients } from '../core/vessel.js';
 import { STRUCT, rootSection } from '../core/structure.js';
 import { AIR_RATING, PARTS } from '../core/parts.js';
 import { MAX_DEBRIS } from '../core/world.js';
+import * as AERO from '../core/aero.js';
 
 const DEG = 180 / Math.PI;
 
-/** The transonic drag multiplier of js/core/vessel.js `_stepFlight`, as a function of Mach number. */
+/**
+ * The single transonic drag multiplier that wings, fins and open panels still use (js/core/vessel.js `_stepFlight`),
+ * as a function of Mach number. Bodies use the two curves of js/core/aero.js (`dragRise`).
+ */
 export function machRise(mach) {
   const P = TUNING.MACH_PEAK, H = TUNING.MACH_HIGH;
   return mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 * (P - 1) : mach < 2.5 ? P + (mach - 1.1) / 1.4 * (H - P) : H;
@@ -39,7 +43,7 @@ export function aeroModel() {
     const cd90 = wingCoefficients(Math.PI / 2)[1];
     return { name: d.name, h: d.h, t: d.t, width: d.rw, area: w.area, sec, factor, capM: STRUCT.LINE_T * factor * sec.zFlap, cd90, arm: d.rw / 2 };
   };
-  return { TUNING, STRUCT, PARTS, MAX_DEBRIS, rated, machRise, wingCoefficients, rootSection, tearTime, ring, fin, DEG };
+  return { TUNING, STRUCT, PARTS, MAX_DEBRIS, AERO, rated, machRise, wingCoefficients, rootSection, tearTime, ring, fin, DEG };
 }
 
 export const AERO_CHAPTERS = [
@@ -53,8 +57,13 @@ export const AERO_CHAPTERS = [
       const q0 = 20000;
       const fin = A.PARTS.fin, a5 = 5 / DEG, cf = A.wingCoefficients(a5, T.FIN_LIFT, T.FIN_STALL, [0, 0]);
       const rho8 = at.rho0 * Math.exp(-8000 / at.scale), q8 = 0.5 * rho8 * 300 * 300;
-      const slopeUp = 2.5 * (T.MACH_PEAK - 1), slopeDown = (T.MACH_PEAK - T.MACH_HIGH) / 1.4;
       const plateMax = T.WING_CD0 + T.WING_PLATE_CD;
+      const AE = A.AERO, row = ys => ys.map(y => y.toFixed(2)).join(' | ');
+      const phi = T.CAP_PHI / DEG, capCd = (1 + Math.cos(phi) ** 2) / 2;
+      // lift over drag of a spherical cap held 20 degrees off, from its Newtonian axial and normal coefficients
+      const al = 20 / DEG, capCA = Math.cos(al) ** 2 * capCd + Math.sin(al) ** 2 * Math.sin(phi) ** 2 / 4, capCN = Math.sin(phi) ** 2 / 2 * Math.sin(al) * Math.cos(al);
+      const capLD = (capCA * Math.sin(al) - capCN * Math.cos(al)) / (capCA * Math.cos(al) + capCN * Math.sin(al));
+      const pod = A.PARTS.pod_acorn, podLow = pod.drag.bottom + AE.WAKE * pod.drag.top;
       return String.raw`
 ## One model, summed over the parts
 
@@ -90,34 +99,63 @@ Flying straight, every part sees the same flow. In a tumble they do not: a nose 
 
 A tank, capsule or engine is treated as a body of revolution. Let $\theta$ be the angle between its axis and the flow at that part. It has three drag areas, each a real area times a coefficient for the shape: the end face that meets the wind $A_w$, the end face in the lee $A_l$, and the side $A_s$. Along its axis:
 
-$$ F_{axial} = -\,q_i\,M(\mathrm{Ma})\,\left(A_w + ${T.BASE_DRAG}\,A_l\right)\cos\theta $$
+$$ F_{axial} = -\,q_i\,\left(M_w\,A_w + k_{wake}\,M_l\,A_l\right)\cos\theta $$
 
-The leeward face adds a quarter of its area: that is base drag, the suction of the wake. Across its axis, with $\mathbf{v}_{i,\perp}$ the part of the flow at right angles to the axis:
+The leeward face adds a fraction $k_{wake}$ of its area, ${AE.WAKE} at low speed: that is base drag, the suction of the wake. $M_w$ and $M_l$ are the drag rise of each face with Mach number (below); both are 1 below Mach 0.7. Across its axis, with $\mathbf{v}_{i,\perp}$ the part of the flow at right angles to the axis:
 
-$$ \mathbf{F}_{side} = -\,q_i\,M(\mathrm{Ma})\,A_s\,\frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|} $$
+$$ \mathbf{F}_{side} = -\,q_i\,M_{blunt}\,A_s\,\frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|} $$
 
 Only the exposed part of an end face counts. A tank in the middle of a stack has both faces covered by its neighbours and adds side area only, a tank wider than the one above it shows a ring of face, and the sloping flank of a cone counts toward the end it faces. A pointed nose has a low coefficient (${A.PARTS.nose_m.drag.top} for the ${A.PARTS.nose_m.name}), a flat end a high one (${tank.drag.top}).
 
 A blunt face that leads also gets a small righting moment (its centre of pressure shifts toward the windward edge) and resists pitching. That is why a capsule settles heat shield first.
 
-Small attached parts (antennas, lights, legs, ladders) take plain drag on one small area, straight against the flow at that part.
+Small attached parts (antennas, lights, legs, ladders) take plain drag on one small area, straight against the flow at that part. A folded solar array is the exception: it is a flat package against the hull, and each direction of the flow meets its own face, the big one only from the side it is mounted on.
 
 > example: A bare ${tank.name} (${tank.h} m long, ${(2 * tank.r).toFixed(2)} m wide) has a face area of $${sig(face, 3)}$ m² and a side area of $${sig(side, 3)}$ m² after their coefficients. At a dynamic pressure of ${q0 / 1000} kPa below Mach 0.7, flying end on it feels $${sig(q0 * face * (1 + T.BASE_DRAG) / 1000, 3)}$ kN of drag. Broadside it feels $${sig(q0 * side / 1000, 3)}$ kN.
 
-## The transonic drag rise
+## The drag rise: blunt and slender
 
-Near the speed of sound shock waves form and drag climbs steeply, then eases at higher speed. The factor $M$ multiplies the drag of every part, as a function of the Mach number $\mathrm{Ma} = v / c_s$:
+Near the speed of sound shock waves form and drag climbs steeply. What happens next depends on the shape. A blunt face keeps a strong shock standing ahead of it and its drag stays high for good. A pointed one sweeps its shock back into a thin cone and its drag falls again. So a body face reads one of two curves, each a multiplier on the face's low-speed coefficient against the Mach number $\mathrm{Ma} = v / c_s$:
 
-- Below Mach 0.7: $M = 1$.
-- Mach 0.7 to 1.1: $M = 1 + ${sig(slopeUp, 2)}\,(\mathrm{Ma} - 0.7)$, a straight line up to ${T.MACH_PEAK.toFixed(1)}.
-- Mach 1.1 to 2.5: $M = ${T.MACH_PEAK.toFixed(1)} - ${sig(slopeDown, 3)}\,(\mathrm{Ma} - 1.1)$, a straight line down to ${T.MACH_HIGH}.
-- Above Mach 2.5: $M = ${T.MACH_HIGH}$.
+${AE.DRAG_MACH.map((m, i) => `- Mach ${m}: blunt $${AE.DRAG_BLUNT[i].toFixed(2)}$, slender $${AE.DRAG_SLENDER[i].toFixed(2)}$`).join('\n')}
+
+Both are 1 below Mach 0.7, run in straight lines between these points and hold their last value above Mach 8. A face whose coefficient is 0.2 or less (a nose cone) reads the slender curve, one of 0.7 or more (a flat end, a heat shield) the blunt curve $M_{blunt}$, and one in between a mix in proportion. The side of a body always reads the blunt curve: a cylinder across the flow is a blunt shape.
+
+The wake changes too. The suction behind a body can never be more than the whole pressure of the air around it, and measured against the dynamic pressure that limit shrinks as the square of the Mach number. So
+
+$$ k_{wake} = ${AE.WAKE} \quad (\mathrm{Ma} \le 1), \qquad k_{wake} = \frac{${AE.WAKE}}{\mathrm{Ma}^2} \quad (\mathrm{Ma} > 1) $$
+
+At Mach 5 the wake behind a capsule adds one percent of the lee face, not a quarter.
+
+## Above Mach ${AE.NEWTON_FROM}: the air as a stream of particles
+
+At several times the speed of sound the shock lies close against the body, and Newton's old picture of the air becomes a good one: a stream of particles that hit the surface and give up the part of their momentum that is normal to it. A patch of surface whose outward normal $\mathbf{n}$ makes an angle with the direction of motion $\mathbf{u}$ feels the pressure coefficient
+
+$$ C_p = C_{p,max}\,(\mathbf{n}\cdot\mathbf{u})^2 \quad \text{where it faces the flow}, \qquad C_p = 0 \text{ in the lee} $$
+
+$C_{p,max}$ is the pressure at the stagnation point behind a normal shock, from the Rayleigh pitot formula. For air it is $${sig(AE.pitotCp(2, 1.4), 3)}$ at Mach 2, $${sig(AE.pitotCp(4, 1.4), 3)}$ at Mach 4 and $${sig(AE.pitotCp(8, 1.4), 3)}$ at Mach 8, and it tends to 1.839. The game adds this pressure up over the real surface of every body part: its flank, whatever is open of each end, and the rounded face of a heat shield or capsule (a spherical cap of ${T.CAP_PHI}° half-angle). Below Mach ${AE.NEWTON_FROM} only the face-and-side law above is used, above Mach ${AE.NEWTON_FULL} only this one, and between the two are mixed smoothly.
+
+Three things follow, and each can be worked by hand:
+
+- **A flat face** head on has $C_D = C_{p,max}$, and **a rounded heat shield** $C_D = C_{p,max}\,(1 + \cos^2\varphi)/2$, which is $${sig(capCd, 3)}\,C_{p,max}$ for the ${T.CAP_PHI}° cap.
+- **A cylinder across the flow** has $C_D = \tfrac{2}{3}\,C_{p,max}$ on its length times its width. At an angle of attack $\alpha$ its side force goes as $\sin^2\alpha$, not as $\sin\alpha$: a tank leaning a few degrees feels almost no side force. Cones and noses keep a side force in proportion to the lean. A long rocket is therefore less steady above Mach ${AE.NEWTON_FULL} than below Mach 1, and its nose and fins decide which way it wants to turn.
+- **A capsule held at an angle lifts**, and away from the side it leans to, the opposite of a wing: the pressure on the heat shield pushes along the shield's own axis. Held 20° off, the ${T.CAP_PHI}° cap gives a lift of $${sig(capLD, 2)}$ times its drag.
+
+> example: The ${pod.name} falling heat shield first. Below Mach 0.7 its drag coefficient on its base area is $${pod.drag.bottom} + ${AE.WAKE} \times ${pod.drag.top} = ${sig(podLow, 3)}$. At Mach 8 it is $${sig(capCd, 3)} \times ${sig(AE.pitotCp(8, 1.4), 4)} = ${sig(capCd * AE.pitotCp(8, 1.4), 3)}$, and the wake adds almost nothing.
+
+## Shadow
+
+Above the speed of sound a part cannot feel the air that a wider part ahead of it has already pushed aside. A part that lies wholly inside the wake of a wider body part upstream keeps ${AE.SHADOW_KEEP * 100}% of its force above Mach ${AE.SHADOW_FULL}; the shelter fades in from Mach ${AE.SHADOW_FROM}. The wake is a tube the width of the part that casts it, running back along the motion. It is whole for ${AE.SHADOW_NEAR} of that part's diameters and has closed by ${AE.SHADOW_FAR}. A part whose windward edge stands half its own radius out of the tube is in the open again. This is why a stage behind a wide heat shield feels little, and why it stops being true the moment the vessel turns sideways.
+
+> game: What this model leaves out. Shock waves from one part do not strike another, there is no skin friction or flow separation, and the air stays an ideal gas however hot it gets. Newton's law is good to a few percent for blunt shapes above Mach 4 and overstates the drag of slender ones, which is why slender faces keep their own curve below that. Wings, fins and open panels still use one simpler curve $M$ (1 below Mach 0.7, ${T.MACH_PEAK.toFixed(1)} at Mach 1.1, ${T.MACH_HIGH} above Mach 2.5); their supersonic behaviour is a later step. Below Mach 0.7 nothing in this chapter differs from the low-speed law.
+
+## The speed of sound
 
 The speed of sound is not one number. It follows from the gas and its temperature, $c_s = \sqrt{\gamma R T / M_{gas}}$, with $\gamma$ the ratio of specific heats, $R$ the gas constant and $M_{gas}$ the molar mass. Hydrostatics ties a world's temperature to the scale height it already has, $T_{iso} = M_{gas}\, g\, H / R$, so for air that is all at one temperature $c_s = \sqrt{\gamma g H}$: a heavy gas or a shallow atmosphere means slow sound, and the same speed is a higher Mach number.
 
-> example: ${home.name}'s air (γ 1.40) with $g = ${sig(home.surfaceG, 3)}$ m/s² and $H = ${int(at.scale)}$ m gives $\sqrt{\gamma g H} = ${int(at.aIso)}$ m/s. The temperature profile warms the surface and cools the middle layer, so sound travels at ${int(home.soundSpeed(0))} m/s on the ground, ${int(home.soundSpeed(2 * at.scale))} m/s at ${km(2 * at.scale)} and ${int(home.soundSpeed(at.height))} m/s at the top. A rocket at ${int(home.soundSpeed(2 * at.scale))} m/s is at Mach 1 up there and only Mach ${sig(home.soundSpeed(2 * at.scale) / home.soundSpeed(0), 2)} on the pad.
+> example: ${home.name}'s air (γ 1.40) with $g = ${sig(home.surfaceG, 3)}$ m/s² and $H = ${int(at.scale)}$ m gives $\sqrt{\gamma g H} = ${int(at.aIso)}$ m/s. The temperature profile warms the surface and cools the middle layer, so sound travels at ${int(home.soundSpeed(0))} m/s on the ground, ${int(home.soundSpeed(2 * at.scale))} m/s at ${km(2 * at.scale)} km and ${int(home.soundSpeed(at.height))} m/s at the top. A rocket at ${int(home.soundSpeed(2 * at.scale))} m/s is at Mach 1 up there and only Mach ${sig(home.soundSpeed(2 * at.scale) / home.soundSpeed(0), 2)} on the pad.
 
-> game: Each world has its own gas: air on ${home.name} and Marn, carbon dioxide on Murk and Rusk, hydrogen and helium on Thal and Orrin. The temperature profile has one shape for every world (warm ground, cold middle, a warm layer above, as on Earth) scaled to that world's own $T_{iso}$. The drag-rise curve above has not changed; only the Mach number it is read at is now the true one. Below Mach 0.7 nothing is different.
+> game: Each world has its own gas: air on ${home.name} and Marn, carbon dioxide on Murk and Rusk, hydrogen and helium on Thal and Orrin. The temperature profile has one shape for every world (warm ground, cold middle, a warm layer above, as on Earth) scaled to that world's own $T_{iso}$. Every Mach number in this chapter is the true one for that gas at that height.
 
 ## Wings and fins
 
@@ -132,6 +170,8 @@ $$ C_L = a\,\alpha, \qquad C_D = ${T.WING_CD0} + ${T.WING_K}\,C_L^2 $$
 The lift-curve slope $a$ is ${T.WING_SLOPE} per radian for a wing and ${T.FIN_LIFT} for a fin, which is short and stubby. Lift acts at right angles to the flow and drag along it:
 
 $$ L = \tfrac{1}{2}\rho v^2\,S\,C_L, \qquad D = \tfrac{1}{2}\rho v^2\,S\,C_D\,M(\mathrm{Ma}) $$
+
+Here $M(\mathrm{Ma})$ is the one drag-rise curve that lifting surfaces and open panels keep: 1 below Mach 0.7, a straight line up to ${T.MACH_PEAK.toFixed(1)} at Mach 1.1, down to ${T.MACH_HIGH} at Mach 2.5 and level above.
 
 Past the stall the flow separates and the surface behaves as a flat plate:
 
@@ -185,9 +225,9 @@ with $\dot{q}$ in W/m² and $T$ in kelvin. A leading face has an exposure up to 
 ## What the model leaves out
 
 - One scale height per atmosphere, no weather and no wind.
-- One temperature profile shape for every world, and one drag-rise curve. The density stays a single exponential and does not follow the temperature profile; the top 8% of each atmosphere fades smoothly to nothing in place of a step.
-- Capsules, tanks and debris make no lift of their own shape. Only wings, fins and open solar panels do.
-- Parts do not shield each other from the flow: a booster in the lee of the core feels the same air as one in front. (For heating, a covered end face is protected.)
+- One temperature profile shape for every world. The density stays a single exponential and does not follow the temperature profile; the top 8% of each atmosphere fades smoothly to nothing in place of a step.
+- Below Mach 1.5 capsules, tanks and debris make no lift of their own shape beyond the side force above; from there up the Newtonian pressure gives a tilted capsule lift, but it cannot yet hold a tilt by itself.
+- Below Mach 0.7 parts do not shield each other from the flow, and above it only a part wholly behind a wider body part is sheltered: a booster beside the core feels the same air as one in front. (For heating, a covered end face is protected.)
 - No shock or boundary-layer model beyond the flux law, and no flutter or buckling. Thin parts carry a stated air rating instead (two chapters on).
 
 > game: What has been checked independently: density and pressure against the scale height on all six atmospheres, a capsule drop against a separately integrated reference (0.9 m apart after a 5.4 km fall), terminal velocity, and a re-entry whose peak heat flux came out at 126.7 kW/m² against a reference of 126.6. The method is in the project's physics verification document.

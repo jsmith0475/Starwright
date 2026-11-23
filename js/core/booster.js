@@ -19,7 +19,8 @@ export function groundUnder(body, x, y, z, t) {
 /**
  * Integrates a point mass from (pos, vel) at time `ut` down to the ground through air that turns with the planet.
  * The body flies along its own axis, so drag acts against the air-relative velocity with area `area` (m², from
- * Vessel.axialDragArea) times the game's own Mach factor. With `thrust` (N) and `ve` (m/s) set it also burns
+ * Vessel.axialDragArea) times the single drag-rise curve, or better `drag`, the vessel's own table of drag area
+ * against Mach number (Vessel.axialDragTable). With `thrust` (N) and `ve` (m/s) set it also burns
  * against the air-relative velocity at `throttle`, from `burnBelow` metres above the ground (default: all the way),
  * losing mass as it goes, never below `dryMass`. With `entry: { flux, speed }` it also burns at full thrust on the
  * way down from where the heating flux reaches `flux` (W/m²) until the air-relative speed is down to `speed`.
@@ -30,12 +31,16 @@ export function groundUnder(body, x, y, z, t) {
  *     to rest in the air) }
  */
 export function predictFall(body, pos, vel, mass, ut, opts = {}) {
-  const o = { area: 1, thrust: 0, ve: 0, throttle: 1, burnBelow: Infinity, dryMass: 0, maxT: 2400, floor: 0, coarse: 1, entry: null, ...opts };
+  const o = { area: 1, drag: null, thrust: 0, ve: 0, throttle: 1, burnBelow: Infinity, dryMass: 0, maxT: 2400, floor: 0, coarse: 1, entry: null, ...opts };
   const R = body.radius, gm = body.gm, wy = TAU / body.rotPeriod;
   const atmoTop = body.atmo ? body.atmo.height : 0;
   let x = pos.x, y = pos.y, z = pos.z, vx = vel.x, vy = vel.y, vz = vel.z, m = mass, t = 0;
   const out = { hit: false, t: 0, pos: new Vector3(), dir: new Vector3(), alt: 0, speed: 0, vs: 0, maxQ: 0, maxQAlt: 0, maxFlux: 0, maxG: 0, apogee: -Infinity, mass, stopped: false, speedMax: 0 };
   const F = o.thrust * o.throttle, mdot = o.ve > 0 ? F / o.ve : 0;
+  // drag area at a Mach number: the vessel's own table (Vessel.axialDragTable, Mach 0 to 12 in tenths), or a plain
+  // area times the single drag-rise curve
+  const dragArea = o.drag ? m => { const x = m >= 12 ? 119.999 : m * 10, i = x | 0; return o.drag[i] + (o.drag[i + 1] - o.drag[i]) * (x - i); } : m => machDrag(m) * o.area;
+  let dA = 0;
   let ax = 0, ay = 0, az = 0, sp = 0, qd = 0, rr = 0, mach = 0, burning = false, entering = false, entryDone = !o.entry, FF = 0;
   // acceleration at a state; leaves the air-relative speed in sp and the dynamic pressure in qd
   const acc = (px, py, pz, ux, uy, uz, mm, gh) => {
@@ -46,7 +51,8 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
     const rho = alt < atmoTop ? body.density(alt) : 0;
     qd = 0.5 * rho * sp * sp;
     mach = rho > 0 ? sp / body.soundSpeed(alt) : 0;
-    let k = sp > 1e-6 ? qd * machDrag(mach) * o.area / (mm * sp) : 0;
+    dA = dragArea(mach);
+    let k = sp > 1e-6 ? qd * dA / (mm * sp) : 0;
     burning = F > 0 && mm > o.dryMass && alt - gh < o.burnBelow;
     entering = false;
     if (!entryDone && !burning && o.thrust > 0 && mm > o.dryMass && px * ux + py * uy + pz * uz < 0) {
@@ -64,7 +70,7 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
     if (alt > out.apogee) out.apogee = alt;
     if (sp > out.speedMax) out.speedMax = sp;
     if (qd > out.maxQ) { out.maxQ = qd; out.maxQAlt = alt; }
-    const dragA = qd * machDrag(mach) * o.area / m;
+    const dragA = qd * dA / m;
     if (dragA > out.maxG) out.maxG = dragA;
     if (qd > 0) { const flux = TUNING.HEAT_FLUX_K * Math.sqrt(2 * qd / (sp * sp || 1)) * sp * sp * sp; if (flux > out.maxFlux) out.maxFlux = flux; }
     if (burning && (sp < 0.5 || (sp > lastSp && sp < 15))) { out.stopped = true; break; }
@@ -73,7 +79,15 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
     const rv = (x * vx + y * vy + z * vz) / rr;
     let dt = (h > 20000 ? 1 : h > 3000 ? 0.5 : 0.1) * o.coarse;
     if (burning) dt = Math.min(dt, 0.1);
-    if (entering) dt = Math.min(dt, 0.25);
+    // an entry burn ends at a speed: land the last step on it (a quarter second of full thrust is 7 m/s, and with
+    // 100 s still to fall that would be most of a kilometre of scatter in where the prediction comes down)
+    if (entering) dt = Math.min(dt, 0.25, Math.max(0.01, (sp - o.entry.speed) / (FF / m + qd * dA / m)));
+    else if (!entryDone && o.entry && o.thrust > 0 && rv < 0 && qd > 0 && sp > o.entry.speed) {
+      // and it starts at a heating flux: flux goes as sqrt(density) v³, so falling it grows e-fold every two scale
+      // heights. Land a step on the start as well.
+      const fluxNow = TUNING.HEAT_FLUX_K * Math.sqrt(2 * qd / (sp * sp)) * sp * sp * sp;
+      if (fluxNow < o.entry.flux) dt = Math.min(dt, Math.max(0.01, Math.log(o.entry.flux / fluxNow) * 2 * body.atmo.scale / -rv));
+    }
     if (rv < 0 && h + rv * dt < 0) dt = Math.max(0.005, Math.min(dt, h / -rv));
     const ax1 = ax, ay1 = ay, az1 = az;
     const hx = x + vx * dt / 2, hy = y + vy * dt / 2, hz = z + vz * dt / 2;
@@ -121,7 +135,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -134,10 +148,10 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const propellant = () => { let m = 0; for (const p of v.partList) m += (p.res.fuel || 0) + (p.res.ox || 0) + (p.res.lox || 0) + (p.res.ch4 || 0); return m; };
   const wy = TAU / body.rotPeriod;
   /** Unpowered prediction from now; fills c.miss and `miss` (inertial vector from the impact point to the target, level). */
-  const predict = () => {
+  const predict = (free = false) => {
     const pw = v.enginePower();
-    const plan = st.plan && !st.entryDone ? st.plan : null;
-    const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), entry: plan,
+    const plan = st.plan && !st.entryDone && !free ? st.plan : null;
+    const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag: v.axialDragTable(true), floor: cg(), entry: plan,
       thrust: plan ? pw.thrust : 0, ve: pw.ve, burnBelow: -Infinity, dryMass: st.dry0 });
     body.surfaceDirToInertial(st.aim || o.target, world.ut + pr.t, tgt).normalize().multiplyScalar(pr.pos.length());
     miss.copy(tgt).sub(pr.pos);
@@ -153,15 +167,17 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const planEntry = () => {
     st.tPlan = world.ut;
     if (st.entryDone) return;
-    const pw = v.enginePower(), area = v.axialDragArea(true);
-    const free = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area, floor: cg() });
+    const pw = v.enginePower(), drag = v.axialDragTable(true);
+    const free = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag, floor: cg() });
     st.heat = v.axialHeatRatio(free.maxFlux, true);
     if (st.heat <= o.heatLimit || !(pw.thrust > 0)) { st.plan = null; return; }
     const flux = 0.1 * free.maxFlux;
     let lo = 100, hi = Math.max(200, free.speedMax);
-    for (let i = 0; i < 7; i++) {
+    // (12 halvings: to half a metre per second. Seven left the planned speed in 14 m/s steps, and with 100 s to
+    // fall after the burn each step moved the predicted impact point a kilometre and a half.)
+    for (let i = 0; i < 12; i++) {
       const mid = 0.5 * (lo + hi);
-      const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area, floor: cg(), entry: { flux, speed: mid }, thrust: pw.thrust, ve: pw.ve, burnBelow: -Infinity, dryMass: st.dry0 });
+      const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag, floor: cg(), entry: { flux, speed: mid }, thrust: pw.thrust, ve: pw.ve, burnBelow: -Infinity, dryMass: st.dry0 });
       if (v.axialHeatRatio(pr.maxFlux, true) > o.heatLimit * 0.92) hi = mid; else lo = mid;
     }
     st.plan = { flux, speed: lo };
@@ -169,7 +185,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
   /** Where a burn against the fall at `throttle`, started now, would stop: metres above the ground, or −1 if it would not. */
   const stopAlt = throttle => {
     const { thrust, ve } = v.enginePower();
-    const pb = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), thrust, ve, throttle, dryMass: v.mass * 0.3, maxT: 120 });
+    const pb = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag: v.axialDragTable(true), floor: cg(), thrust, ve, throttle, dryMass: v.mass * 0.3, maxT: 120 });
     st.stop = pb;
     return pb.stopped ? pb.alt - cg() : -1;
   };
@@ -238,7 +254,9 @@ export function boosterRecovery(world, vessel, opts = {}) {
         break;
       }
       case 'boostback': {
-        if (ut - st.tPlan >= 1) planEntry();
+        // (a new plan for the entry burn moves the predicted impact point by itself: measure the approach afresh
+        // from there, so that the jump is not taken for the impact point passing the target)
+        if (ut - st.tPlan >= 1) { planEntry(); predict(); st.best = Infinity; }
         if (ut - st.tPred >= Math.min(o.period, 0.1)) predict();
         const pr = c.prediction;
         // keep what the landing burn needs: the speed it will arrive with, plus gravity while it burns
@@ -305,10 +323,25 @@ export function boosterRecovery(world, vessel, opts = {}) {
         break;
       }
       case 'entry': {
-        hold('srfRetrograde');
-        const err = noseError(_t.copy(srf).normalize().negate());
+        // The burn is against the fall, tipped a few degrees toward the target, and it runs on a little past the
+        // planned speed while the stage would still come down beyond the target. Above Mach 1.5 a leaning body
+        // makes little side force of its own (it goes as the square of the lean), so this burn is where the last
+        // kilometre or two is taken out: each m/s more of it pulls the impact point back by the seconds left to fall.
+        // The prediction used here is the unpowered fall from this instant, which has no burn in it to guess at.
+        if (ut - st.tPred >= 0.1) predict(true);
+        dir.copy(srf).normalize().negate();
+        _t.copy(miss).addScaledVector(up, -miss.dot(up));
+        _s.copy(srf).addScaledVector(up, -srf.dot(up)).normalize();          // the way it is going, over the ground
+        const beyond = _t.dot(_s) < 0;                     // the target lies behind that: it would overshoot
+        const aT = power.thrust / v.mass, left = Math.max(1.5, (speed - st.plan.speed + (beyond ? o.entryExtra : 0)) / Math.max(1, aT));
+        // the side speed that would close the cross-track miss in the time left to fall, spread over what is left of the burn
+        _t.addScaledVector(_s, -_t.dot(_s));
+        const tip = st.short ? 0 : clamp(_t.length() / (Math.max(10, c.prediction.t) * aT * left), 0, o.entryTip);
+        if (tip > 0 && _t.lengthSq() > 1e-6) dir.addScaledVector(_t.normalize(), Math.tan(tip)).normalize();
+        point(dir);
+        const err = noseError(dir);
         v.ctrl.throttle = err < 0.3 ? 1 : 0;
-        if (speed <= st.plan.speed || !(power.thrust > 0)) {
+        if ((speed <= st.plan.speed && (st.short || !beyond || speed <= st.plan.speed - o.entryExtra)) || !(power.thrust > 0)) {
           v.ctrl.throttle = 0; st.entryDone = true; c.phase = 'coast'; predict();
           c.note(`entry burn complete at ${speed.toFixed(0)} m/s, predicted ${c.miss.toFixed(0)} m from the target`);
         }
