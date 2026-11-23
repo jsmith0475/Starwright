@@ -87,7 +87,7 @@ until the arms have it.
 
 One thing in this is new, and a booster this heavy needs it. On the way down the guidance aims
 the point where the landing burn will *stop* the stage, not the point where it would hit the
-ground with no burn. This stage lights 1.5 km up while it still has sideways speed, and stops
+ground with no burn. This stage lights 1.9 km up while it still has sideways speed, and stops
 well short of its unpowered impact point: aimed the old way it arrived 50 to 70 m off the mount,
 aimed this way 4 m.
 
@@ -105,17 +105,17 @@ Inside all five, the arms have it: the stage is held where it is, stood upright,
 until its own engines lift it out again. Outside any one of them the arms cannot take it, the
 game says which limit it broke, and the stage goes on down onto the mount.
 
-**Measured** (`node tests/tools/tower_dev.mjs`; the same flight for 75, 80, 100 and 150 km orbits):
+**Measured** (`node tests/tools/tower_dev.mjs`, 80 km orbit, with the drag model of re-entry step B):
 
 | | |
 |---|---|
 | Staging | 104 s, 29.5 km, 62 t left in the booster |
 | Boostback burn | 40 s, from 37 km |
-| Landing burn lights | 1,550 m up, 283 m/s |
-| Off the mount when the fall is stopped | 4 m |
-| Caught | 317 s after lift-off, at 1.4 m/s, 1 cm from the mount's axis |
-| Propellant left in the booster | 5 t |
-| Ship in orbit | 43 % full, 1,480 m/s left |
+| Landing burn lights | 1,920 m up, 334 m/s |
+| Off the mount when the fall is stopped | 2 m |
+| Caught | 324 s after lift-off, at 1.4 m/s, 2 cm from the mount's axis |
+| Propellant left in the booster | 3 t |
+| Ship in orbit | 44 % full, 1,495 m/s left |
 
 **Honest limits of the catch.**
 

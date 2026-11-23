@@ -388,20 +388,40 @@ $$\mathbf{v}_i = \mathbf{v} + \boldsymbol{\omega} \times \mathbf{r}_i \qquad q_i
 
 A body part with windward face area $A_w$, leeward face area $A_l$ and side area $A_s$ (each
 already multiplied by its drag coefficient), with $\theta$ the angle between its axis and the
-flow. The wake behind the leeward face adds a quarter of that face:
+flow:
 
-$$F_\text{axial} = - q_i M(\mathrm{Ma}) (A_w + 0.25 A_l) \cos\theta \qquad \mathbf{F}_\text{side} = - q_i M(\mathrm{Ma}) A_s \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
+$$F_\text{axial} = - q_i (M_w A_w + k_\text{wake} M_l A_l) \cos\theta \qquad \mathbf{F}_\text{side} = - q_i M_\text{blunt} A_s \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
 
-$M$ is the transonic drag rise, read at the true Mach number. The speed of sound follows from each world's gas and temperature, $c_s = \sqrt{\gamma R T / M_{gas}}$ (303 m/s on Verda's ground, 262 m/s in its cold layer):
+Each face has its own drag rise with Mach number: a blunt face (a flat end, a heat shield)
+stays high, a slender one (a nose cone) falls back. The wake behind the leeward face adds
+$k_\text{wake} = 0.25$ of that face up to Mach 1 and $0.25 / \mathrm{Ma}^2$ beyond, because a
+wake cannot pull harder than a vacuum. The Mach number is a true one: the speed of sound follows
+from each world's gas and temperature, $c_s = \sqrt{\gamma R T / M_{gas}}$ (303 m/s on Verda's
+ground, 262 m/s in its cold layer).
 
-| Mach | below 0.7 | 0.7 to 1.1 | 1.1 to 2.5 | above 2.5 |
-| --- | --- | --- | --- | --- |
-| $M$ | 1 | rises in a straight line to 2.0 | falls in a straight line to 1.5 | 1.5 |
+| Mach | 0.7 | 0.9 | 1.1 | 1.5 | 2.5 | 4 | 8 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blunt | 1.00 | 1.25 | 1.55 | 1.75 | 1.90 | 1.98 | 2.00 |
+| slender | 1.00 | 1.40 | 1.90 | 1.60 | 1.10 | 0.90 | 0.80 |
+
+Above Mach 1.5 the Newtonian force is mixed in, and above Mach 4 it is the whole force on a
+body. Each patch of surface that faces the motion feels a pressure set by the angle between
+its outward normal $\mathbf{n}$ and the direction of motion $\mathbf{u}$:
+
+$$C_p = C_{p,max} (\mathbf{n} \cdot \mathbf{u})^2$$
+
+$C_{p,max}$ is the stagnation pressure behind a normal shock (1.79 at Mach 4, 1.83 at Mach 8).
+The game integrates this over each part's real surface, including the rounded face of a heat
+shield. A part wholly in the wake of a wider part upstream keeps a tenth of its force above
+Mach 1.5. The full model is in [docs/AERODYNAMICS.md](docs/AERODYNAMICS.md).
 
 A wing or fin of area $S$ at angle of attack $\alpha$, with lift-curve slope $a$ (3.6 per
 radian for a wing, 1.6 for a fin). While the flow is attached:
 
 $$C_L = a \alpha \qquad C_D = 0.012 + 0.07 C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S C_L \qquad D = \tfrac{1}{2} \rho v^2 S C_D M$$
+
+$M$ is the one drag-rise curve lifting surfaces keep for now: 1 below Mach 0.7, 2.0 at Mach 1.1,
+1.5 above Mach 2.5.
 
 Past the stall (16° for a wing, 26° for a fin) it blends smoothly into a flat plate, so a wing
 still makes force at any angle, including backwards:
@@ -424,20 +444,23 @@ $$\dot{q} = 1.83 \times 10^{-4} \sqrt{\rho} v^3$$
   stack or strips a rocket.
 - **Wings stall.** Pull too hard and lift falls away while drag climbs.
 - **Debris flies.** A torn-off booster keeps the drag of its own parts and tumbles on.
+- **Shape matters at speed.** Above Mach 2 a pointed rocket slips through on less drag, a blunt
+  capsule on more, and a stage behind a wide heat shield is sheltered until the vessel turns.
 
 ### Checked against
 
 The independent verification covers density and pressure against scale height on six
 atmospheres (exact), a capsule drop against an integrated reference (0.9 m after a 5.4 km
-fall), terminal velocity, and re-entry (peak heat flux 126.7 kW/m² against a reference of
-126.6, with peak heating ahead of peak deceleration as Allen and Eggers predict). Numbers and
+fall), terminal velocity, re-entry (peak heat flux 119.2 kW/m² against a reference of
+119.1, with peak heating ahead of peak deceleration as Allen and Eggers predict), and the
+force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference. Numbers and
 method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
 ### What it leaves out
 
-One scale height per atmosphere, a constant speed of sound, and no winds. Capsules and tanks
-make no lift of their own shape, and neither does debris. There is no shock heating model
-beyond the flux law, and no flutter or buckling: thin parts carry a stated air rating instead.
+One scale height per atmosphere and no winds. A capsule held at an angle lifts above Mach 1.5
+but cannot yet hold that angle by itself. Shock waves from one part do not strike another.
+There is no shock heating model beyond the flux law, and no flutter or buckling: thin parts carry a stated air rating instead.
 Deeper aerodynamics and re-entry is [roadmap item 6](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry).
 
 ## Under the hood

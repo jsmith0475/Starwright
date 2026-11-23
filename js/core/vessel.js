@@ -11,6 +11,7 @@ import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
 import { maneuverBasis } from './trajectory.js';
 import { Structure, STRUCT } from './structure.js';
+import { dragRise, bluntness, wakeFraction, newtonWeight, shadowWeight, pitotCp, newtonTable, newtonAt, SHADOW_KEEP, SHADOW_NEAR, SHADOW_FAR, NEWTON_ROWS } from './aero.js';
 
 const TAU = Math.PI * 2;
 
@@ -34,6 +35,7 @@ export const TUNING = {
   SHIELD_FACTOR: 0.3,        // temperature-rise multiplier of a heat shield that still has ablator
   ABLATE_RATE: 6e-6,         // kg of ablator per J/m² of heat load on the shield face
   AMBIENT_T: 290,
+  CAP_PHI: 25,               // a heat shield or capsule base is a spherical cap of this half-angle (degrees) unless the part states capPhi
   BASE_DRAG: 0.25,           // leeward (wake-side) faces add this fraction of their drag area
   MACH_PEAK: 2.0, MACH_HIGH: 1.5,   // drag multiplier at Mach 1.1 and above Mach 2.5 (1 below Mach 0.7)
   FACE_CP: 0.25,             // restoring moment arm of a blunt leading face, in radii per sin(angle of attack)
@@ -236,6 +238,7 @@ export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WI
   return out;
 }
 const _cf = [0, 0];
+const _nw = [0, 0, 0];
 
 /** The drag multiplier of _stepFlight at a Mach number: 1 below 0.7, a peak at 1.1, lower again above 2.5. */
 export function machDrag(mach) {
@@ -666,13 +669,31 @@ export class Vessel {
         if (rB > rT) { const fl = Math.PI * (rB * rB - rT * rT); aUp += fl; p._sUp -= fl * dragT; }
         else if (rT > rB) { const fl = Math.PI * (rT * rT - rB * rB); aDown += fl; p._sDown -= fl * dragB; }
         p._aUp = aUp * dragT; p._aDown = aDown * dragB; p._aSide = (rT + rB) * d.h * d.drag.side;
+        // above the speed of sound: how blunt each face is (which drag curve it follows), and the part's Newtonian
+        // table. A heat shield or capsule base is a spherical cap (def.capPhi, degrees) when nothing covers it.
+        p._bUp = bluntness(dragT); p._bDown = bluntness(dragB);
+        const cap = (d.capPhi !== undefined ? d.capPhi : (d.heatshield || (d.shape === 'capsule' && d.rBottom > d.rTop)) ? TUNING.CAP_PHI : 0) * Math.PI / 180;
+        p._nt = newtonTable(rB, rT, d.h, coverBot, coverTop, p.flip ? 0 : cap, p.flip ? cap : 0);
+        p._rM = rM;
         const ref = 0.5 * Math.PI * rM * rM;
         p._eUp = Math.min(1, aUp / ref); p._eDown = Math.min(1, aDown / ref);
       } else {
         // (a part that lies flat against the hull, the folding leg, states its own area: its box is long, what it shows the air is not)
         p._aRad = (d.wing || d.fin) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
+        // a solar array is a flat package against the hull: h tall, t wide, rw thick. It shows the air its big face
+        // (h x t, the area above) only from the side it is mounted on; end on along the stack it shows t x rw, and
+        // from along the hull's curve h x rw.
+        if (d.shape === 'solar' && d.aRad === undefined && d.rw > 0 && d.t > 0) { p._aAx = d.t * d.rw * 0.8; p._aTan = d.h * d.rw * 0.8; }
+        else p._aAx = -1;
+        p._rM = 0.25 * d.h;
         if (d.fin) this._fins.push(p);
       }
+    }
+    // who can stand in whose wake: for each part, the stack parts wider than it (see _stepFlight, the shadow rule)
+    for (const p of this._list) {
+      let sh = null;
+      for (const c of this._list) if (c !== p && c._stack && c._rM > p._rM * 1.02) (sh || (sh = [])).push(c);
+      p._sh = sh; p._ex = 1;
     }
     this._wheel = wheel; this.cost = cost; this.crewCount = crewCount;
     this._driven = driven; this.commRange = commRange;
@@ -1596,18 +1617,50 @@ export class Vessel {
   }
   /**
    * Drag area (m²) of the whole vessel flying straight along its own axis with no spin, tail first (the engine
-   * end into the wind) or nose first: the drag force is then q · machDrag(Mach) · area. It adds up the same
-   * per-part terms _stepFlight does for that attitude, so a point-mass prediction made with it follows the flight.
+   * end into the wind) or nose first, at a Mach number: the drag force is then q · area. It adds up the same
+   * per-part terms _stepFlight does for that attitude (the two drag curves, the wake, the Newtonian share and
+   * shadow), so a point-mass prediction made with it follows the flight.
    */
-  axialDragArea(tailFirst = true) {
+  axialDragAt(mach, tailFirst = true) {
+    const riseB = dragRise(mach, 1), riseS = dragRise(mach, 0), wake = wakeFraction(mach), wN = newtonWeight(mach), wC = 1 - wN;
+    const wS = shadowWeight(mach) * (1 - SHADOW_KEEP), mf = machDrag(mach);
+    const cpN = wN > 0 ? pitotCp(mach, this.body.atmo ? this.body.atmo.gamma : 1.4) : 0, uy = tailFirst ? -1 : 1;
     let a = 0;
     for (const p of this._list) {
       const d = p.def;
-      if (p._stack) a += tailFirst ? p._aDown + TUNING.BASE_DRAG * p._aUp : p._aUp + TUNING.BASE_DRAG * p._aDown;
-      else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf)[1];
-      else { let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area; a += aR; }
+      let keep = 1;
+      if (wS > 0 && p._sh) {
+        let shade = 0;
+        for (const c of p._sh) {
+          const dx = p.pos.x - c.pos.x, dy = p.pos.y - c.pos.y, dz = p.pos.z - c.pos.z, along = -dy * uy;
+          if (along <= 0) continue;
+          const far = along / (2 * c._rM);
+          if (far >= SHADOW_FAR) continue;
+          let sIn = 1 + (c._rM - Math.sqrt(dx * dx + dz * dz) - p._rM) / (0.5 * p._rM);
+          if (sIn <= 0) continue;
+          if (sIn > 1) sIn = 1;
+          if (far > SHADOW_NEAR) sIn *= (SHADOW_FAR - far) / (SHADOW_FAR - SHADOW_NEAR);
+          if (sIn > shade) shade = sIn;
+        }
+        keep = 1 - wS * shade;
+      }
+      if (p._stack) {
+        const mU = riseS + (riseB - riseS) * p._bUp, mD = riseS + (riseB - riseS) * p._bDown;
+        let f = wC * (tailFirst ? p._aDown * mD + wake * p._aUp * mU : p._aUp * mU + wake * p._aDown * mD);
+        if (wN > 0) f += wN * cpN * Math.abs(p._nt[tailFirst ? (NEWTON_ROWS - 1) * 3 : 0]);
+        a += f * keep;
+      } else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf)[1] * mf;
+      else { let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area; a += aR * riseB * keep; }
     }
     return a;
+  }
+  /** The same at low speed (below Mach 0.7). */
+  axialDragArea(tailFirst = true) { return this.axialDragAt(0, tailFirst); }
+  /** axialDragAt sampled at Mach 0, 0.1, ... 12, for a predictor to interpolate in. */
+  axialDragTable(tailFirst = true) {
+    const t = new Float64Array(121);
+    for (let i = 0; i <= 120; i++) t[i] = this.axialDragAt(i / 10, tailFirst);
+    return t;
   }
   /** Choose which rings of a cluster engine burn (an index into its def.engine.modes; 0 is all of them). */
   setEngineMode(partId, mode, ev = []) {
@@ -2112,10 +2165,15 @@ export class Vessel {
       const list = this._list, n = list.length;
       const cxm = com.x, cym = com.y, czm = com.z;
       const uAx = uy / speed;
-      const BASE = TUNING.BASE_DRAG;
       const mach = this._envMach;
+      // wings and open panels keep the single drag-rise curve (they are part D of the re-entry work)
       const mf = mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 * (TUNING.MACH_PEAK - 1)
         : mach < 2.5 ? TUNING.MACH_PEAK + (mach - 1.1) / 1.4 * (TUNING.MACH_HIGH - TUNING.MACH_PEAK) : TUNING.MACH_HIGH;
+      // bodies: a blunt and a slender curve, a wake that fades, a Newtonian force that takes over, and shadow
+      const riseB = dragRise(mach, 1), riseS = dragRise(mach, 0), wake = wakeFraction(mach);
+      const wN = newtonWeight(mach), wC = 1 - wN, wS = shadowWeight(mach) * (1 - SHADOW_KEEP);
+      const cpN = wN > 0 ? pitotCp(mach, body.atmo.gamma) : 0;
+      const wux = ux / speed, wuy = uy / speed, wuz = uz / speed;
       const lat0 = Math.sqrt(Math.max(0, 1 - uAx * uAx));
       for (let i = 0; i < n; i++) {
         const p = list[i], d = p.def;
@@ -2124,20 +2182,55 @@ export class Vessel {
         const v2 = vx * vx + vy * vy + vz * vz;
         if (v2 < 1e-6) continue;
         const Ax0 = Ax, Ay0 = Ay, Az0 = Az, ATx0 = ATx, ATy0 = ATy, ATz0 = ATz;
-        const sp = Math.sqrt(v2), qd = 0.5 * rho * v2, qdm = qd * mf;
+        const sp = Math.sqrt(v2), qd = 0.5 * rho * v2, qdm = qd * riseB;
         let fx = 0, fy = 0, fz = 0;
+        // shadow: a part wholly inside the wake tube of a wider part upstream keeps a tenth of its force above
+        // Mach 1.5. The tube runs back from the wider part along the motion and closes 2 to 4 diameters behind it.
+        // A part whose windward edge stands half its own radius out of the tube is in the open.
+        let keep = 1;
+        if (wS > 0 && p._sh) {
+          let shade = 0;
+          const sh = p._sh, rp = p._rM;
+          for (let j = 0; j < sh.length; j++) {
+            const c = sh[j], dx = p.pos.x - c.pos.x, dy = p.pos.y - c.pos.y, dz = p.pos.z - c.pos.z;
+            const along = -(dx * wux + dy * wuy + dz * wuz);
+            if (along <= 0) continue;
+            const far = along / (2 * c._rM);
+            if (far >= SHADOW_FAR) continue;
+            const perp = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - along * along));
+            let sIn = 1 + (c._rM - perp - rp) / (0.5 * rp);
+            if (sIn <= 0) continue;
+            if (sIn > 1) sIn = 1;
+            if (far > SHADOW_NEAR) sIn *= (SHADOW_FAR - far) / (SHADOW_FAR - SHADOW_NEAR);
+            if (sIn > shade) shade = sIn;
+          }
+          p._ex = 1 - shade; keep = 1 - wS * shade;
+        } else p._ex = 1;
         if (p._stack) {
           const ca = vy / sp;
-          if (ca > 0) fy = -qdm * (p._aUp + BASE * p._aDown) * ca; else fy = -qdm * (p._aDown + BASE * p._aUp) * ca;
-          ATx -= rz * fy; ATz += rx * fy;
+          const mU = riseS + (riseB - riseS) * p._bUp, mD = riseS + (riseB - riseS) * p._bDown;
+          // classic: the leading face, a fraction of the trailing one for its wake, and the flank
+          const kc = wC * keep;
+          if (ca > 0) fy = -qd * (p._aUp * mU + wake * p._aDown * mD) * ca * kc; else fy = -qd * (p._aDown * mD + wake * p._aUp * mU) * ca * kc;
           // a blunt leading face rights itself (its centre of pressure moves to the windward edge) and damps pitching
           const rr = d.rTop > d.rBottom ? d.rTop : d.rBottom;
-          const kR = TUNING.FACE_CP * qdm * (ca > 0 ? p._sUp : -p._sDown) * Math.abs(ca) * rr / sp;
+          const kR = TUNING.FACE_CP * qd * (ca > 0 ? p._sUp * mU : -p._sDown * mD) * Math.abs(ca) * rr / sp * kc;
           const kD = TUNING.FACE_DAMP * qdm * (p._aUp + p._aDown) * rr * rr / sp;
           ATx += kR * vz - kD * w.x; ATz -= kR * vx + kD * w.z;
-          const k = qdm * p._aSide / sp;
+          const k = qdm * p._aSide / sp * kc;
           fx = -k * vx; fz = -k * vz;
-          ATx += ry * fz; ATy += rz * fx - rx * fz; ATz -= ry * fx;
+          if (wN > 0) {
+            // Newtonian: the table gives the force along the axis and across it, and the moment about the part's centre
+            newtonAt(p._nt, ca, _nw);
+            const qc = qd * cpN * wN * keep, lat = Math.sqrt(vx * vx + vz * vz);
+            fy += qc * _nw[0];
+            if (lat > 1e-9 * sp) {
+              const lx = vx / lat, lz = vz / lat, fn = qc * _nw[1], mn = qc * _nw[2];
+              fx += fn * lx; fz += fn * lz;
+              ATx -= mn * lz; ATz += mn * lx;
+            }
+          }
+          ATx += ry * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - ry * fx;
           Ax += fx; Ay += fy; Az += fz;
         } else if (p._wArea > 0) {
           // lifting surface: chord along the stack axis, span along the mount direction, normal n tangential
@@ -2179,8 +2272,12 @@ export class Vessel {
           let aR = p._aRad;
           if (d.wheel && !p.deployed) aR = 0;
           else if (d.airbrake && p.deployed) aR += d.airbrake.area;
-          const k = qdm * aR / sp;
-          fx = -k * vx; fy = -k * vy; fz = -k * vz;
+          const k = qdm * aR / sp * keep;
+          if (p._aAx >= 0) {
+            // a flat package: each direction of the flow meets its own face (outward, along the stack, along the curve)
+            const ox = p._ox, oz = p._oz, vo = vx * ox + vz * oz, vt = vz * ox - vx * oz, kt = k * p._aTan / aR;
+            fx = -k * vo * ox + kt * vt * oz; fz = -k * vo * oz - kt * vt * ox; fy = -k * p._aAx / aR * vy;
+          } else { fx = -k * vx; fy = -k * vy; fz = -k * vz; }
           Ax += fx; Ay += fy; Az += fz;
           ATx += ry * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - ry * fx;
           if (p._pA > 0 && p.deployed) {

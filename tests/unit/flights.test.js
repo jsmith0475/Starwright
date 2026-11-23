@@ -476,21 +476,50 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   const hop = AP.planHohmannToMoon(w, v, dray);
   assert.ok(hop, 'transfer to Dray planned');
   fly(AP.executeNode(w, v), 'transfer to Dray');
-  const fix2 = AP.planCorrection(w, v, dray, { periapsis: 12000 });
-  assert.ok(fix2, 'on an encounter course');
-  if (fix2.node) fly(AP.executeNode(w, v), 'Dray correction');
+  // a burn of a few m/s on this engine does not come out exact (each trim here leaves several m/s to correct), and
+  // 0.3 m/s is 10 km of periapsis at Dray: so trim up to four times, as a flight controller would, and then judge
+  // the arrival itself
+  for (let k = 0; k < 4; k++) {
+    const fix2 = AP.planCorrection(w, v, dray, { periapsis: 12000 });
+    assert.ok(fix2, 'on an encounter course');
+    log(`Dray correction ${k + 1}: ${fix2.dv.toFixed(2)} m/s → periapsis ${fix2.periapsis === null ? 'none' : km(fix2.periapsis)}`);
+    if (!fix2.node) break;
+    fly(AP.executeNode(w, v), 'Dray correction');
+  }
   coast(() => v.body === dray, 3e6);
   assert.equal(v.body, dray, 'reached Dray');
+  log(`DRAY arrival periapsis ${km(v.periapsis)} at ${v.orbitalSpeed.toFixed(0)} m/s`);
+  assert.ok(v.periapsis > 6000 && v.periapsis < 20000, 'arrives near the 12 km it aimed for: ' + v.periapsis);
   AP.planCircularize(w, v, 'periapsis');
   fly(AP.executeNode(w, v), 'Dray capture');
-  assert.equal(v.situation, 'orbit');
+  assert.equal(v.situation, 'orbit', `Dray orbit ${km(v.apoapsis)} × ${km(v.periapsis)}, e ${v.getOrbit(w.ut).e.toFixed(3)}\n` + m.lines.slice(-8).join('\n'));
   log(`DRAY ORBIT ${km(v.apoapsis)} × ${km(v.periapsis)}; ${v.deltaV.toFixed(0)} m/s left`);
   // 6. down
   // The landing autopilot does not choose its site: it comes down on whatever ground is under the ship, and Dray is
-  // rugged. Tried from five points of this orbit (0, 2, 5, 10 and 15 minutes on), it stood on three and came down
-  // on slopes of 25 and 40 degrees on the other two. So this flight does what a pilot would and waits ten minutes
-  // for gentler ground. (Until the climb from Verda changed by a few seconds this test passed with no wait, by luck.)
-  { const t0 = w.ut; AP.fly(w, null, { dt: 0.1, maxSim: 601, until: () => w.ut - t0 >= 600 }); }
+  // rugged (slopes of 25 and 40 degrees are common). Which ground that is depends on the second the ship arrived, so
+  // any change to the climb from Verda moves it. So this flight does what a pilot would: it scouts. From six points
+  // of the orbit, five minutes apart, a copy of the world flies the landing. Wherever the ground it found was
+  // standable (a slope under 0.2 rad) the lander must be standing on it, and the flight then lands for real from the
+  // first point that worked.
+  let wait = null;
+  {
+    const saved = JSON.stringify(w.toJSON()), tries = [];
+    for (let k = 0; k < 6; k++) {
+      const w2 = World.fromJSON(saved), v2 = w2.getVessel(v.id);
+      const t0 = w2.ut;
+      if (k) AP.fly(w2, null, { dt: 0.1, maxSim: 300 * k + 1, until: () => w2.ut - t0 >= 300 * k });
+      const c = AP.fly(w2, AP.hoverslamLanding(w2, v2), { maxSim: 1e6 });
+      for (let i = 0; i < 200; i++) w2.step(0.1);
+      const tilt = v2.dead ? Math.PI : v2.pos.clone().set(0, 1, 0).applyQuaternion(v2.q).angleTo(v2.pos);
+      const slope = v2.surface ? v2.surface.slope : NaN, stands = c.done && !c.failed && v2.landed && !v2.dead && tilt < 0.5;
+      tries.push(`${5 * k} min: slope ${slope.toFixed(2)}, ${stands ? 'standing' : 'fell'}`);
+      if (slope < 0.2) assert.ok(stands, `on standable ground the lander stands (${tries[k]})`);
+      if (stands && wait === null) wait = 300 * k;
+    }
+    log('scouted landings: ' + tries.join('; '));
+    assert.ok(wait !== null, 'standable ground somewhere along the orbit: ' + tries.join('; '));
+  }
+  if (wait) { const t0 = w.ut; AP.fly(w, null, { dt: 0.1, maxSim: wait + 1, until: () => w.ut - t0 >= wait }); }
   const before = m.events.filter(e => e.type === 'explosion').length;
   const land = fly(AP.hoverslamLanding(w, v), 'landing');
   for (let i = 0; i < 200; i++) w.step(0.1);

@@ -142,8 +142,9 @@ game. Nothing is scripted and nothing is nudged: the program only moves the cont
 
 **The predictor.** Four times a second the program asks: if the engine stayed off from here, where
 would this stage come down? `predictFall` integrates a point mass under inverse-square gravity and
-drag, in air that turns with the planet, using the stage's own tail-first drag area and the game's
-own drag rise through Mach 1. It returns the impact point, time, speed, peak dynamic pressure, peak
+drag, in air that turns with the planet, using a table of the stage's own tail-first drag area
+against Mach number (`Vessel.axialDragTable`, made from the same per-part forces the flight uses,
+see [AERODYNAMICS.md](AERODYNAMICS.md)). It returns the impact point, time, speed, peak dynamic pressure, peak
 heating and peak g.
 
 **Flip and boostback.** The stage turns to point its engine along the line that moves the predicted
@@ -155,7 +156,10 @@ time and for the fuel it burns. It keeps a reserve for the landing and will not 
 of the rating of the weakest part, the program plans a burn inside the predictor (so the impact
 point already allows for it), sized by bisection to bring the peak back under the limit. Below
 that it says "no entry burn needed" and saves the propellant. A stage dropped early on Verda
-usually does not need one; one coming back from near-orbital speed does.
+usually does not need one; one coming back from near-orbital speed does. Above Mach 1.5 a leaning
+body makes little side force, so while the entry burn runs it also steers: the engine is tipped up
+to 8 degrees across the track and the burn runs up to 60 m/s longer while the stage would still
+overshoot.
 
 **Steering on the fins.** Falling engine first, a stage that leans its nose a few degrees gets a
 sideways push from the air. The program leans up to 7 degrees to walk the impact point onto the
@@ -304,8 +308,9 @@ What this says (it was measured before guidance was written, and guidance was bu
 - `tests/e2e/booster_barge.mjs`, in a real browser (26 checks): launch, separation, "Land on the
   barge" from the Guidance panel, the landing on the deck, the map markers, the upper stage in orbit.
 - `tests/verify/checks_booster.mjs`, groups 9d to 9f (20 checks). The reference integrator
-  shares no code with the game. It has its own exponential atmosphere and its own drag curve, and
-  the drag area it uses is measured from one step of the game's flight, not read from the game.
+  shares no code with the game. It has its own atmosphere, and the drag area it uses at each
+  Mach number is measured from the game's flight, not read from the game; the predictor's own
+  table is compared with that measurement at every Mach number flown.
   Over a 63 km fall: impact point within 0.1% of the distance flown, time within 0.3 s, impact
   speed within 0.13%, peak dynamic pressure within 0.6%; the game's predictor lands 2.4 m from the
   reference. The landing burn on airless Pell stops within 0.03% of the distance the rocket

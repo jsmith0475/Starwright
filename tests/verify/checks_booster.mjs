@@ -130,13 +130,12 @@ function watching(S) {
 // ------------------------------------------------------------------------------------------------------------
 const home = SYSTEM.home;
 const homeRef = R.readSystem().byId[home.id];          // the same world as plain data, for the reference's own atmosphere
-/** The drag multiplier against Mach number, restated from the specification (not imported from the game). */
-function machRef(m) { return m <= 0.7 ? 1 : m < 1.1 ? 1 + (m - 0.7) * 2.5 : m < 2.5 ? 2 - (m - 1.1) / 1.4 * 0.5 : 1.5; }
 /**
  * A point mass under inverse-square gravity and drag in air that turns with the planet, on the reference's own
  * integrator with its own exponential atmosphere. y = [r, v]; stops at `stopAlt` above the reference sphere.
+ * `areaAt(mach)` is the drag area (m²) at a Mach number.
  */
-function refFall(r0, v0, mass, area, stopAlt) {
+function refFall(r0, v0, mass, areaAt, stopAlt) {
   const mu = home.gm, Rb = home.radius, wy = R.TAU / home.rotPeriod, at = home.atmo;
   const y = Float64Array.from([...r0, ...v0]);
   let maxQ = 0, prev = null, hit = null;
@@ -145,7 +144,7 @@ function refFall(r0, v0, mass, area, stopAlt) {
     const ax = s[3] - wy * s[2], ay = s[4], az = s[5] + wy * s[0];
     const sp = Math.hypot(ax, ay, az);
     const rho = R.airDensity(homeRef, alt);
-    const k = 0.5 * rho * sp * machRef(sp / R.soundSpeed(homeRef, alt)) * area / mass;
+    const k = 0.5 * rho * sp * areaAt(sp / R.soundSpeed(homeRef, alt)) / mass;
     o[0] = s[3]; o[1] = s[4]; o[2] = s[5];
     o[3] = g * s[0] - k * ax; o[4] = g * s[1] - k * ay; o[5] = g * s[2] - k * az;
   };
@@ -171,28 +170,41 @@ function predictorCheck(S) {
   const { w, v } = dropped({ alt: 62000, speed: 640, pitch: 0, east: 20000, fuel: 0.2 });
   v.ctrl.sas = true; v.ctrl.sasMode = 'srfRetrograde';
   run(w, 30, 0.02);
-  const t0 = w.ut, r0 = A(v.pos), v0 = A(v.vel), m0 = v.mass, area = v.axialDragArea(true), cg = v.baseHeight;
+  const t0 = w.ut, r0 = A(v.pos), v0 = A(v.vel), m0 = v.mass, drag = v.axialDragTable(true), cg = v.baseHeight;
+  const tableAt = m => { const x = Math.min(120, Math.max(0, m * 10)), i = Math.min(119, x | 0); return drag[i] + (drag[i + 1] - drag[i]) * (x - i); };
   const startDir = home.inertialToSurfaceDir(v.pos.clone(), t0);
-  const pred = predictFall(home, v.pos, v.vel, v.mass, t0, { area, floor: cg });
-  // the drag area, measured from the flight itself where the air is thick: what one step took off the velocity
-  let areaMeas = null, maxQ = 0;
+  const pred = predictFall(home, v.pos, v.vel, v.mass, t0, { drag, floor: cg });
+  // the drag area by Mach number, measured from the flight itself wherever the air presses: what each step took off
+  // the velocity, over the dynamic pressure from the reference's own atmosphere. Averaged in bins of Mach 0.05.
+  const BIN = 0.05, sum = new Map();
+  let maxQ = 0;
   while (!v.dead && !v.landed && w.ut - t0 < 900) {
-    const before = A(v.vel), pos = A(v.pos), q = v.dynamicPressure || 0, sp = v.airspeed, mBefore = v.mass;
+    const before = A(v.vel), pos = A(v.pos), sp = v.airspeed, mBefore = v.mass;
     w.step(0.02);
     if (v.dead) break;
     maxQ = Math.max(maxQ, v.dynamicPressure || 0);
-    if (!areaMeas && q > 20000 && sp > 300) {
-      const r = R.norm(pos), g = R.scale(pos, -home.gm / (r * r * r));
+    const r = R.norm(pos), alt = r - home.radius, qNow = 0.5 * R.airDensity(homeRef, alt) * sp * sp;
+    if (qNow > 300 && !v.landed) {
+      const g = R.scale(pos, -home.gm / (r * r * r));
       const dv = R.sub(R.sub(A(v.vel), before), R.scale(g, 0.02));
-      const qNow = 0.5 * home.density(r - home.radius) * sp * sp;
-      areaMeas = R.norm(dv) / 0.02 * mBefore / (qNow * machRef(sp / R.soundSpeed(homeRef, r - home.radius)));
+      const k = Math.round(sp / R.soundSpeed(homeRef, alt) / BIN), e = sum.get(k) || [0, 0];
+      e[0] += R.norm(dv) / 0.02 * mBefore / qNow; e[1]++; sum.set(k, e);
     }
   }
+  const bins = [...sum.entries()].map(([k, e]) => [k * BIN, e[0] / e[1]]).sort((p, q) => p[0] - q[0]);
+  const areaAt = m => {
+    if (m <= bins[0][0]) return bins[0][1];
+    for (let i = 1; i < bins.length; i++) if (m <= bins[i][0]) return bins[i - 1][1] + (bins[i][1] - bins[i - 1][1]) * (m - bins[i - 1][0]) / (bins[i][0] - bins[i - 1][0]);
+    return bins[bins.length - 1][1];
+  };
+  let worst = 0;
+  for (const [m, a] of bins) worst = Math.max(worst, Math.abs(tableAt(m) / a - 1));
   const T = w.ut - t0, endDir = home.inertialToSurfaceDir(v.pos.clone(), w.ut), flown = groundDistance(home, startDir, endDir);
   const seaAlt = v.altitude - Math.max(0, v.radarAlt);                 // height of the surface it hit, above the sphere
   S.info('the fall: time, and distance over the ground', T, 's', (flown / 1000).toFixed(1) + ' km, ending in the sea east of the pad');
-  S.check('drag area the predictor uses = drag area measured from one step of the flight', areaMeas, area, 0.01, { rel: true, unit: 'm²' });
-  const ref = refFall(r0, v0, m0, areaMeas, seaAlt + cg);
+  S.info('drag area engine first, measured in the flight: slowest / at Mach 1.1 / fastest', `${bins[0][1].toFixed(2)} / ${areaAt(1.1).toFixed(2)} / ${bins[bins.length - 1][1].toFixed(2)}`, 'm²', `Mach ${bins[0][0].toFixed(2)} to ${bins[bins.length - 1][0].toFixed(2)}; the forces part by part are checked in chapter 10`);
+  S.check('drag table the predictor uses vs the drag measured in the flight, at every Mach number flown (worst)', 0, worst, 0.02, { max: true, note: 'the table is made at zero angle of attack; the stage sways a little as it falls' });
+  const ref = refFall(r0, v0, m0, areaAt, seaAlt + cg);
   const refDir = home.inertialToSurfaceDir(V3(ref.r), t0 + ref.t);
   S.check('reference vs the flight: impact point', 0, groundDistance(home, refDir, endDir) / flown, 0.01, { max: true, note: 'fraction of the distance flown' });
   S.check('reference vs the flight: time of fall', T, ref.t, 1, { unit: 's' });
