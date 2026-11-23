@@ -1,7 +1,7 @@
 // Starwright part materials: one shared instance per bucket, built lazily. Authored for the renderer
 // contract in docs/SECOND_PASS.md (sRGB output, ACES tone mapping, soft shadows).
 import * as THREE from '../../lib/three.module.min.js';
-import { hullMaps, metalMaps, bellMaps, foilMaps, solarMaps, tileMaps, treadMaps, fabricMaps, glowRamp, heatRamp, decalAtlas } from './textures.js';
+import { hullMaps, metalMaps, bellMaps, foilMaps, solarMaps, tileMaps, treadMaps, fabricMaps, steelMaps, hexTileMaps, glowRamp, heatRamp, decalAtlas } from './textures.js';
 
 export const PALETTE = {
   white: 0xf2f4f5, shade: 0xd3d9de, teal: 0x39d0c0, tealDark: 0x1c8f86, gun: 0x333a44, dark: 0x1b1f26,
@@ -31,6 +31,9 @@ function make(name) {
     case 'foil': { const t = foilMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(1.0), roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: 0.78, side: THREE.DoubleSide }); }
     case 'solar': { const t = solarMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(0.6), roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: 1, side: THREE.DoubleSide, emissive: 0x06103a, emissiveIntensity: 0.25 }); }
     case 'tile': { const t = tileMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(1.2), roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: 1 }); }
+    // bare brushed stainless sheet (XXL hulls) and the black hexagonal tiles on their belly; a skirt shows its inside
+    case 'steel': { const t = steelMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(0.55), roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: 1, side: THREE.DoubleSide }); }
+    case 'hextile': { const t = hexTileMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(1.0), roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: 1, side: THREE.DoubleSide }); }
     case 'rubber': { const t = treadMaps(); return new STD({ vertexColors: true, map: t.map, normalMap: t.normalMap, normalScale: NS(1.6), roughness: 0.92, metalness: 0 }); }
     case 'glass': return new PHYS({ vertexColors: true, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, reflectivity: 0.9, emissive: 0x07262c, emissiveIntensity: 0.55 });
     case 'jar': return new PHYS({ color: 0xc8f4ee, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.34, depthWrite: false, clearcoat: 1 });

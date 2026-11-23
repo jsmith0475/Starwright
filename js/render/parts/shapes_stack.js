@@ -1,15 +1,17 @@
 // Starwright part models: stack parts (pods, tanks, structure, utility rings). See geo.js for conventions.
 import * as THREE from '../../lib/three.module.min.js';
 import { PB, P, TAU, M, Mrad, mul, sub, flange, endCap, rib, porthole, windowPane, handrail, raceway, stringers } from './geo.js';
+import { steelTank, ogivePod, STEEL, STEEL_DK } from './shapes_shearwater.js';
 
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 export const DORSAL = Math.PI / 2;   // plane parts: the canopy / roof side faces +Z
-const SIZE_DECAL = r => (r < 0.4 ? 'sizeS' : r < 0.8 ? 'sizeM' : r < 1.5 ? 'sizeL' : 'sizeXL');
+const SIZE_DECAL = r => (r < 0.4 ? 'sizeS' : r < 0.8 ? 'sizeM' : r < 1.5 ? 'sizeL' : r < 2.3 ? 'sizeXL' : 'sizeXXL');
 const SCHEME = {            // paint per size class: body, accent band, secondary
   S: { body: P.hull, band: P.amber, dark: P.gun },
   M: { body: P.hull, band: P.teal, dark: P.gun },
   L: { body: P.hull, band: P.tealDark, dark: P.graphite },
   XL: { body: P.foam, band: P.hull, dark: P.graphite },
+  XXL: { body: STEEL, band: STEEL_DK, dark: P.graphite },   // bare stainless (the steel tank and pod have their own models)
 };
 const scheme = def => SCHEME[def.size] || SCHEME.M;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -25,6 +27,7 @@ function ends(pb, def, o = {}) {
 // Tanks
 // ---------------------------------------------------------------------------------------------
 export function tank(def, g, pb) {
+  if (def.variant === 'steel') return steelTank(def, g, pb);
   const { r, size } = def, sc = scheme(def), [a, b] = ends(pb, def), L = b - a;
   const d = clamp(r * 0.018, 0.006, 0.02), e = Math.min(0.12, L * 0.14), bh = clamp(L * 0.13, 0.05, 0.32), yb = b - e - bh * 0.9;
   const prof = [[r - 0.004, a, sc.body], ...rib(r, a + e, d * 2.4, d, sc.dark, sc.body)];
@@ -131,6 +134,7 @@ function hatchDoor(pb, rAt, slope, y0, y1, ang, w) {
 export function capsule(def, g, pb) {
   const { h, variant } = def, rT = def.rTop, rB = def.rBottom, y0 = -h / 2, y1 = h / 2;
   if (variant === 'can') return landerCan(def, g, pb);
+  if (variant === 'ogive') return ogivePod(def, g, pb);
   const skirt = clamp(h * 0.09, 0.05, 0.2), neck = clamp(h * 0.1, 0.06, 0.24);
   const ya = y0 + skirt, yb = y1 - neck, slope = (rT - rB) / (yb - ya);
   const rAt = y => rB + slope * (clamp(y, ya, yb) - ya);

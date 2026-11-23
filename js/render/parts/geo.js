@@ -5,7 +5,7 @@
 // faces +X ("outward" for radial parts). Hull-type UVs are laid out in metres (see HULL_TILE).
 import * as THREE from '../../lib/three.module.min.js';
 import { mat, NO_SHADOW, NO_TINT, PALETTE } from './materials.js';
-import { HULL_TILE, decalUV, decalRow } from './textures.js';
+import { HULL_TILE, STEEL_TILE, decalUV, decalRow } from './textures.js';
 
 export const P = PALETTE;
 export const TAU = Math.PI * 2;
@@ -137,9 +137,9 @@ export function extrudePoly(pts, d, bevel = 0) {
 }
 
 // Buckets whose UVs are in metres and need scaling to their texture tile.
-const TILE = { hull: 1 / HULL_TILE, metal: 1, foil: 2, solar: 2, tile: 1, bell: 1, rubber: 1, canopy: 1 };
+const TILE = { hull: 1 / HULL_TILE, metal: 1, foil: 2, solar: 2, tile: 1, bell: 1, rubber: 1, canopy: 1, steel: 1 / STEEL_TILE, hextile: 1 };
 // Flat colours used when everything collapses into the single 'lod' material.
-const LOD_TINT = { solar: 0x1c3a8a, tile: 0x3a2e28, rubber: 0x55565a, glass: 0x1a2a33, bell: 0x8a8f96, metal: 0xb0b6bd, chrome: 0xd0d4d8, glow: 0x2a1408, beam: 0xfff2d0 };
+const LOD_TINT = { solar: 0x1c3a8a, tile: 0x3a2e28, rubber: 0x55565a, glass: 0x1a2a33, bell: 0x8a8f96, metal: 0xb0b6bd, chrome: 0xd0d4d8, glow: 0x2a1408, beam: 0xfff2d0, steel: 0x9ca2a8, hextile: 0x1b1c1f };
 
 export class PB {
   /** q: 2 = high, 1 = medium, 0 = low (single flat material, no small detail). */
@@ -159,6 +159,7 @@ export class PB {
     let rMax = 0; for (const p of profile) rMax = Math.max(rMax, p[0]);
     const opt = { seg: this.seg(rMax), ...o };
     // foil and solar tiles are 0.5 m square: wrap them at that size so the crinkles are not smeared sideways
+    if (bucket === 'steel') { if (opt.uRep === undefined) opt.uRep = Math.max(1, Math.round(TAU * rMax / STEEL_TILE)); if (opt.vTile === undefined) opt.vTile = STEEL_TILE; }
     if (opt.uRep === undefined) opt.uRep = bucket === 'hull' ? Math.max(1, Math.round(TAU * rMax / HULL_TILE)) : bucket === 'bell' ? Math.max(1, Math.round(TAU * rMax / 0.9)) : bucket === 'foil' || bucket === 'solar' ? Math.max(1, Math.round(TAU * rMax / 0.5)) : Math.max(1, Math.round(TAU * rMax));
     if (opt.vTile === undefined) opt.vTile = bucket === 'hull' ? HULL_TILE : bucket === 'foil' || bucket === 'solar' ? 0.5 : 1;
     return this.add(revolve(profile, opt), null, o.m || null, bucket);

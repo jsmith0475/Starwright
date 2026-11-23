@@ -2,17 +2,29 @@
 // boosters and radial engines. Every bell sits in a group named 'gimbal' so partmesh can swivel it; nozzle
 // interiors go in the 'glow' bucket whose emissive ramp follows throttle.
 import * as THREE from '../../lib/three.module.min.js';
-import { PB, P, TAU, M, Mrad, mul, sub, flange, rib, raceway } from './geo.js';
+import { PB, P, TAU, M, Mrad, mul, sub, flange, rib, raceway, revolve } from './geo.js';
+import { STEEL, STEEL_DK, WELD } from './shapes_shearwater.js';
 
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 const lerp = (a, b, t) => a + (b - a) * t;
 
-/** Where the exhaust leaves: [{ x, y, z, r }] in part coordinates (y = exit plane). */
+/** Where the exhaust leaves: [{ x, y, z, r }] in part coordinates (y = exit plane). A ring cluster (engine.rings)
+ *  lists every bell ring by ring (ring 0's first), each with `ring` (its index) and `fixed` (true: it does not swivel). */
 export function nozzleExits(def) {
   const e = def.engine, y = -def.h / 2;
   if (!e) return [{ x: 0, y, z: 0, r: (def.r || 0.3) * 0.7 }];
   if (def.shape === 'radialengine') { const r = Math.min(def.rw, def.t) * (def.variant === 'pod' ? 0.36 : 0.34); return [{ x: def.variant === 'pod' ? def.rw * 0.08 : 0, y, z: 0, r }]; }
   const r = def.r, v = def.variant;
+  if (e.rings) {
+    const out = [];
+    e.rings.forEach((rg, k) => {
+      // sea-level bells are a tenth of the stage's radius, vacuum bells nearly three times that; each ring is turned
+      // so its bells sit in the gaps of the ring inside it
+      const rr = r * (rg.vacuum ? 0.285 : 0.103), a0 = Math.PI / 2 + (k ? Math.PI / rg.n : 0), fixed = !(rg.gimbal > 0);
+      for (let i = 0; i < rg.n; i++) { const a = a0 + i * TAU / rg.n; out.push({ x: Math.cos(a) * rg.radius, y, z: Math.sin(a) * rg.radius, r: rr, ring: k, fixed }); }
+    });
+    return out;
+  }
   if (def.shape === 'srb') return [{ x: 0, y, z: 0, r: r * 0.62 }];
   if (v === 'twin') return [-1, 1].map(s => ({ x: 0, y, z: s * r * 0.5, r: r * 0.44 }));
   if (v === 'cluster') return [{ x: 0, y, z: 0, r: r * 0.3 }, ...[0, 1, 2, 3].map(i => ({ x: Math.cos(i * Math.PI / 2 + Math.PI / 4) * r * 0.62, y, z: Math.sin(i * Math.PI / 2 + Math.PI / 4) * r * 0.62, r: r * 0.3 }))];
@@ -94,6 +106,7 @@ function wiring(pb, pts, r = 0.008, color = P.orange) { if (pb.hi) pb.tube(pts, 
 // ---------------------------------------------------------------------------------------------
 export function engine(def, g, pb) {
   const v = def.variant, e = def.engine;
+  if (e.rings) return ringCluster(def, g, pb);
   if (v === 'ion') return ion(def, g, pb);
   if (v === 'jet' || v === 'ramjet') return jet(def, g, pb);
   if (v === 'spike') return spike(def, g, pb);
@@ -152,6 +165,68 @@ function multiBell(def, g, pb) {
     if (pb.med) gp.tube([[ex.x + rT * 3, yUnder - h * 0.12 - yPivot, ex.z - rT * 2], [ex.x + rT * 2.6, 0.05, ex.z - rT * 1.5], [ex.x + rT * 1.5, yT + chLen * 0.9 - yPivot, ex.z - rT * 0.8]], rT * 0.4, P.copper, 'metal');
     void st;
   }
+  gp.build(gim);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ring clusters (engine.rings): many small bells on one thrust plate inside a steel skirt. One bell of each ring is
+// modelled once and stamped round its ring, so 33 bells are still three or four merged meshes. The rings that swivel
+// go in the 'gimbal' group, the fixed ones stay with the skirt, and each ring's nozzle interiors are their own
+// 'glow' mesh tagged userData.ring, so a ring that is shut down in the current mode can go dark (partmesh
+// setEngineRings).
+// ---------------------------------------------------------------------------------------------
+function bellKit(q, rT, rE, len, vac) {
+  const seg = vac ? (q >= 2 ? 28 : q === 1 ? 18 : 8) : (q >= 2 ? 14 : q === 1 ? 8 : 6), n = q >= 2 ? (vac ? 12 : 5) : q === 1 ? (vac ? 7 : 3) : 1;
+  const th = clamp(rE * 0.035, 0.006, 0.02), pow = vac ? 1.75 : 1.9, tint = vac ? 0x3c4048 : undefined, uRep = Math.max(1, Math.round(TAU * rE / 0.9));
+  if (q === 0) return { outer: revolve([[rE, 0, 0x8a8f96], [rT * 1.6, len]], { seg, uRep }), inner: null, head: null, seg };
+  const outer = [[rE - th * 0.3, -th * 0.2, P.steel], [rE + th * 0.5, 0], [rE + th * 0.5, th * 1.5]], inner = [[0.002, len + rT * 0.5, 0x8a8078]];
+  for (let i = 0; i <= n; i++) { const s = 1 - i / n; outer.push([bellR(rT, rE, s, pow), len * (1 - s) + (i ? 0 : th * 1.5), bellColor(s, tint)]); }
+  for (let i = 0; i <= n; i++) { const s = i / n; inner.push([Math.max(bellR(rT, rE, s, pow) - th, 0.002), len * (1 - s), 0x8a8078]); }
+  inner.push([rE - th * 0.3, -th * 0.2]);
+  // chamber, injector and a stub of powerhead up toward the thrust plate
+  const rc = rT * 1.9, cl = Math.max(rT * 3.4, 0.2);
+  const hp = q >= 2 ? [[rT, len, 0x7a5a48], [rc, len + cl * 0.3, 0x8a8f96], [rc, len + cl * 0.8, P.iron], [rc * 1.25, len + cl * 0.86], [rc * 1.25, len + cl], [rc * 0.6, len + cl * 1.05], [rc * 0.6, len + cl * 1.9]]
+    : [[rT, len, 0x7a5a48], [rc, len + cl * 0.3, 0x8a8f96], [rc * 1.1, len + cl, P.iron], [rc * 0.6, len + cl * 1.9]];
+  const head = revolve(hp, { seg: vac ? Math.max(6, seg - 8) : 6, crease: 0.5, uRep: 1, vTile: 1 });
+  return { outer: revolve(outer, { seg, uRep, vTile: 1, crease: 0.8 }), inner: revolve(inner, { seg, vFit: true, crease: 1.2 }), head, seg, top: len + cl * 1.9, th };
+}
+function ringCluster(def, g, pb) {
+  const { h, r } = def, e = def.engine, y0 = -h / 2, y1 = h / 2, exits = nozzleExits(def), many = exits.length > 12;
+  // --- skirt: all the way down round a vacuum cluster, short on a booster so the bells stand out below it
+  const ft = flange(pb, r, y1, 1, { h: 0.11, color: STEEL_DK, lip: 0.014, cap: false });
+  const lens = e.rings.map((rg, k) => { const rE = exits.find(x => x.ring === k).r; return rg.vacuum ? Math.min(h * 0.64, rE * 2.9) : rE * 3.6; });
+  const yPlate = Math.min(y1 - ft - 0.25, y0 + Math.max(...lens) + (many ? 0.5 : 0.42)), ySk = many ? y0 + lens[0] * 0.72 : y0 + 0.03, mid = (y1 - ft + ySk) / 2;
+  const wall = [[r - 0.05, ySk, STEEL_DK], [r + 0.01, ySk], [r + 0.01, ySk + 0.09], [r, ySk + 0.1, STEEL]];
+  if (pb.med) wall.push([r, mid - 0.03, WELD], [r + 0.005, mid - 0.012], [r + 0.005, mid + 0.012], [r, mid + 0.03, STEEL]);
+  wall.push([r, y1 - ft]);
+  pb.rev(wall, 'steel', { crease: 0.5 });
+  // --- thrust plate: a shallow dished floor the powerheads hang from, ribbed, with a feed manifold per ring
+  const m = pb.hi ? 8 : pb.med ? 5 : 2, plate = [];
+  for (let i = 0; i <= m; i++) { const t = i / m; plate.push([Math.max((r - 0.03) * t, 0.002), yPlate + 0.22 * (1 - t * t), i === 0 ? P.gun : undefined]); }
+  pb.rev(plate, 'metal', { crease: 1.2 });
+  if (pb.med) {
+    pb.around(many ? 20 : 12, a => pb.box(r * 0.56, 0.1, 0.05, P.iron, Mrad(a, r * 0.7, yPlate + 0.06), 'metal'), 0.1);
+    for (const rg of e.rings) if (rg.radius > r * 0.3) pb.torus(rg.radius, many ? 0.05 : 0.07, rg.vacuum ? P.copper : P.steel, M(0, yPlate - 0.08, 0, Math.PI / 2), 'metal', pb.seg(rg.radius), 6);
+  }
+  pb.decal('sizeXXL', r, y1 - ft - 0.5, 0.5, 1.2); pb.decal('danger', r, y1 - ft - 0.5, 0.5 + Math.PI, 1.2);
+  // --- bells
+  const gimY = y0 + lens[0] + 0.35, gim = sub(g, 'gimbal', 0, gimY, 0), gp = new PB(pb.q);
+  e.rings.forEach((rg, k) => {
+    const mine = exits.filter(x => x.ring === k), rE = mine[0].r, len = lens[k], B = bellKit(pb.q, rE * (rg.vacuum ? 0.14 : 0.3), rE, len, !!rg.vacuum);
+    const fixed = mine[0].fixed, body = fixed ? pb : gp, parent = fixed ? g : gim, oy = y0 - (fixed ? 0 : gimY), glow = new PB(pb.q);
+    for (const ex of mine) {
+      const mm = M(ex.x, oy, ex.z);
+      body.add(B.outer, null, mm, 'bell');
+      if (!pb.med) continue;
+      glow.add(B.inner, null, mm, 'glow'); body.add(B.head, null, mm, 'metal');
+      // hangers from the plate to the powerhead (they stay with the plate, so only on rings that do not swivel)
+      if (fixed && B.top < yPlate - y0) pb.cyl(rE * 0.2, rE * 0.2, yPlate + 0.1 - y0 - B.top, (y0 + B.top + yPlate + 0.1) / 2, P.iron, 'metal', 6, true, M(ex.x, 0, ex.z));
+      if (rg.vacuum) for (const sK of [0.3, 0.55, 0.8]) body.torus(bellR(rE * 0.14, rE, sK, 1.75) + B.th * 0.4, B.th * 0.9, P.iron, mul(mm, M(0, len * (1 - sK), 0, Math.PI / 2)), 'metal', B.seg, 4);
+    }
+    if (pb.med) { const n0 = parent.children.length; glow.build(parent); for (let i = n0; i < parent.children.length; i++) parent.children[i].userData.ring = k; }
+  });
+  // the swivelling rings hang from one carrier under the plate
+  if (pb.med) { const sw = e.rings.filter(rg => rg.gimbal > 0), ro = sw.length ? Math.max(...sw.map(rg => rg.radius)) + exits[0].r * 1.1 : 0; if (ro > 0) pb.rev([[ro, yPlate + 0.05, P.gun], [ro * 0.92, gimY + 0.25], [0.002, gimY + 0.25]], 'metal', { crease: 0.6 }); }
   gp.build(gim);
 }
 

@@ -178,7 +178,7 @@ test('interstage: every stock craft has one wherever a stage sits under an engin
     // find the joints independently: a stack part whose top face meets the nozzle plane of a rocket engine on its axis
     for (const e of c.parts) {
       const ed = partDef(e.type);
-      if (ed.shape !== 'engine' || ed.engine.type === 'jet' || !ed.attach.stack) continue;
+      if (ed.shape !== 'engine' || ed.engine.type === 'jet' || !ed.attach.stack || ed.engine.rings) continue;      // (a ring cluster has its own skirt)
       const nozzleY = e.pos.y + (e.flip ? 1 : -1) * ed.h / 2;
       const under = c.parts.filter(p => p !== e && partDef(p.type).attach.stack && Math.abs(p.pos.x - e.pos.x) < 1e-6 && Math.abs(p.pos.z - e.pos.z) < 1e-6 &&
         Math.abs((p.pos.y + (e.flip ? -1 : 1) * partDef(p.type).h / 2) - nozzleY) < 1e-6 && (p.parent === e.id || e.parent === p.id));

@@ -32,7 +32,12 @@
 //                for a landing leg: metres the strut has closed (the foot comes up the craft's axis by that much)
 //     light      true/false (or 0..1) switches spotlight lenses on
 //     throttle   also lights ion grids, jet afterburners and aerospikes
-//   nozzleExits(def)                         → [{ x, y, z, r }] every nozzle of a (multi-bell) engine
+//   nozzleExits(def)                         → [{ x, y, z, r }] every nozzle of a (multi-bell) engine; a ring cluster
+//                                            (engine.rings) adds `ring` and `fixed` to each, ring 0's bells first
+//   setEngineRings(group, lit)               lit: the ring indices burning in the engine's mode (null: all). The
+//                                            nozzle interiors of the other rings stay dark whatever the throttle.
+//   Handed parts (flaps: one face steel, one tiled) carry both hands as 'sideA' / 'sideB' and show the one whose
+//   tiles face −Z of the frame the part group sits in (the craft's belly), picked whenever the group's matrix updates.
 //   ensurePartEnvironment(renderer)          builds the small procedural environment map that part metals
 //                                            reflect. It also installs itself the first time a part is drawn,
 //                                            so calling it is optional. setPartEnvironment(texture, intensity)
@@ -53,6 +58,7 @@ import * as stackShapes from './parts/shapes_stack.js';
 import * as engineShapes from './parts/shapes_engine.js';
 import * as aeroShapes from './parts/shapes_aero.js';
 import * as radialShapes from './parts/shapes_radial.js';
+import { cargobay, hotring, catchpin, flap } from './parts/shapes_shearwater.js';
 import { buildPipInto, buildPipMesh, animatePip } from './parts/pip.js';
 
 export { PALETTE, mergeGeometries, buildPipMesh, animatePip };
@@ -74,6 +80,7 @@ const { legGeometry, foldLegGeometry, wheelGeometry, ...aeroRest } = aeroShapes;
 const { DORSAL: _d, ...stackRest } = stackShapes;
 const shapes = {
   ...stackRest, engine: engineShapes.engine, srb: engineShapes.srb, radialengine: engineShapes.radialengine, ...aeroRest, ...radialRest, clamp: clampShape,
+  cargobay, hotring, catchpin, flap,
   pip(def, g) { buildPipInto(g); },
   generic(def, g, pb) {
     if (def.r) pb.cyl(def.rTop ?? def.r, def.rBottom ?? def.r, def.h, 0, P.shade, 'paint');
@@ -213,8 +220,19 @@ export function buildPartMesh(def, { ghost = false, quality = 'high' } = {}) {
       else if (o.isLineSegments) o.material = mat('ghostLine');
     });
   } else if (first && !hasPartEnvironment()) hookEnvironment(first);
+  if (refs.sideA && refs.sideB) hookHanded(g, [g]);
   applyAnim(g, def, true);
   return g;
+}
+// Which hand of a handed part shows: 'sideA' while the part's own +Z points to the +Z half of its parent's frame.
+// A stock flap pair sits at rot 0 and π, so one takes each hand and both tiled faces look at the belly (−Z).
+function hookHanded(holder, groups) {
+  let cur = null;
+  holder.updateMatrix = function () {
+    const q = this.quaternion, a = 1 - 2 * (q.x * q.x + q.y * q.y) >= -1e-6;
+    if (a !== cur) { cur = a; for (const g of groups) { const r = g.userData.refs; r.sideA.visible = a; r.sideB.visible = !a; } }
+    THREE.Object3D.prototype.updateMatrix.call(this);
+  };
 }
 
 /** High / medium / low versions of a part in a THREE.LOD. distances = [medium from, low from] in metres. */
@@ -224,6 +242,7 @@ export function createPartLOD(def, { distances = [60, 400] } = {}) {
   lod.addLevel(levels[0], 0); lod.addLevel(levels[1], distances[0]); lod.addLevel(levels[2], distances[1]);
   lod.userData = { def, lodLevels: levels };
   if (levels[0].userData.canopy) lod.userData.canopy = levels[0].userData.canopy;
+  if (levels[0].userData.refs.sideA) { for (const l of levels) delete l.updateMatrix; hookHanded(lod, levels); }
   return lod;
 }
 export function partDrawCalls(group) { let n = 0; group.traverse(o => { if ((o.isMesh || o.isLineSegments) && o.visible) n++; }); return n; }
@@ -292,6 +311,8 @@ export function setPartInterstages(group, trusses, { quality } = {}) {
   }
   if (!key || !def) return;
   for (const t of trusses) {
+    // a hot-stage ring is the interstage: the skirted cluster standing on it rim to rim needs no lattice round it
+    if (def.shape === 'hotring' && Math.abs(t.r0 - t.r1) < 0.01) continue;
     const m = buildInterstageMesh(t, { quality: quality || u.quality || 'high' });
     const side = t.side < 0 ? -1 : 1;
     m.position.set(0, side * (def.h + t.h) / 2, 0);
@@ -442,10 +463,11 @@ export function setPartState(group, state = {}) {
     lvl = clamp(lvl, 0, 1);
     if (lvl !== u.glowLvl) {
       u.glowLvl = lvl;
-      const k = Math.pow(lvl, 0.6), ion = def.engine.type === 'ion';
+      const k0 = Math.pow(lvl, 0.6), ion = def.engine.type === 'ion', mask = u.ringMask ?? -1;
       for (const m of u.glow) {
+        const ring = m.userData.ring, k = ring !== undefined && !(mask >> ring & 1) ? 0 : k0;
         if (ion) m.material.emissive.setRGB(0.25 * k, 0.75 * k, 1.0 * k); else m.material.emissive.setRGB(k, k * (0.55 + 0.35 * k), k * (0.3 + 0.4 * k * k));
-        m.material.emissiveIntensity = lvl > 0 ? 0.6 + 3.4 * k : 0;
+        m.material.emissiveIntensity = lvl > 0 && k > 0 ? 0.6 + 3.4 * k : 0;
       }
     }
   }
@@ -458,6 +480,15 @@ export function setPartState(group, state = {}) {
     u.heat = Math.round(heat * 50) / 50;
     applyTint(group);
   }
+}
+
+/** A ring cluster burning only some of its rings: `lit` lists the ring indices that are alight (null = all). The
+ *  change shows at the next setPartState. */
+export function setEngineRings(group, lit) {
+  if (group.isLOD && group.userData.lodLevels) { for (const l of group.userData.lodLevels) setEngineRings(l, lit); return; }
+  let mask = -1; if (lit) { mask = 0; for (const i of lit) mask |= 1 << i; }
+  const u = group.userData; if ((u.ringMask ?? -1) === mask) return;
+  u.ringMask = mask; u.glowLvl = undefined;
 }
 
 /** Tint a part for hover/selection (emissive). Pass null to remove. Works on ghosts too (recolours them). */
@@ -513,7 +544,7 @@ export function renderPartThumbnail(renderer, def, size = 96) {
   scene.add(g); g.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(g), sph = box.getBoundingSphere(new THREE.Sphere());
   const radial = def.attach && def.attach.radial && !def.attach.stack;
-  const flat = sh === 'wing' || sh === 'elevon' || sh === 'tailfin' || sh === 'fin' || (sh === 'solar');
+  const flat = sh === 'wing' || sh === 'elevon' || sh === 'tailfin' || sh === 'fin' || sh === 'flap' || (sh === 'solar');
   const elev = def.engine ? -0.36 : def.heatshield ? -0.24 : sh === 'dock' || sh === 'chute' ? 0.6 : 0.36;
   const az = flat ? 0.34 : radial ? 0.95 : sh === 'cockpit' || sh === 'capsule' || sh === 'rover_body' ? 0.5 : 0.62;
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(elev), Math.sin(elev), Math.cos(az) * Math.cos(elev));

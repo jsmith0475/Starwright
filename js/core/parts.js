@@ -776,7 +776,7 @@ const defs = [
       modes: [{ name: 'All 33', rings: [0, 1, 2] }, { name: 'Inner 13', rings: [0, 1] }, { name: 'Centre 3', rings: [0] }] },
     tolerance: 8, maxTemp: 1900,
     desc: 'Thirty-three Peregrine engines on one thrust plate: three in the centre, ten round them, twenty on the rim. The inner thirteen steer. It can burn all thirty-three, the inner thirteen, or the centre three.' },
-  { id: 'eng_peregrine6', name: 'Peregrine Mount 3+3', cat: 'engines', tech: 'very_heavy', cost: 26000, mass: 4.8, size: 'XXL',
+  { id: 'eng_peregrine6', name: 'Peregrine Mount 3+3', cat: 'engines', tech: 'very_heavy', cost: 26000, mass: 4.2, size: 'XXL',
     joint: 2, shape: 'engine', variant: 'cluster6', h: 3.6, r: 2.8125, attach: STACK,
     engine: { type: 'liquid', prop: 'methalox', thrust: 0, ispVac: 0, ispAtm: 0, gimbal: 0,
       rings: [{ n: 3, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 8, radius: 0.5 }, { n: 3, thrust: 375, ispVac: 380, ispAtm: 200, gimbal: 0, radius: 1.75, vacuum: true }],
@@ -787,7 +787,7 @@ const defs = [
     joint: 2, shape: 'tank', variant: 'steel', h: 18.75, r: 2.8125, attach: STACK, res: { lox: 156520, ch4: 43480 }, tolerance: 7, maxTemp: 1500,
     desc: 'A stainless tank for two liquids: 157 tonnes of liquid oxygen above 43 tonnes of liquid methane, in the 3.6 to 1 the Peregrine burns.' },
   { id: 'tank_xxl_ship', name: 'Shearwater Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 30.0, size: 'XXL',
-    joint: 2, shape: 'tank', variant: 'steel', h: 15, r: 2.8125, attach: STACK, res: { lox: 125220, ch4: 34780 }, tolerance: 7, maxTemp: 1700,
+    joint: 2, tiles: true, shape: 'tank', variant: 'steel', h: 15, r: 2.8125, attach: STACK, res: { lox: 125220, ch4: 34780 }, tolerance: 7, maxTemp: 1700,
     desc: 'The ship\'s own tank, tiled down one side: 125 tonnes of liquid oxygen and 35 tonnes of liquid methane.' },
   { id: 'ring_hotstage', name: 'Hot-Stage Ring XXL', cat: 'structure', tech: 'very_heavy', cost: 4200, mass: 3.0, size: 'XXL',
     joint: 2, shape: 'hotring', h: 2.2, r: 2.8125, attach: STACK, decoupler: { force: 40, hot: true }, command: 'probe', crew: 0, torque: 60, res: { elec: 600 }, elecDrain: 0.2,
@@ -887,7 +887,7 @@ export const INTERSTAGE = { kgPerM2: 12, minKg: 3, name: 'Interstage truss' };
 /** Does a part stacked on this engine's nozzle end need a truss around the engine? (Rocket engines with a bell that
  *  hangs below their mount: not jets, whose tailpipe is their body, and not solid boosters, whose casing is the wall.) */
 export function wantsInterstage(def) {
-  return !!(def && def.shape === 'engine' && def.attach && def.attach.stack && def.engine && def.engine.type !== 'jet');
+  return !!(def && def.shape === 'engine' && def.attach && def.attach.stack && def.engine && def.engine.type !== 'jet' && !def.engine.rings);      // (a ring cluster has its own skirt)
 }
 /** Mass in kg of a lattice ring `h` tall between rims of radius r0 and r1. */
 export function interstageMass(h, r0, r1) {

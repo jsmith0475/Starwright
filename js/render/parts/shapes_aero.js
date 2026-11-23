@@ -105,19 +105,21 @@ export function fin(def, g, pb) {
 }
 function gridFin(def, g, pb) {
   const { h, rw, t } = def, x0 = -rw / 2;
-  pb.rbox(0.05, h * 0.3, t * 1.6, 0.01, P.gun, M(x0 + 0.025, 0, 0), 'metal');
-  const piv = sub(g, 'ctrlHinge', x0 + 0.05, 0, 0), inner = sub(piv, 'ctrl'), sp = new PB(pb.q), w = rw - 0.08, n = pb.hi ? 6 : 4;
+  // a vane the size of a door is built from plate, not strip: frame, lattice and bracket all scale with it
+  const big = rw > 1.5, k = big ? 3 : 1;
+  pb.rbox(0.05 * k, h * 0.3, t * 1.6, 0.01 * k, P.gun, M(x0 + 0.025 * k, 0, 0), 'metal');
+  const piv = sub(g, 'ctrlHinge', x0 + 0.05 * k, 0, 0), inner = sub(piv, 'ctrl'), sp = new PB(pb.q), w = rw - 0.08 * k, n = big ? (pb.hi ? 8 : pb.med ? 6 : 3) : pb.hi ? 6 : 4;
   sp.rod([0, 0, 0], [w * 0.2, 0, 0], t * 0.3, P.iron, 'metal', 8);
-  const xa = w * 0.16, xb = w, fr = 0.014;
-  for (const y of [-h / 2, h / 2]) sp.rbox(xb - xa, 0.03, t, 0.006, P.steel, M((xa + xb) / 2, y - Math.sign(y) * 0.015, 0), 'metal');
-  for (const x of [xa, xb]) sp.rbox(0.03, h, t, 0.006, P.steel, M(x + (x === xa ? 0.015 : -0.015), 0, 0), 'metal');
+  const xa = w * 0.16, xb = w, fr = big ? 0.03 : 0.014, ft = 0.03 * k;
+  for (const y of [-h / 2, h / 2]) sp.rbox(xb - xa, ft, t, 0.006 * k, P.steel, M((xa + xb) / 2, y - Math.sign(y) * ft / 2, 0), 'metal');
+  for (const x of [xa, xb]) sp.rbox(ft, h, t, 0.006 * k, P.steel, M(x + (x === xa ? ft / 2 : -ft / 2), 0, 0), 'metal');
   for (let i = 1; i < n * 2; i++) { const k = i / (n * 2); // diagonal lattice
     const a = [lerp(xa, xb, clamp(k * 2, 0, 1)), lerp(-h / 2, h / 2, clamp(k * 2 - 1, 0, 1))], b = [lerp(xa, xb, clamp(k * 2 - 1, 0, 1)), lerp(-h / 2, h / 2, clamp(k * 2, 0, 1))];
     for (const f of [1, -1]) { const p = [a[0], f * a[1]], q = [b[0], f * b[1]], dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy); if (len > 0.02) sp.box(len, fr, t * 0.9, P.silver, M((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 0, 0, 0, Math.atan2(dy, dx)), 'metal'); }
   }
+  if (big && sp.med) for (const y of [-h * 0.3, h * 0.3]) sp.rod([w * 0.02, 0, 0], [xa + ft, y, 0], t * 0.16, P.iron, 'metal', 6);   // struts from the pivot to the frame
   sp.build(inner);
 }
-
 export function wing(def, g, pb) { return wingShape(def, g, pb); }
 function wingShape(def, g, pb) {
   const { h, rw, t, variant } = def, sweep = (def.wing && def.wing.sweep) || 0, ctl = def.wing && def.wing.control;
