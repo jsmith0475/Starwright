@@ -27,7 +27,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   let good = 0;
   for (let i = 0; i < n; i++) {
-    const start = { alt: 22000 + rnd() * 18000, speed: 850 + rnd() * 500, pitch: 35 + rnd() * 25, east: 12000 + rnd() * 28000, fuel: 0.5 };
+    const start = { alt: 22000 + rnd() * 18000, speed: 850 + rnd() * 500, pitch: 35 + rnd() * 25, east: 12000 + rnd() * 28000, fuel: 0.42 + rnd() * 0.14 };
     const r = flyReturn(start);
     const inside = r.ok && r.miss < 10 && Math.abs(r.vs) < 2 && r.hs < 1 && r.tilt < 3;
     if (inside) good++;
