@@ -386,7 +386,7 @@ flow. The wake behind the leeward face adds a quarter of that face:
 
 $$F_\text{axial} = - q_i M(\mathrm{Ma}) (A_w + 0.25 A_l) \cos\theta \qquad \mathbf{F}_\text{side} = - q_i M(\mathrm{Ma}) A_s \frac{\mathbf{v}_{i,\perp}}{|\mathbf{v}_i|}$$
 
-$M$ is the transonic drag rise. The speed of sound is held at 320 m/s:
+$M$ is the transonic drag rise, read at the true Mach number. The speed of sound follows from each world's gas and temperature, $c_s = \sqrt{\gamma R T / M_{gas}}$ (303 m/s on Verda's ground, 262 m/s in its cold layer):
 
 | Mach | below 0.7 | 0.7 to 1.1 | 1.1 to 2.5 | above 2.5 |
 | --- | --- | --- | --- | --- |
@@ -514,6 +514,7 @@ what the game does today, and what building it involves.
    stage. A stock reusable rocket, a recovery plan and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
+   **First step built:** a true speed of sound on every world. [The science](docs/REENTRY_SCIENCE.md) and [the build specification](docs/REENTRY_SPEC.md).
 7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,
    halo orbits and low-energy transfers, starting as an overlay in the map.
 8. **[Stations and surface bases.](docs/ROADMAP.md#8-stations-and-surface-bases)** Mine a moon,

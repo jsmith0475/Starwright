@@ -170,7 +170,7 @@ const CALCS = {
     const run = () => {
       const body = ctx.B[world.value], h = Number(alt.value) * 1000, v = Number(sp.value), th = Number(ang.value) * Math.PI / 180;
       if (!body || !(h >= 0) || !(v >= 0) || !Number.isFinite(th)) { for (const o of [oRho, oMach, oQ, oCross, oHeat]) o.textContent = 'n/a'; why.textContent = 'Altitude and airspeed must be zero or more.'; return; }
-      const rho = body.density(h), q = 0.5 * rho * v * v, mach = v / T.SOUND_SPEED, cross = q * Math.sin(th) * Math.sin(th), flux = T.HEAT_FLUX_K * Math.sqrt(rho) * v * v * v;
+      const rho = body.density(h), q = 0.5 * rho * v * v, mach = body.atmo ? v / body.soundSpeed(h) : 0, cross = q * Math.sin(th) * Math.sin(th), flux = T.HEAT_FLUX_K * Math.sqrt(rho) * v * v * v;
       oRho.textContent = rho > 0 ? (rho >= 0.01 ? rho.toFixed(3) : rho.toExponential(2)) + ' kg/m³' : 'none: above the atmosphere';
       oMach.textContent = 'Mach ' + mach.toFixed(2) + ', drag × ' + A.machRise(mach).toFixed(2);
       oQ.textContent = kpa(q);

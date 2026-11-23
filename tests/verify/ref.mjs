@@ -46,7 +46,7 @@ export function readSystem() {
       gm: d.gm !== undefined ? d.gm : d.surfaceG * d.radius * d.radius,
       surfaceG: d.surfaceG, rotPeriodDef: d.rotPeriod, rotSync: d.rotSync || null, rot0: d.rot0 || 0,
       elements: d.orbit ? { a: d.orbit[0], e: d.orbit[1], i: d.orbit[2], lan: d.orbit[3], argp: d.orbit[4], M0: d.orbit[5] } : null,
-      atmo: d.atmo ? { height: d.atmo[0], scale: d.atmo[1], rho0: d.atmo[2] } : null,
+      atmo: d.atmo ? { height: d.atmo[0], scale: d.atmo[1], rho0: d.atmo[2], gas: d.airGas || 'air' } : null,
       relief: d.relief || [0, 0], gas: !!d.gas, children: [],
     };
     byId[b.id] = b;
@@ -447,4 +447,37 @@ export function refPatched(sys, eph, state, tEnd, opts = {}) {
   }
   const s = at(Math.min(t, tEnd));
   return { state: { body, r: s.r, v: s.v, t: Math.min(t, tEnd) }, events, closest };
+}
+
+// ------------------------------------------------------------------------------------------ atmosphere
+// Restated from the specification (docs/REENTRY_SPEC.md part A), not imported from the game. Constants typed here:
+// the universal gas constant, each gas's ratio of specific heats and molar mass, and the temperature profile.
+const RU = 8.314462618;                                                          // J/(mol K), CODATA
+const GAS_TABLE = { air: [1.40, 0.028964], co2: [1.29, 0.04401], h2he: [1.45, 0.0023] };   // [gamma, kg/mol]
+// altitude in scale heights -> T / T_iso; straight lines between the points, flat beyond the ends
+const T_SHAPE = [[0, 1.18], [1.5, 0.88], [2.8, 0.88], [6.5, 1.10], [7.0, 1.10], [12, 0.76]];
+const TAPER_FRACTION = 0.08;                                                     // the top 8% of the atmosphere fades to nothing
+
+/** The isothermal temperature a world's own scale height implies: hydrostatics, H = R T / (M g). */
+export function isoTemperature(b) { return GAS_TABLE[b.atmo.gas][1] * (b.gm / (b.radius * b.radius)) * b.atmo.scale / RU; }
+/** Air temperature (K) at an altitude. */
+export function airTemperature(b, alt) {
+  const x = Math.min(alt, b.atmo.height) / b.atmo.scale;
+  let f = x <= T_SHAPE[0][0] ? T_SHAPE[0][1] : T_SHAPE[T_SHAPE.length - 1][1];
+  for (let i = 1; i < T_SHAPE.length; i++) {
+    const [x0, f0] = T_SHAPE[i - 1], [x1, f1] = T_SHAPE[i];
+    if (x >= x0 && x <= x1) { f = f0 + (f1 - f0) * (x - x0) / (x1 - x0); break; }
+  }
+  return isoTemperature(b) * f;
+}
+/** Speed of sound (m/s): sqrt(gamma R T / M). */
+export function soundSpeed(b, alt) { const [gam, M] = GAS_TABLE[b.atmo.gas]; return Math.sqrt(gam * RU * airTemperature(b, alt) / M); }
+/** Air density (kg/m3): exponential, with a cubic fade to zero over the top of the atmosphere. Zero on airless worlds. */
+export function airDensity(b, alt) {
+  if (!b.atmo || alt >= b.atmo.height) return 0;
+  const rho = b.atmo.rho0 * Math.exp(-Math.max(0, alt) / b.atmo.scale);
+  const band = TAPER_FRACTION * b.atmo.height, left = b.atmo.height - alt;
+  if (left >= band) return rho;
+  const u = left / band;
+  return rho * u * u * (3 - 2 * u);
 }

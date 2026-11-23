@@ -393,7 +393,7 @@ test('terminal velocity and drag sanity', () => {
   const vt = Math.sqrt(2 * v.mass * 9.6 / (home.density(at.alt) * cdA));
   assert.ok(at.speed > vt && at.speed < vt * 1.25, `near terminal velocity (${vt.toFixed(0)} m/s): ${at.speed.toFixed(0)}`);
   near(v.dynamicPressure, 0.5 * home.density(v.altitude) * v.airspeed ** 2, 1, 'dynamic pressure');
-  near(v.mach, v.airspeed / TUNING.SOUND_SPEED, 1e-9);
+  near(v.mach, v.airspeed / home.soundSpeed(v.altitude), 1e-9);
   const tail = new Vector3(0, -1, 0).applyQuaternion(v.q);
   assert.ok(tail.angleTo(v.surfaceVel) < 0.35, 'blunt end first: ' + tail.angleTo(v.surfaceVel));
   // drag is dissipative: a coasting rocket loses energy in the air and none in vacuum
