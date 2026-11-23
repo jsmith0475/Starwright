@@ -423,6 +423,10 @@ Deeper aerodynamics and re-entry is [roadmap item 6](docs/ROADMAP.md#6-deeper-ae
 
 ## Under the hood
 
+<p align="center">
+  <a href="media/architecture.png"><img src="media/architecture.png" width="100%" alt="Starwright technology and architecture. Screens and input (js/ui) send controls down to the physics core (js/core); the core's state comes up to be drawn by three.js r170 on WebGL 2 (js/render). The core is pure simulation: orbits on patched conics, a flight model on 20 ms steps, structure and breakup, guidance, the world, parts and career; n-body gravity is not built. It is checked three ways: unit tests, browser tests and an independent reference with 1,321 checks and 0 failures. Directed by Jerry Smith, written by 20+ Claude agents, reviewed independently by Grok agents. Shipped by pull request to GitHub Pages as static files with no build step"></a>
+</p>
+
 - Plain JavaScript modules. No framework, no bundler, no build step, no install. The only
   dependency is a vendored copy of [three.js](https://threejs.org/) r170.
 - Everything you see and hear is generated in the browser: terrain, textures, part models and
