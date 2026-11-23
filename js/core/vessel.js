@@ -2032,11 +2032,17 @@ export class Vessel {
     const st = this.structure;
     if (st) { if (st.pending && !this.dead) this._breakJoints(ev); else if (this.landed) st.rest(dt); }
     if (this.ringDue && (this.ringDue.t -= dt) <= 0) this._shedRing(ev);
-    if (this.hotDue && (this.hotDue.t -= dt) <= 0) {
-      const ring = this.parts.get(this.hotDue.id);
-      this.hotDue = null;
-      if (ring && !this.dead) { this._decouple(ring, ev); this.estimateDeltaV(); }
-    }
+    if (this.hotDue && (this.hotDue.t -= dt) <= 0) this.finishHotStage(ev);
+  }
+
+  /** A hot-staging ring that is waiting out its delay lets go now. → true if one did. */
+  finishHotStage(ev = []) {
+    if (!this.hotDue) return false;
+    const ring = this.parts.get(this.hotDue.id);
+    this.hotDue = null;
+    if (!ring || this.dead) return false;
+    this._decouple(ring, ev); this.estimateDeltaV();
+    return true;
   }
 
   _stepFlight(dt, ut, ev) {
