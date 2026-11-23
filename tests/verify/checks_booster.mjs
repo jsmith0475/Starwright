@@ -6,6 +6,11 @@ import { Craft } from '../../js/core/craft.js';
 import { LOAD_RANGE } from '../../js/core/world.js';
 import { World, SYSTEM, A, spawn, run } from './harness.mjs';
 import * as R from './ref.mjs';
+import { Vector3 } from '../../js/lib/three.module.min.js';
+import { predictFall, groundDistance, boosterRecovery } from '../../js/core/booster.js';
+import { dropped } from '../tools/booster_dev.mjs';
+import { flyReturn } from '../tools/booster_sweep.mjs';
+const V3 = a => new Vector3(a[0], a[1], a[2]);
 
 const sys = R.readSystem();
 
@@ -119,8 +124,146 @@ function watching(S) {
   S.check('switching between them every 5 s: largest difference', 0, worst(c), 1e-6, { max: true, note: 'relative' });
 }
 
+
+// ------------------------------------------------------------------------------------------------------------
+// Phase 2: the fall predictor and the program that flies a stage back (js/core/booster.js).
+// ------------------------------------------------------------------------------------------------------------
+const home = SYSTEM.home;
+/** The drag multiplier against Mach number, restated from the specification (not imported from the game). */
+function machRef(m) { return m <= 0.7 ? 1 : m < 1.1 ? 1 + (m - 0.7) * 2.5 : m < 2.5 ? 2 - (m - 1.1) / 1.4 * 0.5 : 1.5; }
+const SOUND = 320;
+/**
+ * A point mass under inverse-square gravity and drag in air that turns with the planet, on the reference's own
+ * integrator with its own exponential atmosphere. y = [r, v]; stops at `stopAlt` above the reference sphere.
+ */
+function refFall(r0, v0, mass, area, stopAlt) {
+  const mu = home.gm, Rb = home.radius, wy = R.TAU / home.rotPeriod, at = home.atmo;
+  const y = Float64Array.from([...r0, ...v0]);
+  let maxQ = 0, prev = null, hit = null;
+  const deriv = (t, s, o) => {
+    const r = Math.hypot(s[0], s[1], s[2]), alt = r - Rb, g = -mu / (r * r * r);
+    const ax = s[3] - wy * s[2], ay = s[4], az = s[5] + wy * s[0];
+    const sp = Math.hypot(ax, ay, az);
+    const rho = alt < at.height ? at.rho0 * Math.exp(-Math.max(0, alt) / at.scale) : 0;
+    const k = 0.5 * rho * sp * machRef(sp / SOUND) * area / mass;
+    o[0] = s[3]; o[1] = s[4]; o[2] = s[5];
+    o[3] = g * s[0] - k * ax; o[4] = g * s[1] - k * ay; o[5] = g * s[2] - k * az;
+  };
+  R.integrate(deriv, y, 0, 3000, { rtol: 1e-10, hmax: 0.25, onStep: (t, s) => {
+    const r = Math.hypot(s[0], s[1], s[2]), alt = r - Rb;
+    const sx = s[3] - wy * s[2], sz = s[5] + wy * s[0], sp = Math.hypot(sx, s[4], sz);
+    const rho = alt < at.height ? at.rho0 * Math.exp(-Math.max(0, alt) / at.scale) : 0;
+    maxQ = Math.max(maxQ, 0.5 * rho * sp * sp);
+    if (alt <= stopAlt) {
+      const f = prev ? (prev.alt - stopAlt) / (prev.alt - alt) : 1;      // the crossing, between the last two steps
+      const p = prev || { t, s: Array.from(s), sp };
+      hit = { t: p.t + f * (t - p.t), r: [0, 1, 2].map(i => p.s[i] + f * (s[i] - p.s[i])), speed: p.sp + f * (sp - p.sp) };
+      return true;
+    }
+    prev = { t, s: Array.from(s), alt, sp };
+    return false;
+  } });
+  return { ...hit, maxQ };
+}
+
+/** A stage falling engine first over the sea: the game's flight, the game's predictor, and the reference. */
+function predictorCheck(S) {
+  const { w, v } = dropped({ alt: 62000, speed: 640, pitch: 0, east: 20000, fuel: 0.2 });
+  v.ctrl.sas = true; v.ctrl.sasMode = 'srfRetrograde';
+  run(w, 30, 0.02);
+  const t0 = w.ut, r0 = A(v.pos), v0 = A(v.vel), m0 = v.mass, area = v.axialDragArea(true), cg = v.baseHeight;
+  const startDir = home.inertialToSurfaceDir(v.pos.clone(), t0);
+  const pred = predictFall(home, v.pos, v.vel, v.mass, t0, { area, floor: cg });
+  // the drag area, measured from the flight itself where the air is thick: what one step took off the velocity
+  let areaMeas = null, maxQ = 0;
+  while (!v.dead && !v.landed && w.ut - t0 < 900) {
+    const before = A(v.vel), pos = A(v.pos), q = v.dynamicPressure || 0, sp = v.airspeed, mBefore = v.mass;
+    w.step(0.02);
+    if (v.dead) break;
+    maxQ = Math.max(maxQ, v.dynamicPressure || 0);
+    if (!areaMeas && q > 20000 && sp > 300) {
+      const r = R.norm(pos), g = R.scale(pos, -home.gm / (r * r * r));
+      const dv = R.sub(R.sub(A(v.vel), before), R.scale(g, 0.02));
+      const qNow = 0.5 * home.density(r - home.radius) * sp * sp;
+      areaMeas = R.norm(dv) / 0.02 * mBefore / (qNow * machRef(sp / SOUND));
+    }
+  }
+  const T = w.ut - t0, endDir = home.inertialToSurfaceDir(v.pos.clone(), w.ut), flown = groundDistance(home, startDir, endDir);
+  const seaAlt = v.altitude - Math.max(0, v.radarAlt);                 // height of the surface it hit, above the sphere
+  S.info('the fall: time, and distance over the ground', T, 's', (flown / 1000).toFixed(1) + ' km, ending in the sea east of the pad');
+  S.check('drag area the predictor uses = drag area measured from one step of the flight', areaMeas, area, 0.01, { rel: true, unit: 'm²' });
+  const ref = refFall(r0, v0, m0, areaMeas, seaAlt + cg);
+  const refDir = home.inertialToSurfaceDir(V3(ref.r), t0 + ref.t);
+  S.check('reference vs the flight: impact point', 0, groundDistance(home, refDir, endDir) / flown, 0.01, { max: true, note: 'fraction of the distance flown' });
+  S.check('reference vs the flight: time of fall', T, ref.t, 1, { unit: 's' });
+  S.check('reference vs the flight: impact speed', v.airspeed, ref.speed, 0.01, { rel: true, unit: 'm/s' });
+  S.check('reference vs the flight: peak dynamic pressure', maxQ, ref.maxQ, 0.02, { rel: true, unit: 'Pa' });
+  S.check('predictor vs the flight: impact point', 0, groundDistance(home, pred.dir, endDir) / flown, 0.01, { max: true, note: 'fraction of the distance flown' });
+  S.check('predictor vs the reference: impact point', 0, groundDistance(home, pred.dir, refDir), 100, { max: true, unit: 'm' });
+  S.check('predictor vs the reference: time of fall', ref.t, pred.t, 0.5, { unit: 's' });
+  S.check('predictor vs the reference: impact speed', ref.speed, pred.speed, 0.005, { rel: true, unit: 'm/s' });
+}
+
+/** The landing burn on airless Pell: where a burn stops, against the rocket equation integrated by the reference. */
+function landingBurnCheck(S) {
+  const pell = SYSTEM.byId.pell, mu = pell.gm;
+  const F = 60000, ve = 2900, m0 = 4000, v0 = 180, h0 = 9000;
+  const pos = V3([pell.radius + h0, 0, 0]), vel = V3([-v0, 0, 0]);
+  const wy = R.TAU / pell.rotPeriod;
+  vel.z -= wy * pos.x;                                                 // straight down over the turning ground
+  const pb = predictFall(pell, pos, vel, m0, 0, { area: 0, thrust: F, ve, throttle: 1, dryMass: 500, maxT: 200, floor: -1e9 });
+  // reference: radial fall with thrust up and mass flow, exact gravity
+  const y = Float64Array.from([pell.radius + h0, -v0, m0]);
+  let stop = null, prev = null;
+  R.integrate((t, s, o) => { o[0] = s[1]; o[1] = -mu / (s[0] * s[0]) + F / s[2]; o[2] = -F / ve; }, y, 0, 200, { rtol: 1e-12, hmax: 0.05,
+    onStep: (t, s) => { if (s[1] >= 0) { const f = prev ? -prev.v / (s[1] - prev.v) : 1; stop = { t: (prev ? prev.t : t) + f * (t - (prev ? prev.t : t)), r: (prev ? prev.r : s[0]) + f * (s[0] - (prev ? prev.r : s[0])) }; return true; } prev = { t, r: s[0], v: s[1] }; return false; } });
+  const dRef = pell.radius + h0 - stop.r, dPred = pell.radius + h0 - pb.pos.length();
+  S.ok('the predicted burn comes to rest', pb.stopped);
+  S.check('distance fallen during the burn: predictor vs rocket equation', dRef, dPred, 0.01, { rel: true, unit: 'm' });
+  S.check('time of the burn', stop.t, pb.t, 0.01, { rel: true, unit: 's' });
+  // closed form with constant gravity, as a sanity check on the reference itself
+  const g = mu / Math.pow(pell.radius + h0 - dRef / 2, 2), tb = stop.t, mdot = F / ve;
+  const dClosed = v0 * tb + 0.5 * g * tb * tb - ve * (tb - (m0 / mdot - tb) * Math.log(m0 / (m0 - mdot * tb)));
+  S.check('the same distance from the closed form (constant gravity)', dRef, dClosed, 0.01, { rel: true, unit: 'm' });
+  S.check('propellant burned = thrust × time / exhaust speed', mdot * stop.t, m0 - pb.mass, 0.01, { rel: true, unit: 'kg' });
+}
+
+/** Returns from varied separations, each flown by the game at 0.02 s; every one is listed. */
+function dispersion(S) {
+  let seed = 4242;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  let good = 0, worstMiss = 0, worstVs = 0, worstHs = 0, worstTilt = 0;
+  const N = 12, bad = [];
+  for (let i = 0; i < N; i++) {
+    const start = { alt: 22000 + rnd() * 18000, speed: 850 + rnd() * 500, pitch: 35 + rnd() * 25, east: 12000 + rnd() * 28000, fuel: 0.42 + rnd() * 0.14 };
+    const r = flyReturn(start);
+    const inside = r.ok && r.miss < 10 && Math.abs(r.vs) < 2 && r.hs < 1 && r.tilt < 3;
+    if (inside) good++; else bad.push(JSON.stringify(start));
+    if (r.ok) { worstMiss = Math.max(worstMiss, r.miss); worstVs = Math.max(worstVs, Math.abs(r.vs)); worstHs = Math.max(worstHs, r.hs); worstTilt = Math.max(worstTilt, r.tilt); }
+  }
+  S.check(`returns inside the touchdown targets, of ${N} (separation 22 to 40 km, 850 to 1,350 m/s, 12 to 40 km downrange)`, N, good, 0, { note: bad.join(' ') });
+  S.check('worst distance from the target', 0, worstMiss, 10, { max: true, unit: 'm' });
+  S.check('worst vertical speed at touchdown', 0, worstVs, 2, { max: true, unit: 'm/s' });
+  S.check('worst sideways speed at touchdown', 0, worstHs, 1, { max: true, unit: 'm/s' });
+  S.check('worst tilt at touchdown', 0, worstTilt, 3, { max: true, unit: '°' });
+  // a dead engine: the stage comes down hard, as an unguided one does (nothing is faked to save it)
+  const { w, v } = dropped({ alt: 30000, speed: 1000, pitch: 45, east: 20000, fuel: 0.45 });
+  const c = boosterRecovery(w, v, { target: home.dirFromLatLon(600 / home.radius, 0) });
+  let cut = false;
+  for (let i = 0; i < 40000 && !c.done; i++) {
+    c.update(0.02);
+    if (c.phase === 'coast' && v.verticalSpeed < 0 && v.altitude < 20000 && !cut) { cut = true; for (const p of v.partList) { if (p.res.fuel !== undefined) p.res.fuel = 0; if (p.res.ox !== undefined) p.res.ox = 0; } }
+    w.step(0.02);
+    if (v.dead) { c.update(0.02); break; }
+  }
+  S.ok('with its propellant taken away before the landing burn the stage is lost, and the program says so', v.dead && c.failed, (c.log.at(-1) || {}).msg);
+}
+
 export const groups = [
   { name: '9a. Separation: mass, momentum, and what the dropped stage becomes', fast: true, run: S => separation(S) },
   { name: '9b. A booster far from the vessel being flown vs two-body motion', fast: true, run: S => farKepler(S) },
   { name: '9c. The flight does not depend on which vessel is watched', fast: true, run: S => watching(S) },
+  { name: '9d. Where a falling stage comes down: predictor, flight and an independent integration', fast: true, run: S => predictorCheck(S) },
+  { name: '9e. The landing burn against the rocket equation', fast: true, run: S => landingBurnCheck(S) },
+  { name: '9f. Returns from varied separations', fast: false, run: S => dispersion(S) },
 ];
