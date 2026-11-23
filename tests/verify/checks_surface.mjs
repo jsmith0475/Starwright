@@ -14,14 +14,14 @@ function atmosphere(S) {
     const { height, scale, rho0 } = b.atmo;
     let worst = 0;
     for (const f of [0, 0.5, 1, 2, 3, 5, 8]) {
-      const h = f * scale; if (h >= height) continue;
+      const h = f * scale; if (h >= 0.92 * height) continue;
       worst = Math.max(worst, Math.abs(g.density(h) / (rho0 * Math.exp(-h / scale)) - 1));
     }
-    S.check(`${b.name}: density vs rho0 exp(-h/H) at 0..8 scale heights (worst)`, 0, worst, 1e-12, { note: `rho0 ${rho0} kg/m3, H ${scale} m, top ${height} m` });
+    S.check(`${b.name}: density vs rho0 exp(-h/H) at 0..8 scale heights, below the taper (worst)`, 0, worst, 1e-12, { note: `rho0 ${rho0} kg/m3, H ${scale} m, top ${height} m` });
     S.check(`${b.name}: pressure falls by 1/e per scale height (p(H)/p(0))`, Math.exp(-1), g.pressureAtm(scale) / g.pressureAtm(0), 1e-12);
     S.check(`${b.name}: density above the top of the atmosphere`, 0, g.density(height + 1), 0, { unit: 'kg/m3' });
     const edge = rho0 * Math.exp(-height / scale);
-    S.info(`${b.name}: density just below the cut-off at the top (a step to zero)`, edge, 'kg/m3', `${(edge / rho0).toExponential(2)} of the surface value`);
+    S.info(`${b.name}: what an untapered exponential would leave at the top (the step the taper removes)`, edge, 'kg/m3', `${(edge / rho0).toExponential(2)} of the surface value`);
     S.info(`${b.name}: surface pressure, game (in Verda atmospheres) / hydrostatic rho0 g H (kPa)`, `${g.pressureAtm(0).toFixed(3)} / ${(rho0 * b.gm / b.radius ** 2 * scale / 1000).toFixed(1)}`, '', 'the game scales pressure with density (isothermal, same temperature everywhere)');
   }
 }
@@ -72,7 +72,7 @@ function drag(S) {
 // ------------------------------------------------------------------------------------------ 4c re-entry heating
 /** The game's drag rise with Mach number (data from TUNING in vessel.js): 1 below 0.7, 2.0 at 1.1, 1.5 above 2.5. */
 const machFactor = M => M <= 0.7 ? 1 : M < 1.1 ? 1 + (M - 0.7) * 2.5 : M < 2.5 ? 2 - (M - 1.1) / 1.4 * 0.5 : 1.5;
-const SOUND = 320, K_HEAT = 1.83e-4;
+const K_HEAT = 1.83e-4;
 
 function entry(b, vE, gamma, { record = true } = {}) {
   const mu = b.gm, { scale, rho0, height } = b.atmo, wy = R.TAU / b.rotPeriod;
@@ -91,8 +91,8 @@ function entry(b, vE, gamma, { record = true } = {}) {
     w.step(dt);
     const alt = v.pos.length() - b.radius;
     const ax = v.vel.x - wy * v.pos.z, ay = v.vel.y, az = v.vel.z + wy * v.pos.x, air = Math.hypot(ax, ay, az);
-    const rho = alt < height ? rho0 * Math.exp(-alt / scale) : 0;
-    if (alt < height - 200 && v.heatFlux > 0) g.formulaErr = Math.max(g.formulaErr, Math.abs(v.heatFlux / (K_HEAT * Math.sqrt(rho) * air ** 3) - 1));
+    const rho = R.airDensity(b, alt);
+    if (alt < 0.92 * height && v.heatFlux > 0) g.formulaErr = Math.max(g.formulaErr, Math.abs(v.heatFlux / (K_HEAT * Math.sqrt(rho) * air ** 3) - 1));
     if (v.heatFlux > g.peakQ.flux) g.peakQ = { flux: v.heatFlux, alt, speed: air, t: w.ut };
     const a = (s0 - v.vel.length()) / dt;
     if (a > g.peakG.a) g.peakG = { a, alt, speed: air, t: w.ut };
@@ -109,8 +109,8 @@ function entry(b, vE, gamma, { record = true } = {}) {
     const dragAcc = (s, o) => {
       const r = Math.hypot(s[0], s[1], s[2]), alt = r - b.radius;
       const ax = s[3] - wy * s[2], ay = s[4], az = s[5] + wy * s[0], air = Math.hypot(ax, ay, az);
-      const rho = alt < height ? rho0 * Math.exp(-alt / scale) : 0;
-      const k = 0.5 * rho * air * capCdA * machFactor(air / SOUND) / m;
+      const rho = R.airDensity(b, alt);
+      const k = 0.5 * rho * air * capCdA * machFactor(air / R.soundSpeed(b, alt)) / m;
       if (o) { o[0] = -k * ax; o[1] = -k * ay; o[2] = -k * az; }
       return { rho, air, alt, a: k * air };
     };
@@ -148,7 +148,7 @@ function heating(S) {
   const { g, ref } = entry(b, vE, gamma);
   S.ok('steep 2 km/s entry at 25 deg: the bare capsule survives', !g.dead, g.dead || '');
   S.check('heat flux above the atmosphere', 0, g.fluxAbove, 0, { unit: 'W/m2' });
-  S.check('heat flux follows K sqrt(rho) v^3 all the way down (worst)', 0, g.formulaErr, 0.02, { note: 'K = 1.83e-4: Sutton-Graves for Earth air and a nose radius of 0.9 m' });
+  S.check('heat flux follows K sqrt(rho) v^3 all the way down (worst)', 0, g.formulaErr, 0.02, { note: 'K = 1.83e-4: Sutton-Graves for Earth air and a nose radius of 0.9 m; compared below the taper at the top, where the density changes by tens of percent within one step' });
   S.check('capsule holds its heat shield into the airflow while it is hot (worst tilt)', 0, g.tilt * 180 / Math.PI, 5, { unit: 'deg' });
   S.check('peak heat flux vs reference point-mass entry', ref.peakQ.flux, g.peakQ.flux, 0.01, { rel: true, unit: 'W/m2' });
   S.check('altitude of peak heating vs reference', ref.peakQ.alt, g.peakQ.alt, 150, { unit: 'm' });

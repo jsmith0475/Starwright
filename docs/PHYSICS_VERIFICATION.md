@@ -113,6 +113,27 @@ themselves are stated limits, like a part's maximum temperature, and the checks 
 game applies them as documented, not that they are the right numbers for a real antenna.
 Model and results: [AERO_BREAKUP.md](AERO_BREAKUP.md).
 
+### The air: gas, temperature, speed of sound (chapter 10 of the checks)
+
+`tests/verify/checks_aero.mjs`, the first step of the re-entry work
+([REENTRY_SPEC.md](REENTRY_SPEC.md) part A, science in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md)).
+The reference has its own atmosphere in `tests/verify/ref.mjs`, with the gas constants and the
+temperature profile typed a second time. 117 checks pass, 0 fail.
+
+| Group | What | Checks | Representative numbers |
+|---|---|---|---|
+| 10a | Isothermal temperature M g H / R, temperature and speed of sound at 201 heights on six atmospheres, and a^2 = gamma g H (T / T_iso) with no gas constant in it; Verda worked by hand | 40 | 4e-16 relative; Verda 303.29 m/s at the surface against 303.28 by hand |
+| 10b | Mach readout in flight against airspeed over the reference speed of sound: pole and equator, Verda, Rusk and Murk, and an airless moon | 9 | 2e-15 relative |
+| 10c | The taper: plain exponential below 92 % of the top, the cubic fade above, pressure fading with density, no rise with height, no kink where it starts, and a capsule crossing the top at 2,320 m/s | 44 | largest step-to-step change in air deceleration 2.3e-4 m/s2, where the old edge switched on 2.7e-2 m/s2 at once |
+| 10d | Capsule drag at Mach 0.3 to 4 at 12, 20 and 30 km: the rise sits on the true Mach number, and the factor is 1 below Mach 0.7 | 24 | 6e-4 relative |
+
+What moved in the game, measured on the stock rockets flown by the same ascent autopilot before
+and after: every rocket that reached orbit still does, on 1 to 10 m/s less propellant (the
+Whisper Probe, a very light probe on a large engine, 293 m/s less); staging altitudes moved by
+under 300 m; the height at which each rocket passes Mach 1 fell by 400 to 900 m; the twelve
+booster returns of `tests/tools/booster_sweep.mjs` still land inside their targets with about
+10 m/s more left. `tests/tools/fleet_report.mjs` prints these numbers for any checkout.
+
 ## 4. Model honesty: patched conics against n-body gravity
 
 "n-body" here means the ship feels every body, and Verda recoils from its moons as real gravity requires.
@@ -279,8 +300,9 @@ No existing test encoded wrong physics; none was changed.
   happens, but a ship can meet it there.
 - **Near-circular orbits** (1e-10 < e < 1e-6) carry a constant 1.6 mm phase offset from `Orbit.fromState`.
 - **Atmosphere**: pressure is density scaled, not hydrostatic (Verda's rho0 g H is 67.9 kPa for "1 atmosphere");
-  density steps to zero at the top (4e-6 of the surface value on Verda, 1e-3 on Rusk); the speed of sound is a
-  constant 320 m/s everywhere.
+  density is one exponential and does not follow the temperature profile; the top 8 % of each atmosphere fades
+  smoothly to zero (it used to step: 4e-6 of the surface value on Verda, 1e-3 on Rusk). The speed of sound follows
+  each world's gas and temperature (chapter 10); the temperature profile is one shape scaled to every world.
 - **Drag integration** is first order in the speed-dependent force at 20 ms: 0.9 m over a 5.4 km fall.
 - **Physics warp** uses 100 ms steps when coasting in vacuum: 1.5 m of along-track error per 10 low orbits,
   with energy conserved to 5e-8 m of semi-major axis.
@@ -309,7 +331,7 @@ For someone who knows Kerbal Space Program or similar games:
 - **Inclined targets are reached by a mid-course plane change.** The transfer planner gives the minimum-energy
   ejection in the home planet's plane and expects a correction about 40 % of the way; it does not search
   porkchop plots or wait for the line of nodes. Expect 200 to 350 m/s of correction for Rusk and Murk.
-- **Atmospheres are simple.** Exponential density with one scale height, a hard top, constant speed of sound,
+- **Atmospheres are simple.** Exponential density with one scale height, a tapered top, a speed of sound from each world's gas and temperature,
   no lift on capsules, no winds. Heating follows the Sutton-Graves law; peak heating comes before peak g, where
   it should. Aerobraking works and is predictable.
 - **Rotation is right.** The pad gives 203 m/s eastward for free, tidally locked moons keep one face to their

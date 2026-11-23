@@ -11,6 +11,26 @@ const TAU = Math.PI * 2;
 const HOME_RHO0 = 1.22;
 
 // ---------------------------------------------------------------------------------------------
+// The air as a gas (roadmap item 6, part A)
+// ---------------------------------------------------------------------------------------------
+/** Universal gas constant, J/(mol K). */
+export const R_GAS = 8.314462618;
+/** The gases of the system's atmospheres: ratio of specific heats `gamma` and molar mass `M` (kg/mol). */
+export const GASES = {
+  air: { name: 'air', gamma: 1.40, M: 0.028964 },
+  co2: { name: 'carbon dioxide', gamma: 1.29, M: 0.04401 },
+  h2he: { name: 'hydrogen and helium', gamma: 1.45, M: 0.0023 },
+};
+/**
+ * Default temperature profile, the shape of Earth's standard atmosphere: [altitude in scale heights, temperature as a
+ * fraction of the isothermal temperature T_iso = M g H / R that the world's own scale height implies]. Linear between
+ * the nodes, constant above the last. A world may carry its own (`def.tempProfile`).
+ */
+export const TEMP_PROFILE = [[0, 1.18], [1.5, 0.88], [2.8, 0.88], [6.5, 1.10], [7.0, 1.10], [12, 0.76]];
+/** The top of every atmosphere fades out over this fraction of its height, so the air has no edge to hit. */
+export const ATMO_TAPER = 0.08;
+
+// ---------------------------------------------------------------------------------------------
 // Surface helpers (all allocation-free: they are called millions of times to bake textures)
 // ---------------------------------------------------------------------------------------------
 
@@ -932,6 +952,15 @@ export class Body {
     this.atmo = def.atmo
       ? { height: def.atmo[0], scale: def.atmo[1], rho0: def.atmo[2], color: def.atmoColor, oxygen: !!def.oxygen }
       : null;
+    if (this.atmo) {
+      // the gas, and what the scale height says about it: H = R T / (M g), so T_iso = M g H / R and a_iso = sqrt(gamma g H)
+      const at = this.atmo, gas = GASES[def.airGas || 'air'];
+      at.gas = gas; at.gamma = gas.gamma; at.molarMass = gas.M;
+      at.tIso = gas.M * this.surfaceG * at.scale / R_GAS;
+      at.aIso = Math.sqrt(gas.gamma * this.surfaceG * at.scale);
+      at.profile = def.tempProfile || TEMP_PROFILE;
+      at.taper = at.height * (1 - ATMO_TAPER);
+    }
     this.ocean = !!def.ocean;
     /** Height of the liquid surface relative to `radius` (only meaningful when `ocean`). */
     this.seaLevel = def.seaLevel || 0;
@@ -1016,14 +1045,52 @@ export class Body {
   density(alt) {
     const at = this.atmo;
     if (!at || !(alt < at.height)) return 0;
-    return at.rho0 * Math.exp(-(alt > 0 ? alt : 0) / at.scale);
+    const rho = at.rho0 * Math.exp(-(alt > 0 ? alt : 0) / at.scale);
+    return alt > at.taper ? rho * this._fade(alt) : rho;
   }
 
   /** Pressure in home-sea-level atmospheres. */
   pressureAtm(alt) {
     const at = this.atmo;
     if (!at || !(alt < at.height)) return 0;
-    return (at.rho0 / HOME_RHO0) * Math.exp(-(alt > 0 ? alt : 0) / at.scale);
+    const p = (at.rho0 / HOME_RHO0) * Math.exp(-(alt > 0 ? alt : 0) / at.scale);
+    return alt > at.taper ? p * this._fade(alt) : p;
+  }
+
+  /** The fade at the top of the atmosphere: 1 at the start of the taper, 0 at the top, smooth at both ends. */
+  _fade(alt) {
+    const at = this.atmo, s = (at.height - alt) / (at.height - at.taper);
+    return s <= 0 ? 0 : s >= 1 ? 1 : s * s * (3 - 2 * s);
+  }
+
+  /**
+   * Air temperature (K) at an altitude: the world's profile times its isothermal temperature. Above the top of the
+   * atmosphere it is the value at the top; 0 on a world without air.
+   */
+  temperature(alt) {
+    const at = this.atmo;
+    return at ? at.tIso * this._tau(alt) : 0;
+  }
+
+  /**
+   * Speed of sound (m/s) at an altitude: sqrt(gamma R T / M), which with T_iso = M g H / R is sqrt(gamma g H) times
+   * sqrt(T / T_iso). Above the top of the atmosphere it is the value at the top. Infinity on a world without air:
+   * nothing there has a Mach number.
+   */
+  soundSpeed(alt) {
+    const at = this.atmo;
+    return at ? at.aIso * Math.sqrt(this._tau(alt)) : Infinity;
+  }
+
+  /** T / T_iso at an altitude, from the profile. */
+  _tau(alt) {
+    const at = this.atmo, pr = at.profile;
+    const x = (alt > 0 ? (alt < at.height ? alt : at.height) : 0) / at.scale;
+    if (x <= pr[0][0]) return pr[0][1];
+    for (let i = 1; i < pr.length; i++) {
+      if (x <= pr[i][0]) { const a = pr[i - 1], b = pr[i]; return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); }
+    }
+    return pr[pr.length - 1][1];
   }
 
   /** Rotate a body-fixed direction (or position) into the inertial frame at time t. */
@@ -1147,7 +1214,7 @@ const DEFS = [
     orbit: [6.2e9, 0.18, 6, 70, 15, 2.1], color: 0x5a3a28, seed: 202, sciMult: 7, spaceBorder: 6e4, relief: [-6000, 8000],
     blurb: 'A scorched, cratered cinder on an eccentric orbit.' },
   { id: 'murk', name: 'Murk', type: 'planet', parent: 'helion', radius: 5.4e5, surfaceG: 8.4, rotPeriod: 7.5e5,
-    orbit: [9.9e9, 0.015, 2.2, 250, 0, 4.0], atmo: [110000, 6500, 60], atmoColor: [0.95, 0.74, 0.42],
+    orbit: [9.9e9, 0.015, 2.2, 250, 0, 4.0], atmo: [110000, 6500, 60], airGas: 'co2', atmoColor: [0.95, 0.74, 0.42],
     color: 0xd8a55a, seed: 252, sciMult: 8, spaceBorder: 2.6e5, relief: [-2500, 12000],
     blurb: 'Fifty atmospheres of ochre cloud over shield volcanoes. Easy to land on, very hard to leave.' },
   { id: 'verda', name: 'Verda', type: 'planet', parent: 'helion', radius: 6.4e5, surfaceG: 9.6, rotPeriod: 19800,
@@ -1162,14 +1229,14 @@ const DEFS = [
     orbit: [4.4e7, 0.08, 5.5, 40, 30, 0.5], color: 0xcfe6f5, seed: 505, sciMult: 5, spaceBorder: 3e4, relief: [-3500, 3500],
     blurb: 'A small, bright ice moon on an inclined orbit, split by blue rifts.' },
   { id: 'rusk', name: 'Rusk', type: 'planet', parent: 'helion', radius: 3.6e5, surfaceG: 3.2, rotPeriod: 24000,
-    orbit: [2.05e10, 0.05, 1.5, 130, 60, 3.6], atmo: [45000, 6500, 0.25], atmoColor: [0.86, 0.60, 0.42],
+    orbit: [2.05e10, 0.05, 1.5, 130, 60, 3.6], atmo: [45000, 6500, 0.25], airGas: 'co2', atmoColor: [0.86, 0.60, 0.42],
     color: 0xb5562f, seed: 606, sciMult: 6, spaceBorder: 1.4e5, relief: [-8000, 6500],
     blurb: 'A rust-red desert world: dunes, mesas, a maze of canyons and thin air.' },
   { id: 'dray', name: 'Dray', type: 'moon', parent: 'rusk', radius: 3.2e4, surfaceG: 0.22, rotPeriod: 'tidal',
     orbit: [5.5e6, 0.02, 1.0, 10, 0, 1.1], color: 0x7a686a, seed: 616, sciMult: 6.5, spaceBorder: 1.2e4, relief: [-5000, 4500],
     blurb: 'Rusk\'s lumpy, grooved moon. Gravity is so weak that a hard jump is a suborbital flight.' },
   { id: 'thal', name: 'Thal', type: 'planet', parent: 'helion', radius: 5.2e6, surfaceG: 8.5, rotPeriod: 36000,
-    orbit: [6.8e10, 0.04, 1.2, 200, 10, 5.1], atmo: [400000, 40000, 3.0], atmoColor: [0.45, 0.75, 0.80], gas: true,
+    orbit: [6.8e10, 0.04, 1.2, 200, 10, 5.1], atmo: [400000, 40000, 3.0], airGas: 'h2he', atmoColor: [0.45, 0.75, 0.80], gas: true,
     color: 0x3fa3a0, seed: 707, sciMult: 9, spaceBorder: 2e6,
     blurb: 'A teal and violet gas giant with four very different moons.' },
   { id: 'tiv', name: 'Tiv', type: 'moon', parent: 'thal', radius: 4.0e5, surfaceG: 2.2, rotPeriod: 'tidal',
@@ -1186,7 +1253,7 @@ const DEFS = [
     orbit: [6.5e8, 0.28, 31, 280, 70, 2.0], color: 0x3a3536, seed: 838, sciMult: 10.5, spaceBorder: 6e3, relief: [-1500, 1500],
     blurb: 'A captured rock on a tilted, lopsided orbit. Docking is a better word than landing.' },
   { id: 'orrin', name: 'Orrin', type: 'planet', parent: 'helion', radius: 4.3e6, surfaceG: 7.2, rotPeriod: 41000,
-    orbit: [1.3e11, 0.05, 2.4, 320, 80, 1.2], atmo: [350000, 36000, 2.2], atmoColor: [0.95, 0.84, 0.60], gas: true,
+    orbit: [1.3e11, 0.05, 2.4, 320, 80, 1.2], atmo: [350000, 36000, 2.2], airGas: 'h2he', atmoColor: [0.95, 0.84, 0.60], gas: true,
     ring: [1.45, 2.35], color: 0xd9b06a, seed: 909, sciMult: 11, spaceBorder: 1.8e6,
     blurb: 'An amber giant with bright rings, and an ocean moon hidden inside them.' },
   { id: 'brim', name: 'Brim', type: 'moon', parent: 'orrin', radius: 2.4e5, surfaceG: 1.35, rotPeriod: 'tidal',

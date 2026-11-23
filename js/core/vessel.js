@@ -54,7 +54,6 @@ export const TUNING = {
   EVA_TURN: 6,               // rad/s: how fast a walking Pip turns to face the way it is going
   EVA_JUMP: 2.2,             // m/s
   EVA_TORQUE: 0.2,           // × the pip part's torque
-  SOUND_SPEED: 320,
   CRASH_ALL: 2.2,            // × tolerance: everything is destroyed
   WATER_TOL: 1.5,
   SAS_KP: 1.5, SAS_WMAX: 0.9, SAS_T: 0.15,
@@ -2058,7 +2057,7 @@ export class Vessel {
     _ul.set(sx, sy, sz).applyQuaternion(_qi);
     const ux = _ul.x, uy = _ul.y, uz = _ul.z;
 
-    this._envAlt = alt; this._envMach = speed / TUNING.SOUND_SPEED;
+    this._envAlt = alt; this._envMach = speed / body.soundSpeed(alt);
     const thrust = this._systems(dt, pAtm, ev);
     // is the attitude hold asking for tail first? (retrograde, or a held direction more than 90° from the airflow)
     const cs = this.ctrl;
@@ -2114,7 +2113,7 @@ export class Vessel {
       const cxm = com.x, cym = com.y, czm = com.z;
       const uAx = uy / speed;
       const BASE = TUNING.BASE_DRAG;
-      const mach = speed / TUNING.SOUND_SPEED;
+      const mach = this._envMach;
       const mf = mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 * (TUNING.MACH_PEAK - 1)
         : mach < 2.5 ? TUNING.MACH_PEAK + (mach - 1.1) / 1.4 * (TUNING.MACH_HIGH - TUNING.MACH_PEAK) : TUNING.MACH_HIGH;
       const lat0 = Math.sqrt(Math.max(0, 1 - uAx * uAx));
@@ -3156,7 +3155,7 @@ export class Vessel {
     this.horizontalSpeed = Math.sqrt(Math.max(0, this.airspeed * this.airspeed - this.verticalSpeed * this.verticalSpeed));
     const rho = body.density(this.altitude);
     this.dynamicPressure = 0.5 * rho * this.airspeed * this.airspeed;
-    this.mach = this.airspeed / TUNING.SOUND_SPEED;
+    this.mach = this.airspeed / body.soundSpeed(this.altitude);
     this.groundSpeed = this.landed ? 0 : this.horizontalSpeed;
     // height of the terrain under the vessel (the sea surface over water)
     let gh = 0;

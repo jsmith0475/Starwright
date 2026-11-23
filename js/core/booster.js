@@ -36,7 +36,7 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
   let x = pos.x, y = pos.y, z = pos.z, vx = vel.x, vy = vel.y, vz = vel.z, m = mass, t = 0;
   const out = { hit: false, t: 0, pos: new Vector3(), dir: new Vector3(), alt: 0, speed: 0, vs: 0, maxQ: 0, maxQAlt: 0, maxFlux: 0, maxG: 0, apogee: -Infinity, mass, stopped: false, speedMax: 0 };
   const F = o.thrust * o.throttle, mdot = o.ve > 0 ? F / o.ve : 0;
-  let ax = 0, ay = 0, az = 0, sp = 0, qd = 0, rr = 0, burning = false, entering = false, entryDone = !o.entry, FF = 0;
+  let ax = 0, ay = 0, az = 0, sp = 0, qd = 0, rr = 0, mach = 0, burning = false, entering = false, entryDone = !o.entry, FF = 0;
   // acceleration at a state; leaves the air-relative speed in sp and the dynamic pressure in qd
   const acc = (px, py, pz, ux, uy, uz, mm, gh) => {
     rr = Math.sqrt(px * px + py * py + pz * pz);
@@ -45,7 +45,8 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
     sp = Math.sqrt(sx * sx + sy * sy + sz * sz);
     const rho = alt < atmoTop ? body.density(alt) : 0;
     qd = 0.5 * rho * sp * sp;
-    let k = sp > 1e-6 ? qd * machDrag(sp / TUNING.SOUND_SPEED) * o.area / (mm * sp) : 0;
+    mach = rho > 0 ? sp / body.soundSpeed(alt) : 0;
+    let k = sp > 1e-6 ? qd * machDrag(mach) * o.area / (mm * sp) : 0;
     burning = F > 0 && mm > o.dryMass && alt - gh < o.burnBelow;
     entering = false;
     if (!entryDone && !burning && o.thrust > 0 && mm > o.dryMass && px * ux + py * uy + pz * uz < 0) {
@@ -63,7 +64,7 @@ export function predictFall(body, pos, vel, mass, ut, opts = {}) {
     if (alt > out.apogee) out.apogee = alt;
     if (sp > out.speedMax) out.speedMax = sp;
     if (qd > out.maxQ) { out.maxQ = qd; out.maxQAlt = alt; }
-    const dragA = qd * machDrag(sp / TUNING.SOUND_SPEED) * o.area / m;
+    const dragA = qd * machDrag(mach) * o.area / m;
     if (dragA > out.maxG) out.maxG = dragA;
     if (qd > 0) { const flux = TUNING.HEAT_FLUX_K * Math.sqrt(2 * qd / (sp * sp || 1)) * sp * sp * sp; if (flux > out.maxFlux) out.maxFlux = flux; }
     if (burning && (sp < 0.5 || (sp > lastSp && sp < 15))) { out.stopped = true; break; }

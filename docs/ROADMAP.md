@@ -170,9 +170,16 @@ re-entries where your attitude decides whether you live.
 
 **Today.** Drag is computed per part with a transonic rise. Wings and control surfaces have
 real lift, stall and induced drag, and spaceplanes fly. Atmospheres are exponential with one
-scale height, a hard top and a constant speed of sound. Capsules have no lift. Heating follows
+scale height. Since step A (November 2026) each world has its own gas and temperature profile,
+the Mach number is read on the true speed of sound, and the top of the atmosphere fades out
+in place of a step. Capsules have no lift. Heating follows
 the Sutton-Graves law, and heat shields ablate.
 [docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
+
+**The plan.** The mathematics is written up in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md) and the
+build is specified in seven steps in [REENTRY_SPEC.md](REENTRY_SPEC.md): A the air (built),
+B forces on bodies at high Mach, C capsule trim and steering, E heating by shape and attitude,
+D wings and fins at speed, F plasma and blackout where it is real, G winds.
 
 **Building it.** Add body lift, a temperature profile per atmosphere, occlusion so shielded
 parts stay cool, and optional winds. Every change needs a matching check in the verification

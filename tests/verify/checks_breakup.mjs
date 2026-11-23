@@ -42,7 +42,7 @@ function stateOf(v) {
 function airAt(s, at) {
   const b = sys.byId[s.body];
   const h = norm(s.pos) - b.radius;
-  const rho = b.atmo && h < b.atmo.height ? b.atmo.rho0 * Math.exp(-h / b.atmo.scale) : 0;
+  const rho = R.airDensity(b, h);
   // the air turns with the body, about its +Y axis
   const omega = [0, TAU / b.rotPeriodDef, 0];
   const rel = sub(s.vel, cross(omega, s.pos));

@@ -129,7 +129,7 @@ test('aerodynamics chapter: the body-drag formulas and the drag rise are what th
   for (const speed of [200, 288, 400, 576, 960]) for (const broadside of [false, true]) {
     const { w, v, q } = inAir(one, { alt: 1153, speed, tilt: broadside ? Math.PI / 2 : 0 });
     const m = v.mass; w.step(TUNING.DT_MAX);
-    const mach = speed / TUNING.SOUND_SPEED;
+    const mach = speed / SYSTEM.home.soundSpeed(1153);
     // end on: q M (A_w + 0.25 A_l); broadside: q M A_s
     close(v.gForce * G0 * m, q * machRise(mach) * (broadside ? side : face * (1 + TUNING.BASE_DRAG)), 1e-9, `Mach ${mach.toFixed(2)} ${broadside ? 'broadside' : 'end on'}`);
   }
@@ -138,7 +138,7 @@ test('aerodynamics chapter: the body-drag formulas and the drag rise are what th
   // the worked example prints these two forces at 20 kPa
   const body = text('aeromodel');
   assert.ok(body.includes(ctx.sig(20000 * face * 1.25 / 1000, 3)) && body.includes(ctx.sig(20000 * side / 1000, 3)), 'the canister example');
-  assert.ok(body.includes(String(TUNING.SOUND_SPEED)) && body.includes(String(TUNING.WING_SLOPE)) && body.includes(String(TUNING.FIN_LIFT)));
+  assert.ok(body.includes(String(Math.round(SYSTEM.home.soundSpeed(0)))) && body.includes(String(TUNING.WING_SLOPE)) && body.includes(String(TUNING.FIN_LIFT)));
 });
 
 test('aerodynamics chapter: fin lift, the stall and the flat plate are the game\'s', () => {
