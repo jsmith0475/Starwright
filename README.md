@@ -147,6 +147,16 @@ And around the flying:
 </p>
 
 <p align="center">
+  <a href="media/booster-return.mp4">
+    <img src="media/booster-return-preview.gif" width="100%" alt="One flight recorded in the game: the stages part 21 km up and the ring that joined them is thrown clear as a third piece, the booster flips and burns back toward the launch site, falls, lights its engine at 993 m, swings its legs out and lands on the Return Pad">
+  </a>
+  <br>
+  <a href="media/booster-return.mp4"><b>▶ Watch a booster fly itself home (45 seconds, silent)</b></a>
+  <br>
+  <sub>Real gameplay, one flight recorded in Chrome: three pieces at separation, boostback, landing burn at 993 m, touchdown at 1.7 m/s, 0 m from the mark. <a href="docs/BOOSTERS.md">How it works and what was checked.</a></sub>
+</p>
+
+<p align="center">
   <a href="media/shot-booster.jpg"><img src="media/shot-booster.jpg" width="100%" alt="A dropped first stage 28 km above the coast, flown as its own vessel named Test Returner booster, while the upper stage climbs to orbit out of view"></a>
   <br>
   <sub>A dropped first stage, flown as its own ship 28 km up while the upper stage flies itself to orbit. <a href="docs/BOOSTERS.md">How it works and what was checked.</a></sub>
