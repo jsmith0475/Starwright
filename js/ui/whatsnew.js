@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'return-pad-barge', date: '2026-11-22', title: 'A Return Pad and a barge at sea',
+    text: 'A booster flying back now has two places to land. The Return Pad is a marked concrete pad 600 m north of the launch pad. The barge Patient Tide is a steel deck anchored 40 km out to sea: hop to the booster, open Guidance and choose Land on the barge. Its deck is solid and its edge is real, and the map marks both sites.' },
   { id: 'booster-return', date: '2026-11-22', title: 'Boosters that fly back and land',
     text: 'Give your first stage a guidance ring, grid fins and landing legs, and launch with the ascent assist. It lets the booster go early with enough propellant to come home, and the booster flips, burns back, steers on its fins and lands on its legs beside the pad while the upper stage goes on to orbit. Press \\ to watch it or take over.' },
   { id: 'booster-flies-on', date: '2026-11-22', title: 'A dropped booster keeps flying',

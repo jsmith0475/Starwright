@@ -192,14 +192,22 @@ top as well, and it comes home by itself:
 1. Launch with the ascent assist. It stages early, when the booster has just enough propellant
    left to return, and tells you so.
 2. The booster flips, burns back toward the pad, steers on its fins and lands on its legs at the
-   landing zone, 600 m north of the pad. Every step is called out on screen.
+   **Return Pad**, the marked concrete pad 600 m north of the launch pad. Every step is called
+   out on screen.
 3. Press **\\** to watch it. Touch the controls and you are flying it. The assist takes the upper
    stage to orbit either way.
 
 Flying by hand instead? When you are in the air over Verda, Guidance has **Fly back and land**.
 Without legs a stage is never flown back, and without grid fins it misses by kilometres. A stage
 dropped too late and too fast cannot reach the pad: the program says so and lands where it can.
-The landing zone is open ground for now, and landing there pays nothing yet. The full description
+
+**The barge.** *Patient Tide* is a steel deck anchored 40 km east of the pad, under your launch
+path. To land there instead, hop to the booster, open Guidance and choose **Land on the barge**.
+It costs less propellant than flying all the way back. The deck is 80 by 50 m and its edge is
+real: a booster with its feet over the side goes into the sea. The map marks both landing sites
+when you zoom in on Verda.
+
+Landing a booster pays nothing yet. The full description
 is in [BOOSTERS.md](BOOSTERS.md).
 
 ## Targeting, rendezvous and docking

@@ -37,6 +37,7 @@ import * as PM from '../render/partmesh.js';
 import * as GFX from '../render/planetgfx.js';
 import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
 import { createPostChain } from '../render/post.js';
+import { createBarge } from '../render/barge.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
@@ -259,6 +260,9 @@ export function createFlightScene(app) {
   let base = null, pad = null, padOffset = new THREE.Vector3();
   const padQ = World.padFrame(SYSTEM.launchSite.dir);
   const padQLegacy = padQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, Math.PI));   // old pad: tower to the west
+  // the landing barge (js/render/barge.js): its long side lies along `heading` (90 = east), which is the model's +X
+  let barge = null, bargeSite = SYSTEM.sites && SYSTEM.sites.barge && SYSTEM.sites.barge.deck ? SYSTEM.sites.barge : null;
+  const bargeQ = bargeSite ? World.padFrame(bargeSite.dir).multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (90 - (bargeSite.heading ?? 90)) * Math.PI / 180)) : null;
   function useLegacyPad() { if (pad) return; pad = createLaunchPad(); pad.visible = false; shadowFlags(pad, false, true); near.add(pad); }
   function adoptBase(b) {
     if (!b || !b.group || disposed) { if (b && b.dispose) b.dispose(); return; }
@@ -926,6 +930,16 @@ export function createFlightScene(app) {
         }
       } else site.visible = false;
     }
+    // ---- the landing barge: built the first time the camera comes within sight of it, drawn where the physics has its deck
+    if (bargeSite && body === SYSTEM.home) {
+      body.surfaceDirToInertial(bargeSite.dir, ut, v2).multiplyScalar(body.radius + bargeSite.top).sub(anchor.pos);
+      const seen = v2.lengthSq() < 3.6e9;                               // 60 km
+      if (seen && !barge) { try { barge = createBarge({ length: bargeSite.length, width: bargeSite.width, freeboard: bargeSite.top - body.seaLevel }); shadowFlags(barge, true, true); near.add(barge); } catch (err) { console.warn('[flight] the barge could not be built:', err && err.message); bargeSite = null; } }
+      if (barge) {
+        barge.visible = seen;
+        if (seen) { barge.quaternion.setFromAxisAngle(Y_AXIS, body.rotationAngle(ut)).multiply(bargeQ); barge.position.copy(v2); }
+      }
+    } else if (barge) barge.visible = false;
 
     elAcc.set(0, 0, 0);
     for (const v of world.vessels) {
@@ -1343,6 +1357,7 @@ export function createFlightScene(app) {
     catcher.geometry.dispose(); catcher.material.dispose();
     if (pad) pad.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.dispose) o.material.dispose(); });
     if (base) { near.remove(base.group); try { base.dispose(); } catch { /* ignore */ } base = null; }
+    if (barge) { near.remove(barge); try { barge.userData.dispose(); } catch { /* ignore */ } barge = null; }
     if (sunNear.shadow.map) sunNear.shadow.map.dispose();
     if (probeOn) setProbe(false);
     if (probe) { probe.dispose(); probe = null; }

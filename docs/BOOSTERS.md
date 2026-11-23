@@ -1,14 +1,18 @@
 # Reusable boosters
 
 Roadmap item 5: fly the first stage back and land it on its legs while the upper stage carries on
-to orbit. It is being built in parts. **Two are in the game:**
+to orbit. It is being built in parts. **Three are in the game:**
 
 1. A dropped stage that can still be flown keeps flying, under full physics, however far it is
    from the vessel you are watching.
 2. A stage built to come back flies itself home: it flips, makes a boostback burn, makes an entry
    burn if it needs one, steers on its grid fins, and lands on its legs by the launch pad.
 
-A marked pad and a platform at sea, a stock reusable rocket, and pay for landing one come next.
+3. There are two places to land: the **Return Pad**, a marked concrete pad 600 m north of the launch
+   pad, and the barge ***Patient Tide***, a steel deck anchored in the ocean 40 km east of it.
+
+A stock reusable rocket, a recovery plan you choose before launch, and pay for landing one come
+next.
 
 ## Flying a booster back
 
@@ -33,8 +37,25 @@ Press **\\** to watch the booster come down, and **\\** again to go back. Touch 
 you are watching it and it is yours to fly. You can also start a return yourself on any rocket in
 the air over Verda: Guidance, **Fly back and land**.
 
-The target is the **landing zone**, 600 m north of the launch pad. Today it is open ground with
-nothing drawn on it; the pad itself is the next part.
+The target is the **Return Pad**, 600 m north of the launch pad: a concrete disc 90 m across with
+two rings and an amber aim point, a road to it from the launch pad, and four light masts.
+
+## Landing on the barge
+
+*Patient Tide* is a flat steel deck, 80 m long and 50 m wide, 4 m above the water, anchored 40 km
+east of the launch pad under the path every eastward launch takes. It does not move: no swell and
+no drift in this version. The sea under it is about 470 m deep.
+
+To send a booster there, hop to it after separation (**\\**), open Guidance and choose **Land on
+the barge**. From then on the return is flown exactly as it is to the Return Pad, with the deck as
+the target. The barge suits a stage that has gone too far or too fast to turn all the way round:
+it needs less of a boostback, so it needs less propellant.
+
+The deck is solid to the physics and the edge is a real edge. A stage that comes down with its
+feet over the side tips off into the sea. One that misses comes down in the water, and the program
+reports "down in the sea" and how far from the target, not a landing.
+
+Both sites are marked on the map once Verda is drawn large enough to tell them apart.
 
 ## How the return is flown
 
@@ -84,8 +105,10 @@ gone, the stage is lost, as it would be.
   different amounts of propellant): **312 landed**, every one within 0.3 m of the target, at
   1.75 m/s, upright. `node tests/tools/booster_sweep.mjs 200 777` repeats 200 of them.
 - A whole mission in a real browser: separation at 21.4 km and 772 m/s, the booster down 0 m from
-  the landing zone at 1.7 m/s with 249 m/s of propellant left, the upper stage in an
+  the Return Pad at 1.7 m/s with 249 m/s of propellant left, the upper stage in an
   83 × 80 km orbit.
+- The same mission sent to the barge, in a real browser: the booster down 0 m from the middle of
+  the deck at 1.7 m/s, upright, and the upper stage in the same orbit.
 
 ## Flying a booster yourself
 
@@ -159,11 +182,17 @@ What this says (it was measured before guidance was written, and guidance was bu
 
 ## Honest limits
 
-- The landing zone is unmarked ground. There is no pad to land on and no platform at sea yet.
 - No stock rocket is built to come back yet. Build one as described above.
-- The target is always the landing zone by the pad. A stage that separates late and fast (the
-  last four rows of the table) cannot get back to it; the program says so and lands where it
-  falls, which is usually the sea.
+- The ascent assist always stages for a return to the Return Pad. There is no recovery plan to
+  choose before launch yet: the barge is picked by hand after separation, and the assist does
+  not stage later to use it. A stage that separates late and fast (the last four rows of the
+  table) cannot reach either site; the program says so and comes down where it falls, which is
+  usually the sea.
+- The barge does not move, and there is one, in one place.
+- The deck is a level rectangle to the physics. The four corner houses and the light masts on
+  it are drawn only: a stage can pass through them. They stand outside the marked circle.
+- A stage that comes down gently in the sea floats upright. A real one would fall over. The
+  program reports it as lost to the sea either way.
 - The return was tuned and measured on single-engine stages of the size above. Very different
   designs (many engines, very squat, no fins) are not covered by the measurements.
 - The landing burn cannot move the stage sideways: leaning the engine is cancelled by the fins.
@@ -184,6 +213,19 @@ What this says (it was measured before guidance was written, and guidance was bu
 
 ## What was checked
 
+- `tests/verify/checks_booster.mjs`, group 9g (12 checks) for the barge. The deck's place and
+  size are measured without the game's own distance code: 40 km from the pad by the haversine
+  formula, 80 by 50 m by walking outward in 1 cm steps until the ground stops being deck. A stage
+  flown down onto the deck stands with its centre of mass 3.844 m above it, the same to 0.15 mm
+  as the same flight ended on level ground. Ten returns from varied separations all land on the
+  deck inside 10 m, 2 m/s and 3 degrees (worst: 3 cm from the middle).
+- `tests/unit/barge.test.js` (8 tests): the Return Pad is level, dry, where the model draws it
+  and clear of every building; the deck's outline, height and the water round it; a stage lands
+  on the deck and stands; with its feet over the edge it tips off; beside the barge it is in the
+  sea and the program says so; a booster on the deck is still there after a save and reload and
+  after a day at high warp.
+- `tests/e2e/booster_barge.mjs`, in a real browser (26 checks): launch, separation, "Land on the
+  barge" from the Guidance panel, the landing on the deck, the map markers, the upper stage in orbit.
 - `tests/verify/checks_booster.mjs`, groups 9d to 9f (20 checks). The reference integrator
   shares no code with the game. It has its own exponential atmosphere and its own drag curve, and
   the drag area it uses is measured from one step of the game's flight, not read from the game.
@@ -218,7 +260,7 @@ What this says (it was measured before guidance was written, and guidance was bu
 - `tests/e2e/booster.mjs`, in a real browser through the real flight screen: launch with the
   ascent assist, separation, the hop key, the stages 14 km apart and both flying, the warp hold and
   its message, the hop back, and the upper stage reaching an 83 × 81 km orbit by itself.
-- The whole verification passes: 1,309 checks, 0 failed. 461 unit tests pass.
+- The whole verification passes: 1,321 checks, 0 failed. 469 unit tests pass.
 
 ## For developers
 
@@ -235,7 +277,11 @@ What this says (it was measured before guidance was written, and guidance was bu
   `prediction`, `log`), `recoverableStage(vessel)`, `returnReserve(world, vessel, target)`.
   `ascentProgram(world, { recover: { target } })` stages at the reserve.
 - `js/core/vessel.js`: `axialDragArea(tailFirst)`, `axialHeatRatio(flux, tailFirst)`, `machDrag`.
-- `js/core/bodies.js`: `SYSTEM.home.sites.landing`.
+- `js/core/bodies.js`: `SYSTEM.home.sites.landing` (the Return Pad) and `.barge`; `BARGE` (where
+  and how big); `Body.decks` and `Body.deckAt(dir)`, a level rectangle that is not part of the
+  height field. `terrainAt` in `vessel.js` is what the physics asks, and it includes decks.
+- `js/render/barge.js`: `createBarge()`. `js/render/basegfx.js`: `RETURN_PAD`, `buildReturnPad`.
+  `js/ui/flightscene.js` places the barge; `js/ui/mapview.js` marks both sites.
 - `js/ui/flight.js`: `parked` (programs flying vessels that are not being watched, ticked by
   `tickParked`), `family` (the vessels of this flight), `hopVessel()`, the key `hopVessel`
   (default `\`).

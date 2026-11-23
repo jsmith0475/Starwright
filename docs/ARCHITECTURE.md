@@ -1307,3 +1307,16 @@ gravity, drag from `Vessel.axialDragArea` and `machDrag` in air rotating with th
 toasts each new line of its log (`callouts`). The landing target is `SYSTEM.home.sites.landing`.
 Tests: `tests/unit/booster_return.test.js`, `tests/verify/checks_booster.mjs` groups 9d to 9f,
 `tests/e2e/booster_return.mjs`.
+
+## Additions (reusable boosters, part 3: landing sites)
+
+`Body.decks` is a list of level rectangles that are solid to the physics and are not part of the height field
+(`Body.deckAt(dir)` returns the top, or -Infinity). The home world has one, the landing barge (`BARGE` in `bodies.js`,
+`SYSTEM.home.sites.barge`). `terrainAt` in `vessel.js`, which every ground contact goes through, returns the deck where
+there is one; `Body.surfaceHeight` and `Body.isWater` agree with it. Rendering never sees decks: `Body.terrainHeight` is
+unchanged. `Vessel._groundInfo` treats a deck as level (no slope from the drop at its edge) and `_contact` lets a hull
+point past the edge keep its real clearance, so a stage half off the deck finds no support there. The Return Pad
+(`sites.landing`) is ordinary level ground with paving drawn on it (`buildReturnPad` in `basegfx.js`). The barge model is
+`js/render/barge.js`, built the first time the camera is within 60 km and placed by `flightscene.js` at the deck's
+position. `mapview.js` marks both sites. `boosterRecovery` reports a touchdown on water as "down in the sea" and failed.
+Tests: `tests/unit/barge.test.js`, `tests/verify/checks_booster.mjs` group 9g, `tests/e2e/booster_barge.mjs`.

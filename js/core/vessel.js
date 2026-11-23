@@ -170,8 +170,11 @@ export function jetFactor(def, body, alt, mach) {
 export function terrainAt(body, dir) {
   if (typeof body.terrainHeight !== 'function') return 0;
   const h = +body.terrainHeight(dir);
+  if (body.decks) { const k = body.deckAt(dir); if (k > h) return k; }      // a built deck (the landing barge) stands above it
   return h === h ? h : 0;
 }
+/** Is there a built deck (not terrain) under this body-fixed direction? */
+export function deckUnder(body, dir) { return !!body.decks && body.deckAt(dir) > -Infinity; }
 /** Height of the liquid surface of an ocean world (m above the reference radius). */
 export function seaLevelOf(body) { return body.ocean ? (body.seaLevel || 0) : -Infinity; }
 /** Height of whatever a vessel meets first at a body-fixed direction: the terrain, or the sea over water. */
@@ -2357,6 +2360,9 @@ export class Vessel {
           const hN = terrainAt(body, _e.copy(d).addScaledVector(e2, eps / R).normalize()), hS = terrainAt(body, _e.copy(d).addScaledVector(e2, -eps / R).normalize());
           gx = (hE - hW) / (2 * eps); gy = (hN - hS) / (2 * eps);
         }
+        // a deck is level, and what lies past its edge (the sea, far below) is not a slope under the craft
+        g.deck = deckUnder(body, d);
+        if (g.deck) { gx = 0; gy = 0; fit = h0; }
         g.nb.addScaledVector(e1, -gx).addScaledVector(e2, -gy).normalize();
         g.slope = Math.hypot(gx, gy);
       } else g.slope = 0;
@@ -2433,7 +2439,8 @@ export class Vessel {
           const len = _rl2.length();
           const hT = terrainAt(body, body.inertialToSurfaceDir(_rl2, ut0, _rl2).normalize());
           c.dh = (len - Rb - hT) * cosS - (d0 + rx * nx + ry * ny + rz * nz);
-          if (!(c.dh === c.dh) || c.dh > 3 || c.dh < -3) c.dh = 0;
+          // (on a deck, a point out past the edge has nothing under it: it keeps its real clearance and finds no support)
+          if (!(c.dh === c.dh) || c.dh < -3 || (c.dh > 3 && !g.deck)) c.dh = 0;
         }
       }
     } else if (this._reliefKey && this._reliefKey.n !== -1) { this._reliefKey.n = -1; for (let i = 0; i < pts.length; i++) pts[i].dh = 0; }

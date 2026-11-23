@@ -903,8 +903,32 @@ const LOTS = [  // [x, z, w, d, rows]
   [-170, 560, 60, 56, 4], [300, 562, 96, 30, 2], [-470, 420, 120, 30, 2], [440, 245, 100, 28, 2], [-200, 690, 90, 28, 2], [640, 668, 70, 28, 2],
 ];
 
+/** The Return Pad: where a booster flying back is sent (SYSTEM.sites.landing, 600 m north of the launch pad). */
+export const RETURN_PAD = { x: 0, z: -600, r: 45 };
+/** Nothing grows on the Return Pad, its apron or the road to it. */
+function onReturnPad(x, z) { return Math.hypot(x - RETURN_PAD.x, z - RETURN_PAD.z) < RETURN_PAD.r + 28 || (Math.abs(x - RETURN_PAD.x) < 12 && z < -170 && z > RETURN_PAD.z); }
+function buildReturnPad(k) {
+  const { x, z, r } = RETURN_PAD;
+  k.flat('asphalt', x, (-172 + z + r) / 2, 8, -172 - (z + r) + 4, 0.06, 0x44474b);       // the road from the launch pad
+  k.disc('slab', x, z, r + 6, 0.04, C.gravel, 48);
+  k.disc('concrete', x, z, r, 0.06, C.conc, 64);
+  k.disc('mark', x, z, r - 1.5, 0.085, C.line, 64, r - 3);                              // outer ring
+  k.disc('mark', x, z, 22, 0.085, C.teal, 48, 20.4);                                    // inner ring
+  k.disc('mark', x, z, 6, 0.085, C.amber, 32, 4.8); k.disc('mark', x, z, 1.6, 0.09, C.scorch, 16);   // the aim point
+  for (let i = 0; i < 4; i++) {                                                         // four bars pointing in from the compass points
+    const a = i * Math.PI / 2, cx = Math.cos(a), cz = Math.sin(a);
+    k.flat('mark', x + cx * 31, z + cz * 31, cz ? 2.2 : 14, cz ? 14 : 2.2, 0.085, C.line);
+  }
+  for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6 + Math.PI / 12; k.flat('mark', x + Math.cos(a) * (r - 6), z + Math.sin(a) * (r - 6), 1.2, 1.2, 0.085, C.amber); }
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {                         // four light masts, clear of the pad
+    const mx = x + sx * (r + 3) * 0.7071, mz = z + sz * (r + 3) * 0.7071;
+    k.box('concrete', mx, 0, mz, 1.6, 0.4, 1.6, C.concDark); k.beam('metal', [mx, 0, mz], [mx, 16, mz], 0.2, C.white); k.glow(mx, 16.4, mz, 0xfff1c9, 1.6);
+  }
+}
+
 function buildScenery(k, quality) {
   const rnd = k.rnd, cars = [], lamps = [];
+  buildReturnPad(k);
   // crawlerway: two gravel tracks from the VAB door to the pad
   const z0 = 40, z1 = 470, len = z1 - z0, zc = (z0 + z1) / 2;
   for (const s of [-1, 1]) { k.flat('slab', s * 11, zc, 12, len, 0.06, C.gravel); k.flat('slab', s * 17.6, zc, 1.2, len, 0.07, C.concDark); k.flat('slab', s * 4.4, zc, 1.2, len, 0.07, C.concDark); }
@@ -1190,6 +1214,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
       list.push({ x, y: drop(x, z), z, species: 'bush', scale: 0.3 + 0.4 * rnd(), tall: 0.9 + 0.7 * rnd(), yaw: rnd() * TAU, leanX: 0, leanZ: 0, tint: [v * 1.18, v * 1.06, v * 0.7] });
       placed++;
     }
+    for (let i = list.length - 1; i >= 0; i--) if (onReturnPad(list[i].x, list[i].z)) list.splice(i, 1);      // (taken out afterwards, so that every other tree stands where it did)
     flora = createTreeSystem({ trees: list, detail: vegNow, planetRadius, shadows: !low });
     group.add(flora.group);
     // field stones: lumpy boulders in the open and at the edges of the stands (one instanced mesh; not at low quality)
@@ -1201,7 +1226,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
       let n = 0;
       for (let i = 0; i < 20000 && n < N; i++) {
         const x = L.bounds[0] - 300 + rnd() * (L.bounds[2] - L.bounds[0] + 600), z = L.bounds[1] - 300 + rnd() * (L.bounds[3] - L.bounds[1] + 600);
-        if (x > 2260 || !clearGround(x, z) || fbm(noise, (x + 5100) / 210, (z + 100) / 210, 3, 2) < 0.55) continue;
+        if (x > 2260 || !clearGround(x, z) || onReturnPad(x, z) || fbm(noise, (x + 5100) / 210, (z + 100) / 210, 3, 2) < 0.55) continue;
         const sc = 0.25 + 1.3 * rnd() * rnd(), g = 0.36 + 0.2 * rnd();
         m4.compose(V3(x, drop(x, z) - 0.05 * sc, z), _q.setFromEuler(_e.set((rnd() - 0.5) * 0.5, rnd() * TAU, (rnd() - 0.5) * 0.5)), V3(sc * (0.8 + 0.5 * rnd()), sc * (0.6 + 0.4 * rnd()), sc * (0.8 + 0.5 * rnd())));
         rocks.setMatrixAt(n, m4); rocks.setColorAt(n, col.setRGB(g * 1.04, g, g * 0.92)); n++;
@@ -1212,7 +1237,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
   } catch (err) { console.warn('[base] the trees could not be built:', err && err.message); flora = null; }
   // where grass must not grow: everything paved or built on, drawn from above into a mask (1 px per metre)
   if (!low) try {
-    const R = [-1840, -560, 4096, 1792], c = cv(R[2], R[3]), g = c.getContext('2d');
+    const R = [-1840, -688, 4096, 1920], c = cv(R[2], R[3]), g = c.getContext('2d');      // (north far enough to take in the Return Pad)
     g.fillStyle = '#000'; g.fillRect(0, 0, R[2], R[3]); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = 1.6; g.lineJoin = 'round';
     const BUCKETS = { slab: 1, asphalt: 1, concrete: 1, paint: 1 };
     group.updateMatrixWorld(true);
