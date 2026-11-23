@@ -176,6 +176,22 @@ export function catchpin(def, g, pb) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Flank Port: a short collar that looks straight out of the hull (+X here), a latch ring on its rim, a dark
+// recessed face, and the two propellant couplings (oxygen blue, methane amber) inside it
+// ---------------------------------------------------------------------------------------------
+export function sideport(def, g, pb) {
+  const { h, rw, t } = def, x0 = -rw / 2 - 0.25, x1 = rw / 2, R = Math.min(h, t) * 0.42;
+  const along = (x, len, ra, rb, color, bucket = 'metal', open = false) => pb.add(new THREE.CylinderGeometry(rb, ra, len, pb.seg(ra * 2), 1, open), color, mul(M(x + len / 2, 0, 0), RX), bucket);
+  pb.rbox(0.3, h * 1.1, t * 1.1, 0.04, STEEL_DK, M(x0 + 0.15, 0, 0), 'steel');     // doubler, let into the hull
+  along(x0 + 0.25, x1 - x0 - 0.37, R * 1.08, R, STEEL, 'steel');                    // collar
+  along(x1 - 0.12, 0.12, R * 1.16, R * 1.16, P.steel);                              // latch ring
+  pb.add(new THREE.RingGeometry(R * 0.86, R * 1.16, pb.seg(R * 2)), P.silver, M(x1 + 0.002, 0, 0, 0, Math.PI / 2, 0), 'metal');
+  pb.add(new THREE.CircleGeometry(R * 0.86, pb.seg(R * 2)), 0x23262b, M(x1 - 0.05, 0, 0, 0, Math.PI / 2, 0), 'metal');
+  for (const [dy, c] of [[R * 0.36, 0x4f8fd0], [-R * 0.36, 0xd08a3a]]) pb.cyl(R * 0.2, R * 0.2, 0.08, 0, c, 'metal', pb.seg(R * 0.4), false, mul(M(x1 - 0.03, dy, 0), RX));
+  if (pb.med) for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + 0.39; pb.cyl(0.035, 0.035, 0.05, 0, P.gun, 'metal', 6, false, mul(M(x1 + 0.01, Math.cos(a) * R * 1.01, Math.sin(a) * R * 1.01), RX)); }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Flaps: a flat tapered slab hinged along its root. One face is steel, the other tiled, and which is which
 // depends on the side of the ship it hangs from, so both hands are built ('sideA': tiles on −Z, 'sideB': on +Z)
 // and partmesh shows the one whose tiles face the craft's belly.
