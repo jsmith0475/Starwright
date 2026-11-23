@@ -19,6 +19,8 @@ export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875, XXL: 2.8125 };
 //   airbrake: { area }         extra drag area in m² while deployed
 //   multi: { count, radius }   engine mounts drawn under a multi-coupler (it attaches like a plain adapter)
 // Round-2 additions:
+//   capPhi: degrees            the bottom face is a spherical cap of this half-angle (heat shields and tapered
+//                              capsules default to 25; 0 = flat). Used above the speed of sound (js/core/aero.js).
 //   comY: metres               the part's centre of mass sits this far along its own axis from its centre (negative =
 //                              toward the bottom node). Capsules carry it so they float and fall blunt end first.
 //                              Craft.centerOfMass() honours it; vessel.js should too (see the assembly hand-back).

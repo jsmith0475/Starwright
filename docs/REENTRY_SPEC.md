@@ -2,7 +2,7 @@
 
 23 November 2026. Written for Jerry Smith. The companion science document is [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md).
 
-> **Build status.** Part A (the air: gas, temperature, speed of sound, Mach number, the taper at the top) is built, except A5 (parts cooling toward the air temperature), which moves to the heating step, part E, so that the first step changes as little as possible. Parts B to G are not built. The verification checks are chapter 10 of the suite (`tests/verify/checks_aero.mjs`); chapter 10 was already taken by the booster checks. The open questions in section 12 stand at their defaults.
+> **Build status.** Part A (the air: gas, temperature, speed of sound, Mach number, the taper at the top) is built, except A5 (parts cooling toward the air temperature), which moves to the heating step, part E, so that the first step changes as little as possible. Part B (forces on bodies: two drag curves, the fading wake, the Newtonian force, shadow) is built and described in [AERODYNAMICS.md](AERODYNAMICS.md); its blunt curve was recalibrated to meet the Newtonian value at Mach 4 (1.00, 1.25, 1.55, 1.75, 1.90, 1.98, 2.00), and heat shields and tapered capsules carry a 25 degree spherical cap. Parts C to G are not built. The verification checks are chapter 10 of the suite (`tests/verify/checks_aero.mjs`); chapter 10 was already taken by the booster checks. The open questions in section 12 stand at their defaults.
 
 ## 1. Summary
 

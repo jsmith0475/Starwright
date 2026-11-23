@@ -2,6 +2,8 @@
 import { World, SYSTEM, V, A, capsule, spawn, run } from './harness.mjs';
 import { Quaternion, Vector3 } from '../../js/lib/three.module.min.js';
 import * as R from './ref.mjs';
+import * as RA from './ref_aero.mjs';
+import { PARTS } from '../../js/core/parts.js';
 
 const sys = R.readSystem();
 const G0 = 9.80665;
@@ -70,8 +72,13 @@ function drag(S) {
 }
 
 // ------------------------------------------------------------------------------------------ 4c re-entry heating
-/** The game's drag rise with Mach number (data from TUNING in vessel.js): 1 below 0.7, 2.0 at 1.1, 1.5 above 2.5. */
-const machFactor = M => M <= 0.7 ? 1 : M < 1.1 ? 1 + (M - 0.7) * 2.5 : M < 2.5 ? 2 - (M - 1.1) / 1.4 * 0.5 : 1.5;
+/**
+ * The capsule's drag area heat shield first by Mach number, from the independent body aerodynamics
+ * (tests/verify/ref_aero.mjs): the face-and-wake law below Mach 1.5, the Newtonian force on its 25 degree spherical
+ * heat shield above Mach 4, blended between. Geometry and coefficients are the part's data.
+ */
+const POD = PARTS.pod_acorn;
+const capArea = RA.axialDrag({ rB: POD.rBottom, rT: POD.rTop, h: POD.h, capB: 25 * Math.PI / 180 }, POD.drag, sys.byId.verda.atmo.gamma || 1.4);
 const K_HEAT = 1.83e-4;
 
 function entry(b, vE, gamma, { record = true } = {}) {
@@ -110,7 +117,7 @@ function entry(b, vE, gamma, { record = true } = {}) {
       const r = Math.hypot(s[0], s[1], s[2]), alt = r - b.radius;
       const ax = s[3] - wy * s[2], ay = s[4], az = s[5] + wy * s[0], air = Math.hypot(ax, ay, az);
       const rho = R.airDensity(b, alt);
-      const k = 0.5 * rho * air * capCdA * machFactor(air / R.soundSpeed(b, alt)) / m;
+      const k = 0.5 * rho * air * capArea(air / R.soundSpeed(b, alt)) / m;
       if (o) { o[0] = -k * ax; o[1] = -k * ay; o[2] = -k * az; }
       return { rho, air, alt, a: k * air };
     };
@@ -159,7 +166,7 @@ function heating(S) {
   S.check('speed at peak heating / top speed vs Allen-Eggers exp(-1/6)', Math.exp(-1 / 6), g.peakQ.speed / g.vmax, 0.04, { note: `peak ${(g.peakQ.flux / 1000).toFixed(0)} kW/m2 at ${(g.peakQ.alt / 1000).toFixed(1)} km` });
   S.check('speed at peak deceleration / top speed vs Allen-Eggers exp(-1/2)', Math.exp(-1 / 2), g.peakG.speed / g.vmax, 0.05);
   S.check('peak deceleration vs Allen-Eggers v^2 sin(gamma) / (2 e H)', g.vmax ** 2 * Math.sin(g.gammaAtVmax) / (2 * Math.E * scale), g.peakG.a, 0.25, { rel: true, unit: 'm/s2', note: 'rough closed form: it ignores gravity and the curve of the path' });
-  const beta = g.m / (capCdA * 1.5);
+  const beta = g.m / capArea(g.vmax / R.soundSpeed(b, g.peakQ.alt));
   S.check('altitude of peak heating vs Allen-Eggers H ln(3 rho0 H / (beta sin gamma))', scale * Math.log(3 * rho0 * scale / (beta * Math.sin(g.gammaAtVmax))), g.peakQ.alt, 1500, { unit: 'm' });
   S.info('hottest part reached, as a fraction of its limit', g.maxTemp, '', 'bare capsule, no heat shield part');
   // trend with entry speed at the same path angle: against the reference, and roughly v^3
