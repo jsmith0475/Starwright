@@ -235,7 +235,7 @@ with 33 Peregrine engines and a ship with 6. Three things about it are new.
   500 m north-west of the launch pad, not from the pad. Launch with the ascent assist and the
   booster flies itself back and is caught by the tower's arms about five minutes after
   lift-off, while the ship goes on to orbit. Press **\\** to watch it. To fly the catch yourself,
-  bring the booster's base down to 3 m above the mount, within 3.5 m of its axis, slower than
+  bring the booster's base down to 3 m above the mount, within 2.5 m of its axis, slower than
   5 m/s down and 2 m/s sideways, and upright to within 8°. Miss any of those and the game says
   which.
 

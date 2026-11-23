@@ -806,7 +806,7 @@ const defs = [
     desc: 'A grid fin the size of a garage door, for steering a very large booster on its way down.' },
   { id: 'pin_catch', name: 'Catch Pin', cat: 'structure', tech: 'very_heavy', cost: 900, mass: 0.35,
     shape: 'catchpin', h: 0.5, rw: 0.55, t: 0.5, attach: RADIAL, catchPin: true, aRad: 0.1, tolerance: 30, maxTemp: 2300,
-    desc: 'A stub of solid steel that sticks out of a stage near its top. A stage with two of these and no legs is built to be caught by its pins. There is nothing to catch it yet.' },
+    desc: 'A stub of solid steel that sticks out of a stage near its top. A stage with two of these and no legs is built to be caught by its pins, and flies back to the Catch Tower to be taken by its arms.' },
   { id: 'flap_fore', name: 'Shearwater Forward Flap', cat: 'aero', tech: 'very_heavy', cost: 1800, mass: 1.0,
     joint: 2, shape: 'flap', variant: 'fore', h: 4.6, rw: 2.3, t: 0.3, attach: RADIAL, flap: { area: 8, where: 'fore' }, aRad: 0.7, tolerance: 10, maxTemp: 2300,
     desc: 'One of the ship\'s two forward flaps. Fitted and weighed; it does not steer yet.' },

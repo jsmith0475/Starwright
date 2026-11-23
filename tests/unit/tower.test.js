@@ -157,3 +157,18 @@ test('the whole return: launched from the mount, staged by the assist, flown bac
   const full = r.v.partList.reduce((m, p) => m + propIn(p.res, 'methalox'), 0) / r.v.partList.reduce((m, p) => m + propIn(p.def.res, 'methalox'), 0);
   assert.ok(full > 0.3 && full < 0.6 && r.v.deltaV < 1800, `the ship still needs the depot: ${(full * 100).toFixed(0)} % full`);
 });
+
+test('tower: a caught stage is turned so its two pins lie north and south, one over each rail', () => {
+  const r = flyReturn({ alt: 80e3 });
+  const b = r.booster, s = b.surface;
+  assert.equal(s.held, 'tower');
+  for (let i = 0; i < 200 && s.qTarget; i++) r.w.step(0.05);
+  const pins = b.partList.filter(p => p.def.catchPin);
+  assert.equal(pins.length, 2);
+  const q = s.qTarget || s.qRel, up = s.dir.clone().normalize();
+  const d = pins[0].pos.clone().sub(pins[1].pos).applyQuaternion(q);
+  const north = new Vector3(0, 1, 0).addScaledVector(up, -up.y).normalize();
+  assert.ok(Math.abs(d.dot(up)) < 0.05, 'the pins are level');
+  assert.ok(Math.abs(Math.abs(d.normalize().dot(north)) - 1) < 1e-3, 'and in line north to south: ' + d.dot(north).toFixed(4));
+  assert.ok(d.length() > 0.99);
+});

@@ -95,7 +95,7 @@ aimed this way 4 m.
 
 | | Limit |
 |---|---|
-| Distance from the mount's axis | 3.5 m (the arms swing to meet it) |
+| Distance from the mount's axis | 2.5 m (the arms swing to meet it) |
 | Sink rate | 5 m/s |
 | Sideways speed | 2 m/s |
 | Lean | 8° |
@@ -123,7 +123,7 @@ game says which limit it broke, and the stage goes on down onto the mount.
   that misses does not strike an arm: it falls to the mount. The five limits are the whole model.
 - The pins are not checked one by one. The stage has to carry two; where they sit sets how high
   the arms are drawn, not whether the catch works.
-- A stage is taken wherever it is within 3.5 m. The drawn arms move to it.
+- A stage is taken wherever it is within 2.5 m, and is turned in the arms, the shorter way round, until its two pins lie north and south, one on each rail. The drawn arms move to it.
 - The mount is at ground level. There is no flame trench, no water deluge and no damage to the
   pad from 33 engines.
 - A caught booster cannot be put back on the mount, refuelled or flown again yet.

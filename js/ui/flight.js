@@ -371,6 +371,7 @@ export function createFlightScreen(app) {
       return null;
     }
     if (v.landed) {
+      if (body === SYSTEM.home && v.surface && v.surface.held) return { id: 'recover', items: [[null, 'Held by the tower. Press Recover (top right) to get the parts back.']] };
       if (body === SYSTEM.home) return { id: 'recover', items: [[null, 'Down safe. Press Recover (top right) to bank the science and get the parts back.']] };
       return null;
     }

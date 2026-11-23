@@ -1282,7 +1282,7 @@ const DEFS = [
  *   reach         how far from the mount's axis the arms can take one (they swing to meet it)
  *   maxSink, maxDrift (m/s), maxTilt (rad), maxRate (rad/s)   what they can hold
  */
-export const TOWER = { east: -420, north: 260, height: 91, offset: 11, mount: 0, hang: 3, window: 0.3, reach: 3.5, maxSink: 5, maxDrift: 2, maxTilt: 0.14, maxRate: 0.25 };
+export const TOWER = { east: -420, north: 260, height: 91, offset: 11, mount: 0, hang: 3, window: 0.3, reach: 2.5, maxSink: 5, maxDrift: 2, maxTilt: 0.14, maxRate: 0.25 };
 export const BARGE = { east: 40000, length: 80, width: 50, heading: 90, freeboard: 4 };
 function buildSystem() {
   const bodies = [];

@@ -1432,7 +1432,7 @@ function shearwater() {
   const ship = s[1], top = s[4];
   const topY = top.pos.y + partDef(top.type).h / 2;
   for (const a of [0, Math.PI / 2, Math.PI]) if (c.attachRadial('fin_grid_xxl', top.id, topY - 1.6, a, 1).length !== 1) throw new Error('stock craft: grid fin');
-  for (const a of [Math.PI / 4, Math.PI * 3 / 4]) if (c.attachRadial('pin_catch', top.id, topY - 3.4, a, 1).length !== 1) throw new Error('stock craft: catch pin');
+  for (const a of [Math.PI / 2, Math.PI * 3 / 2]) if (c.attachRadial('pin_catch', top.id, topY - 3.4, a, 1).length !== 1) throw new Error('stock craft: catch pin');
   if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
   if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
   c.autoStage();                                   // [33 engines] [ship engines + hot-staging ring]

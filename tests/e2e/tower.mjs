@@ -95,7 +95,7 @@ ok(await ff(400, 'B.caught || B.missed'), 'the return ends at the tower');
 s = await state();
 ok(!!s.caught && !s.missed, 'caught by the arms' + (s.missed ? ' (missed: ' + s.missed.why + ')' : ''));
 if (s.caught) {
-  ok(s.caught.speed < 5 && s.caught.offset < 3.5, `at ${s.caught.speed.toFixed(1)} m/s, ${s.caught.offset.toFixed(2)} m from the mount's axis`);
+  ok(s.caught.speed < 5 && s.caught.offset < 2.5, `at ${s.caught.speed.toFixed(1)} m/s, ${s.caught.offset.toFixed(2)} m from the mount's axis`);
   ok(s.caught.ut - s.sep.ut < 300, `${(s.caught.ut - s.sep.ut).toFixed(0)} s after staging`);
 }
 ok(s.booster.held === 'tower' && s.booster.landed, 'the booster is held by the tower');

@@ -91,6 +91,23 @@ function hold(world, v, s, ev) {
   // upright, keeping its heading: the shortest turn that brings its axis onto the vertical
   _ax.set(0, 1, 0).applyQuaternion(qRel);
   const qUp = new Quaternion().setFromUnitVectors(_ax, _b.copy(dir).normalize()).multiply(qRel).normalize();
+  // and turned, the shorter way round, until the line through its pins lies north to south: the two rails run east
+  // to west, one each side of the stage, and that is the only heading at which a pin sits on each
+  const pins = v.partList.filter(p => p.def.catchPin);
+  if (pins.length >= 2) {
+    _d.copy(pins[0].pos).sub(pins[1].pos); _d.y = 0;
+    if (_d.lengthSq() > 1e-6) {
+      const up = _b.copy(dir).normalize();
+      _d.applyQuaternion(qUp); _d.addScaledVector(up, -_d.dot(up)).normalize();
+      const north = new Vector3(0, 1, 0).addScaledVector(up, -up.y);
+      if (north.lengthSq() > 1e-9) {
+        north.normalize();
+        let ang = Math.atan2(_ax.crossVectors(_d, north).dot(up), _d.dot(north));
+        if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+        qUp.premultiply(_q.setFromAxisAngle(up, ang)).normalize();
+      }
+    }
+  }
   v.landed = true; v.splashed = false;
   v.surface = { dir, qRel, h: R - body.radius, qTarget: qUp, fixed: true, held: 'tower' };
   v.w.set(0, 0, 0);
@@ -109,4 +126,29 @@ export function armsClosed(world) {
     if (v._pinCount >= 2 && v._catchSeen) { const s = catchState(world, v, _st); if (s && s.offset < 60) k = Math.max(k, 1 - Math.min(1, Math.max(0, (s.clearance - TOWER.hang - 5) / 150))); }
   }
   return k;
+}
+
+const _e = new Vector3(), _s = new Vector3(), _cl = { vessel: null, k: 0, pinH: 0, hang: 0, east: 0, south: 0 };
+/** For the drawing: what the arms are busy with. The vessel they hold, else the one they are closing on (the one
+ *  armsClosed answers for), or null. → { vessel, k (0 open … 1 closed), pinH (its pins above its base, m), hang
+ *  (its base above the ground where the arms have it or will take it, m), east, south (its axis from the mount's, m) }. The same object every call. */
+export function towerClient(world, out = _cl) {
+  let best = null, k = 0;
+  for (const v of world.vessels) {
+    if (v.dead) continue;
+    if (v.landed) { if (v.surface && v.surface.held === 'tower') { best = v; k = 1; break; } continue; }
+    if (v._pinCount >= 2 && v._catchSeen) { const s = catchState(world, v, _st); if (s && s.offset < 60) { const kv = 1 - Math.min(1, Math.max(0, (s.clearance - TOWER.hang - 5) / 150)); if (!best || kv > k) { best = v; k = kv; } } }
+  }
+  if (!best) return null;
+  const site = towerSite(best.body), R = best.pos.length();
+  let y = 0, n = 0;
+  for (const p of best.partList) if (p.def.catchPin) { y += p.pos.y; n++; }
+  best.body.surfaceDirToInertial(site.dir, world.ut, _a).normalize();
+  _e.crossVectors(Y_AXIS, _a).normalize(); _s.crossVectors(_e, _a);
+  _d.copy(best.pos).addScaledVector(_a, -R);
+  const low = best._lowest(Y_AXIS).h;
+  out.vessel = best; out.k = k; out.pinH = n ? y / n - best.com.y - low : 0;
+  out.hang = best.landed ? R - best.body.radius - (site.ground ?? 0) + low : TOWER.mount + TOWER.hang;
+  out.east = _d.dot(_e); out.south = _d.dot(_s);
+  return out;
 }
