@@ -1203,6 +1203,30 @@ export class Vessel {
     debris.w.x += hash3(dec.id, this.stageIndex, 1) * k;
     debris.w.z += hash3(dec.id, this.stageIndex, 2) * k;
     events.push({ type: 'decouple', vessel: this, debris, part: dec });
+    if (dec.def.decoupler.both) debris._shedRing(dec, _a, (debris.mass > 0 ? J / debris.mass : 0) + (this.mass > 0 && !this.landed ? J / this.mass : 0), events);
+  }
+  /** The second plane of a twin-plane interstage: the ring (and anything mounted on it) lets go of this dropped stage too and
+   *  becomes a third piece. `axis` (world) points from the kept side towards this stage and `gap` is the speed (m/s) at which
+   *  the first plane has just parted the two sides. The second plane's impulse is the one that leaves the ring moving at the
+   *  mean of the two stages' speeds, so it stays in the gap between them; this stage takes the equal and opposite push. */
+  _shedRing(ring, axis, gap, events) {
+    // its stack neighbours sit on its axis; something mounted on its side does not, and goes with it
+    const rest = ring.links.filter(id => { const n = this.parts.get(id); return n && Math.hypot(n.pos.x - ring.pos.x, n.pos.z - ring.pos.z) < 1e-3; });
+    if (!rest.length) return;                                  // nothing below it: the ring is already a piece of its own
+    for (const id of rest) {
+      const n = this.parts.get(id);
+      n.links = n.links.filter(x => x !== ring.id);
+      ring.links = ring.links.filter(x => x !== id);
+    }
+    const ids = this._component(ring.id, null);
+    if (ids.size >= this.parts.size) return;
+    const ax = axis.clone(), piece = this._splitOff(ids);
+    const j = piece.mass > 0 && this.mass > 0 ? 0.5 * gap / (1 / piece.mass + 0.5 / this.mass) : 0;
+    if (piece.mass > 0) piece.vel.addScaledVector(ax, -j / piece.mass);
+    if (this.mass > 0) this.vel.addScaledVector(ax, j / this.mass);
+    piece.w.x += hash3(ring.id, this.stageIndex, 3) * 0.3;
+    piece.w.z += hash3(ring.id, this.stageIndex, 4) * 0.3;
+    events.push({ type: 'decouple', vessel: this, debris: piece, part: ring });
   }
   _comOf(ids) {
     let m = 0; const c = new Vector3();
