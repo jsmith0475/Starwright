@@ -127,9 +127,9 @@ And around the flying:
   goes on to orbit. It lands on the Return Pad beside the launch site, or on the barge
   *Patient Tide* 40 km out to sea. Press `\` to watch it or take over. See
   [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
-- **Three pieces at separation.** The Twin-Plane Interstage fires at both ends: the upper stage
-  goes on, the first stage falls back clean, and the ring between them drifts off on its own,
-  with mass and momentum shared out exactly among the three.
+- **Three pieces at separation.** A stack separator fires at both ends: the upper stage goes
+  on, the stage below falls back clean, and half a second later the ring between them is thrown clear as a piece of its own, with
+  mass and momentum shared out exactly.
 - **Landing legs with real suspension** that compress and settle on touchdown, and long
   **folding legs** for a booster: flat against the tank all the way up and back, swung out a few
   seconds before it lands.
@@ -454,7 +454,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 478 tests, including scripted flights flown by the autopilot
+npm test            # 477 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 

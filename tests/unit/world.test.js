@@ -512,13 +512,14 @@ test('debris: full physics nearby, removed once unloaded in the atmosphere; rail
   assert.ok(debris.id > v.id && w.vessels.includes(debris));
   for (let i = 0; i < 20; i++) w.step(0.05);
   assert.equal(debris.onRails, false, 'near the active vessel: simulated');
+  assert.equal(w.vessels.length, 3, 'half a second on, the separator ring has left the spent stage as a piece of its own');
   assert.ok(debris.pos.distanceTo(v.pos) > 5, 'drifting apart');
   for (let i = 0; i < 2000 && w.vessels.length > 1; i++) w.step(0.05);
   assert.equal(w.vessels.length, 1, 'debris removed');
   const d = log.of('destroyed');
-  assert.equal(d.length, 1);
-  assert.equal(d[0].vessel, debris);
-  assert.equal(d[0].reason, 'atmosphere');
+  assert.equal(d.length, 2, 'the stage and the ring');
+  assert.ok(d.some(x => x.vessel === debris));
+  for (const x of d) assert.equal(x.reason, 'atmosphere');
   assert.ok(debris.dead);
   assert.ok(debris.pos.distanceTo(v.pos) >= 2500);
   assert.equal(log.of('crewLost').length, 0);

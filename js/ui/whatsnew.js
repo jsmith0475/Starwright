@@ -35,8 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
-  { id: 'twin-plane-interstage', date: '2026-11-23', title: 'An interstage that leaves as a third piece',
-    text: 'The new Twin-Plane Interstage fires at both ends. Stage with it and you get three pieces: the upper stage goes on, the first stage falls back clean, and the ring with its lattice drifts off between them on its own. The plain Stack Separator still works as before and stays on the stage below.' },
+  { id: 'three-piece-separation', date: '2026-11-23', title: 'Separation leaves three pieces',
+    text: 'A stack separator now fires at both ends. Stage and you get three pieces: the upper stage goes on, the stage below falls away with a clean top, and half a second later the ring with its lattice is thrown clear sideways as a piece of its own. A booster that flies home no longer carries the ring down with it. Side-booster clamps work as before.' },
   { id: 'folding-legs', date: '2026-11-23', title: 'Booster legs that fold',
     text: 'The new Heron Folding Leg is made for a booster that comes back. It lies flat against the tank on the pad and for the whole flight up and down, then swings out 60 m above the ground, a few seconds before touchdown, and the stage stands on a wide stance. Mount four low on the last tank. G still lowers and raises them by hand.' },
   { id: 'return-pad-barge', date: '2026-11-22', title: 'A Return Pad and a barge at sea',

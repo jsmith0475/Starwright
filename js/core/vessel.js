@@ -19,6 +19,9 @@ export const TUNING = {
   DT_MAX: 0.02,              // physics sub-step under thrust / in atmosphere (s)
   DT_COAST: 0.1,             // sub-step while coasting in vacuum under physics warp (s)
   DECOUPLE_IMPULSE: 250,     // N·s of separation impulse per unit of def.decoupler.force
+  RING_BORE: 0.72,           // the hole through a separator ring, as a fraction of its radius
+  RING_DELAY: 0.5,           // s between a stack separator's two planes: the ring leaves the dropped stage this long after staging
+  RING_KICK: 20, RING_LIFT: 1, // m/s the ring is thrown sideways, and off the end of the stage, relative to the two together
   HEAT_FLUX_K: 1.83e-4,      // Sutton-Graves-like: flux = K·sqrt(rho)·v³  (W/m²)
   HEAT_K: 0.30,              // equilibrium skin temperature rise = HEAT_K·(flux·exposure)^HEAT_EXP  (K)
   HEAT_EXP: 0.75,
@@ -429,6 +432,7 @@ export class Vessel {
     this.launchSite = null;       // 'pad' | 'runway' for a vessel put there by World.launch
     this.stranded = false;        // a contract's castaway pod
     this.released = false;        // let go by the player: no longer kept under full physics far from the active vessel (World.release)
+    this.ringDue = null;          // {id, t}: a separator ring this dropped stage still carries, and the seconds until its second plane fires
     this.program = null;          // name of the guidance program flying this vessel, if one is (World.isTrackable keeps such a vessel loaded)
     this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = [];
     this._antennas = []; this._ladders = []; this._pts = []; this._ctlAuth = new Vector3();
@@ -633,6 +637,8 @@ export class Vessel {
         p._covT = coverTop; p._covB = coverBot;
         const rT = p._rT, rB = p._rB, rM = Math.max(rT, rB);
         const dragT = p.flip ? d.drag.bottom : d.drag.top, dragB = p.flip ? d.drag.top : d.drag.bottom;
+        // (a separator ring on its own is hollow: the air meets its rim, not a disc)
+        if (d.shape === 'decoupler' && !hasTop && !hasBot) { coverTop = TUNING.RING_BORE * rT; coverBot = TUNING.RING_BORE * rB; }
         let aUp = Math.PI * Math.max(0, rT * rT - coverTop * coverTop);
         let aDown = Math.PI * Math.max(0, rB * rB - coverBot * coverBot);
         // flat faces right the body when they lead; a cone flank does the opposite
@@ -1203,16 +1209,21 @@ export class Vessel {
     debris.w.x += hash3(dec.id, this.stageIndex, 1) * k;
     debris.w.z += hash3(dec.id, this.stageIndex, 2) * k;
     events.push({ type: 'decouple', vessel: this, debris, part: dec });
-    if (dec.def.decoupler.both) debris._shedRing(dec, _a, (debris.mass > 0 ? J / debris.mass : 0) + (this.mass > 0 && !this.landed ? J / this.mass : 0), events);
+    // a stack separator fires at both ends: its second plane lets the ring go a moment later (see _shedRing)
+    if (dec.def.shape === 'decoupler' && debris.parts.size > 1) debris.ringDue = { id: dec.id, t: TUNING.RING_DELAY };
   }
-  /** The second plane of a twin-plane interstage: the ring (and anything mounted on it) lets go of this dropped stage too and
-   *  becomes a third piece. `axis` (world) points from the kept side towards this stage and `gap` is the speed (m/s) at which
-   *  the first plane has just parted the two sides. The second plane's impulse is the one that leaves the ring moving at the
-   *  mean of the two stages' speeds, so it stays in the gap between them; this stage takes the equal and opposite push. */
-  _shedRing(ring, axis, gap, events) {
+  /** The second plane of a stack separator. The ring stays on the stage it was dropped with for RING_DELAY seconds, long
+   *  enough for the engine above to pull clear of the lattice round its bell, and is then thrown off sideways at RING_KICK m/s
+   *  (and RING_LIFT m/s off the stage's end) as a third piece, with anything mounted on it. Sideways, because in thick air a
+   *  light ring let go straight ahead of a stage is blown back onto it at once. The stage takes the equal and opposite push. */
+  _shedRing(events) {
+    const due = this.ringDue, ring = due && this.parts.get(due.id);
+    this.ringDue = null;
+    if (!ring || this.dead) return;
     // its stack neighbours sit on its axis; something mounted on its side does not, and goes with it
     const rest = ring.links.filter(id => { const n = this.parts.get(id); return n && Math.hypot(n.pos.x - ring.pos.x, n.pos.z - ring.pos.z) < 1e-3; });
-    if (!rest.length) return;                                  // nothing below it: the ring is already a piece of its own
+    if (!rest.length) return;
+    const up = this.parts.get(rest[0]).pos.y < ring.pos.y ? 1 : -1;      // which end of this stage the ring is on
     for (const id of rest) {
       const n = this.parts.get(id);
       n.links = n.links.filter(x => x !== ring.id);
@@ -1220,12 +1231,14 @@ export class Vessel {
     }
     const ids = this._component(ring.id, null);
     if (ids.size >= this.parts.size) return;
-    const ax = axis.clone(), piece = this._splitOff(ids);
-    const j = piece.mass > 0 && this.mass > 0 ? 0.5 * gap / (1 / piece.mass + 0.5 / this.mass) : 0;
-    if (piece.mass > 0) piece.vel.addScaledVector(ax, -j / piece.mass);
-    if (this.mass > 0) this.vel.addScaledVector(ax, j / this.mass);
-    piece.w.x += hash3(ring.id, this.stageIndex, 3) * 0.3;
-    piece.w.z += hash3(ring.id, this.stageIndex, 4) * 0.3;
+    const landed = this.landed, piece = this._splitOff(ids);
+    const a = hash3(ring.id, this.stageIndex, 3) * Math.PI;
+    const dv = new Vector3(Math.cos(a) * TUNING.RING_KICK, up * TUNING.RING_LIFT, Math.sin(a) * TUNING.RING_KICK).applyQuaternion(this.q);
+    const mp = piece.mass, ms = this.mass, k = landed || !(mp > 0 && ms > 0) ? 0 : mp / (mp + ms);
+    piece.vel.addScaledVector(dv, 1 - k);
+    if (!landed) this.vel.addScaledVector(dv, -k);
+    piece.w.x += hash3(ring.id, this.stageIndex, 4) * 0.6;
+    piece.w.z += hash3(ring.id, this.stageIndex, 5) * 0.6;
     piece.name = this.name.replace(/ (booster|probe|debris)$/, '') + ' interstage';
     events.push({ type: 'decouple', vessel: this, debris: piece, part: ring });
   }
@@ -1980,6 +1993,7 @@ export class Vessel {
     if (this._massDirty && !this.dead) this._updateMass(true);
     const st = this.structure;
     if (st) { if (st.pending && !this.dead) this._breakJoints(ev); else if (this.landed) st.rest(dt); }
+    if (this.ringDue && (this.ringDue.t -= dt) <= 0) this._shedRing(ev);
   }
 
   _stepFlight(dt, ut, ev) {
@@ -3261,6 +3275,7 @@ export class Vessel {
       actionGroups: Object.keys(this.actionGroups).length ? cloneGroups(this.actionGroups) : undefined,
       ladder: this.ladder ? { ...this.ladder } : undefined, launchSite: this.launchSite || undefined, stranded: this.stranded || undefined,
       released: this.released || undefined, program: this.program || undefined,
+      ringDue: this.ringDue ? { ...this.ringDue } : undefined,
       onRails: this.onRails, orbit: this.onRails && this.orbit ? this.orbit.toJSON() : null,
       ctrl: { ...this.ctrl }, sasTarget: this.sasTarget ? this.sasTarget.toArray() : null, sasDir: j3(this.sasDir),
       sasCoast: this._sasCoast, targetId: this.targetId,
@@ -3306,6 +3321,7 @@ export class Vessel {
       for (const id of gs.wet || []) { const p = v.parts.get(id); if (p) p._wet = true; }
     }
     v.actionGroups = cloneGroups(o.actionGroups);
+    if (o.ringDue && o.ringDue.id !== undefined) v.ringDue = { id: o.ringDue.id, t: +o.ringDue.t || 0 };
     v.ladder = o.ladder ? { ...o.ladder } : null; v.launchSite = o.launchSite || null; v.stranded = !!o.stranded;
     v.released = !!o.released; v.program = o.program || null;
     v.ctrl = { ...defaultCtrl(), ...o.ctrl };
