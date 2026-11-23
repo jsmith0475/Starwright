@@ -1724,15 +1724,15 @@ export function createMapView(app, opts = {}) {
     { const hb = SYSTEM.home, hs = bodyScreen.get(hb), sites = hb.sites;
       if (sites && hs && hs.ok && hs.rs > 110) {
         relBody(hb, rb);
-        for (const [id, st] of [['landing', sites.landing], ['barge', sites.barge]]) {
+        for (const [id, st] of [['landing', sites.landing], ['barge', sites.barge], ['tower', sites.tower]]) {
           if (!st) continue;
           hb.surfaceDirToInertial(st.dir, ut, tmpV2).multiplyScalar(hb.radius + (st.top || 0));
           const x = rb[0] + tmpV2.x, y = rb[1] + tmpV2.y, z = rb[2] + tmpV2.z;
           // (not drawn when it is round the far side of the globe)
           if (tmpV2.x * (P.cx - x) + tmpV2.y * (P.cy - y) + tmpV2.z * (P.cz - z) <= 0 || !proj(x, y, z)) continue;
           if (S.x < -20 || S.x > W + 20 || S.y < -20 || S.y > H + 20) continue;
-          glyphTick(S.x, S.y, id === 'barge' ? '#7fd8ff' : '#f2c14e');
-          mark('site:' + id, S.x, S.y, st.name, id === 'barge' ? 'landing barge, ' + Math.round(Math.acos(Math.min(1, st.dir.dot(sites.pad.dir))) * hb.radius / 1000) + ' km downrange' : 'where a booster flying back lands', 'pill soi', 58, id === 'barge' ? 'above' : 'below');
+          glyphTick(S.x, S.y, id === 'barge' ? '#7fd8ff' : id === 'tower' ? '#c9a6ff' : '#f2c14e');
+          mark('site:' + id, S.x, S.y, st.name, id === 'barge' ? 'landing barge, ' + Math.round(Math.acos(Math.min(1, st.dir.dot(sites.pad.dir))) * hb.radius / 1000) + ' km downrange' : id === 'tower' ? 'launch mount and catch arms for a stage with catch pins' : 'where a booster flying back lands', 'pill soi', 58, id === 'landing' ? 'below' : 'above');
         }
       }
     }

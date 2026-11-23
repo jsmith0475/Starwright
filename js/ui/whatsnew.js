@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'catch-tower', date: '2026-11-23', title: 'A tower that catches the booster',
+    text: 'The Catch Tower stands north-west of the launch pad, and Shearwater now launches from its mount. Fly with the ascent assist and the booster turns round, flies back on 13 engines, hovers on 3 and settles its two pins onto the tower\'s arms about five minutes after lift-off. The ship goes on to orbit. Press \\ to watch the catch. Miss the arms and the game says by how much.' },
   { id: 'shape-at-speed', date: '2026-11-23', title: 'Shape matters above the speed of sound',
     text: 'Above Mach 1.5 the air now presses on the real shape of every part. A pointed rocket has less drag at speed, and a blunt capsule has more and slows higher up. A capsule held at an angle lifts, a stage behind a wide heat shield is sheltered, and a long rocket coasting fast should keep its nose into the wind. Below Mach 0.7 nothing has changed. The mathematics is in the science reference, chapter 10.' },
   { id: 'shearwater-rocket', date: '2026-11-23', title: 'Shearwater: 39 engines on methane and oxygen',

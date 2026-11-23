@@ -109,7 +109,7 @@ ok(await ff(200, 'B.hot'), 'the assist stages');
 s = await state();
 ok(s.hot.n === 1 && s.vessels.length === 1, 'hot staging: the ship is lit and the stack is still one vessel');
 ok(s.toasts.some(t => /Hot staging/.test(t)), 'the player is told');
-ok(s.toasts.some(t => /no tower to catch it yet/.test(t)) && !s.toasts.some(t => /to fly back/.test(t)), 'the assist does not promise a return that cannot happen yet');
+ok(s.toasts.some(t => /to fly back to the tower/.test(t)), 'the assist says why it staged early');
 await shot('shearwater-4-hot-staging');
 ok(await ff(3, 'B.sep'), 'the ring lets go');
 s = await state();

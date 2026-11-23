@@ -6,6 +6,7 @@ import { Orbit } from './orbit.js';
 import { predictPatches, checkSoiTransition, toParentFrame, toChildFrame } from './trajectory.js';
 import { Vessel, TUNING, surfaceAt } from './vessel.js';
 import { Craft } from './craft.js';
+import { stepTower } from './tower.js';
 import { situationOf, EXPERIMENTS, experimentAllowed, BIOME_SITUATIONS } from './career.js';
 
 export const WARP_RATES = Object.freeze([1, 2, 3, 4, 5, 10, 50, 100, 1000, 10000, 100000]);
@@ -155,13 +156,13 @@ export class World {
     v.body = SYSTEM.home;
     const sites = this.sites;
     // `site` may also be a site record of its own ({dir, heading?}: e.g. the flight scene's runway anchor)
-    const st = (site && typeof site === 'object' && site.dir) ? site : (site === 'runway' && sites.runway && (sites.runway.start || sites.runway)) || sites.pad || SYSTEM.launchSite;
+    const st = (site && typeof site === 'object' && site.dir) ? site : (site === 'tower' && sites.tower) || (site === 'runway' && sites.runway && (sites.runway.start || sites.runway)) || sites.pad || SYSTEM.launchSite;
     const dir = new Vector3(st.dir.x, st.dir.y, st.dir.z).normalize();
     const wheels = v.wheelParts.filter(p => p.deployed).length;
     const vehicle = st !== sites.pad && wheels >= 2;
     v.landed = true; v.splashed = false; v.launched = false;
     v.surface = { dir, qRel: vehicle ? World.vehicleFrame(dir, st.heading ?? 90) : World.padFrame(dir), h: 0, qTarget: null, vehicle };
-    v.launchSite = st === sites.pad ? 'pad' : 'runway';
+    v.launchSite = st === sites.pad ? 'pad' : st === sites.tower ? 'tower' : 'runway';
     if (vehicle) v.ctrl.brake = true;                 // parking brake: release it (B) to roll
     v.situation = 'prelaunch';
     v.ctrl.sas = true;
@@ -912,6 +913,7 @@ export class World {
         if (v.ladder) this._ladderStep(v, dt); else if (!v.landed) this._soiCheck(v);
       }
       if (docking > 1) this._dockingStep(dt);
+      stepTower(this, ev);
       remaining -= dt; n++;
       if (ev.length) this._processEvents();
     }

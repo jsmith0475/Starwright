@@ -124,6 +124,16 @@ reports "down in the sea" and how far from the target, not a landing.
 
 Both sites are marked on the map once Verda is drawn large enough to tell them apart.
 
+## Caught by the tower
+
+A stage with **catch pins and no legs** does not go to the Return Pad. It flies back to the
+**Catch Tower**, 500 m north-west of the launch pad, and is taken by the tower's two arms. The
+stock *Shearwater* booster is built this way. The return is the one described below with three
+differences: heights are measured above the arms, not the ground; the burns use the inner
+engines of a ring cluster and the last metres the centre ones; and on the way down the aim is
+the point where the landing burn will stop the stage, not where it would fall with no burn.
+[SHEARWATER.md](SHEARWATER.md) has the limits the arms will take and what was measured.
+
 ## How the return is flown
 
 Everything below runs in `js/core/booster.js`, on the same 20 ms physics step as the rest of the
