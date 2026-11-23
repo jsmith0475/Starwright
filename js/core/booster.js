@@ -184,8 +184,10 @@ export function boosterRecovery(world, vessel, opts = {}) {
     if (v.landed) {
       v.ctrl.throttle = 0; hold('hold');
       if (!st.far) c.miss = e.length(); else c.miss = groundDistance(body, body.inertialToSurfaceDir(up, ut, _t), o.target);
-      c.result = { miss: c.miss, ut, fuel: v.estimateDeltaV() };
-      return c.finish(true, `touchdown ${c.miss.toFixed(0)} m from the target`);
+      c.result = { miss: c.miss, ut, fuel: v.estimateDeltaV(), splashed: !!v.splashed };
+      const far = c.miss >= 1000 ? (c.miss / 1000).toFixed(1) + ' km' : c.miss.toFixed(0) + ' m';
+      if (v.splashed) return c.finish(false, `down in the sea, ${far} from the target`);
+      return c.finish(true, `touchdown ${far} from the target`);
     }
     if (v.grounded && c.phase === 'final') {
       v.ctrl.throttle = 0; hold('hold');

@@ -53,7 +53,8 @@ test('the entry burn: planned from the prediction, flown, and it keeps the skin 
   const start = { alt: 80000, speed: 1900, pitch: 5, east: 200000, fuel: 0.4 }, target = home.dirFromLatLon(0, 500000 / home.radius);
   const r = flyReturn(start, { target });
   assert.ok(r.log.some(l => /entry burn needed/.test(l)) && r.log.some(l => /entry burn complete/.test(l)), r.log.join('\n'));
-  assert.ok(inside(r), JSON.stringify({ ...r, log: undefined }) + '\n' + r.log.join('\n'));
+  // (the aim point is open sea 500 km out: it comes down on it as gently as on a pad, and says that it is in the water)
+  assert.ok(r.miss < 10 && Math.abs(r.vs) < 2 && r.hs < 1 && r.tilt < 3 && /down in the sea, 0 m from the target/.test(r.log.at(-1)), JSON.stringify({ ...r, log: undefined }) + '\n' + r.log.join('\n'));
   assert.ok(r.maxT < 0.8, 'no part passed 80 % of its temperature limit: ' + r.maxT.toFixed(2));
   // the same fall with nobody burning: the unpowered prediction said it would pass the limit, and it does
   const { w, v } = dropped(start);
@@ -63,10 +64,11 @@ test('the entry burn: planned from the prediction, flown, and it keeps the skin 
   assert.ok(maxT > 0.8 || v.partList.length < 12, 'without the burn the stage overheats: ' + maxT.toFixed(2));
 });
 
-test('C7: with too little propellant it says so, keeps the landing burn, and lands short instead of crashing', () => {
+test('C7: with too little propellant it says so, keeps the landing burn, and comes down short and gently, in the sea, instead of crashing', () => {
   const r = flyReturn({ alt: 30000, speed: 1000, pitch: 45, east: 20000, fuel: 0.15 });
   assert.ok(r.log.some(l => /cannot reach the target/.test(l)), r.log.join('\n'));
-  assert.ok(r.ok && Math.abs(r.vs) < 2.5 && r.endTilt < 5, 'it still landed upright: ' + JSON.stringify({ ...r, log: undefined }));
+  assert.ok(!r.ok && r.parts === 12 && Math.abs(r.vs) < 2.5 && r.endTilt < 5, 'it still came down upright and in one piece: ' + JSON.stringify({ ...r, log: undefined }));
+  assert.ok(/down in the sea, \d+\.\d km from the target/.test(r.log.at(-1)), 'and it does not call a ditching a landing: ' + r.log.at(-1));
   assert.ok(r.miss > 10000, 'and reports how far from the target: ' + r.miss.toFixed(0) + ' m');
 });
 

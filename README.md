@@ -123,8 +123,9 @@ And around the flying:
 - **Boosters that fly back and land.** Give the first stage a guidance ring, grid fins and legs
   and it is no longer thrown away. The ascent assist lets it go early with enough propellant to
   return, and it flies itself home under full physics: flip, boostback burn, an entry burn if it
-  needs one, steering on the fins, a landing burn, and down on its legs by the pad while the
-  upper stage goes on to orbit. Press `\` to watch it or take over. See
+  needs one, steering on the fins, a landing burn, and down on its legs while the upper stage
+  goes on to orbit. It lands on the Return Pad beside the launch site, or on the barge
+  *Patient Tide* 40 km out to sea. Press `\` to watch it or take over. See
   [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
 - **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
@@ -313,6 +314,10 @@ Starwright does not fake its orbits, and it shows its work.
   0.1% of the distance, the speed within 0.13%, and the predictor is 2.4 m from the reference.
   The landing burn stops within 0.03% of the rocket equation. 312 of 312 varied returns landed
   within 0.3 m at 1.75 m/s.
+- **A deck at sea that is solid.** The landing barge is a level rectangle the physics stands a
+  stage on, tips it off the edge of, or lets it miss. **12 more checks, 0 failures**: a stage
+  flown down onto the deck stands at the same height, to 0.15 mm, as the same flight ended on
+  level ground, and ten of ten returns from varied separations landed within 3 cm of the middle.
 
 <p align="center">
   <img src="media/shot-science.png" width="100%" alt="The in-game science reference open on chapter 1, gravity and the two-body problem, with numbered equations">
@@ -440,7 +445,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 461 tests, including scripted flights flown by the autopilot
+npm test            # 469 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
@@ -483,11 +488,11 @@ what the game does today, and what building it involves.
    crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
    air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
    move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
-5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **Two parts built.** Flip,
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **Three parts built.** Flip,
    boost back, steer on the grid fins and land the first stage on its legs while the upper stage
    flies on to orbit. Today a first stage with a guidance ring, fins and legs flies itself back
-   and lands by the pad, and one key hops between it and the upper stage. A marked pad, a barge
-   at sea, a stock reusable rocket and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
+   and lands on the Return Pad or on a barge at sea, and one key hops between it and the upper
+   stage. A stock reusable rocket, a recovery plan and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
 7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,

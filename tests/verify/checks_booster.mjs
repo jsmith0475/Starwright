@@ -259,6 +259,44 @@ function dispersion(S) {
   S.ok('with its propellant taken away before the landing burn the stage is lost, and the program says so', v.dead && c.failed, (c.log.at(-1) || {}).msg);
 }
 
+
+// ------------------------------------------------------------------------------------------------------------
+// Phase 3: the landing barge (a deck that is solid to the physics) and returns that end on it.
+// ------------------------------------------------------------------------------------------------------------
+function bargeCheck(S) {
+  const b = home.sites.barge, Rb = home.radius;
+  // where the deck is, from the haversine formula on the site's latitude and longitude (not the game's own distance)
+  const hav = (la1, lo1, la2, lo2) => 2 * Rb * Math.asin(Math.sqrt(Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2));
+  S.check('the barge is 40 km from the launch pad along the ground', 40000, hav(0, 0, b.lat, b.lon), 0.01, { unit: 'm' });
+  S.check('its deck is 4 m above the sea', 4, b.top - home.seaLevel, 1e-9, { unit: 'm' });
+  // the deck's outline, found by walking outward from the middle in 1 cm steps until the ground stops being the deck
+  const edge = (de, dn) => { let r = 0; while (r < 200 && home.deckAt(home.dirFromLatLon(b.lat + dn * (r + 0.01) / Rb, b.lon + de * (r + 0.01) / Rb)) > -Infinity) r += 0.01; return r; };
+  S.check('deck length (east to west)', 80, edge(1, 0) + edge(-1, 0), 0.03, { unit: 'm' });
+  S.check('deck width (north to south)', 50, edge(0, 1) + edge(0, -1), 0.03, { unit: 'm' });
+  // a stage standing on the deck stands exactly as it does on land: same height of its centre of mass above what it stands on
+  const stand = (target, top) => { const { w, v } = dropped({ alt: 16000, speed: 320, pitch: -80, east: (target === b.dir ? 40000 : -1500) - 1500, fuel: 0.14 }); const c = boosterRecovery(w, v, { target }); for (let i = 0; i < 12000 && !c.done; i++) { c.update(0.02); w.step(0.02); } for (let i = 0; i < 500; i++) w.step(0.02); return { ok: c.done && !c.failed && v.landed && !v.splashed, h: v.altitude - top, m: v.mass }; };
+  const onDeck = stand(b.dir, b.top), onLand = stand(home.dirFromLatLon(0, -1500 / Rb), 0);      // (level ground 1.5 km west of the pad)
+  S.ok('a stage flown down onto the deck stands on it, out of the water', onDeck.ok);
+  S.ok('the same stage flown down onto level ground stands there', onLand.ok);
+  S.check('mass of the two stages at rest (the two flights are the same but for where they end)', onLand.m, onDeck.m, 2, { unit: 'kg' });
+  S.check('height of its centre of mass above the deck = above level ground', onLand.h, onDeck.h, 0.01, { unit: 'm' });
+  // returns from separation that end on the barge
+  let seed = 977;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const N = 10, bad = []; let good = 0, worstMiss = 0, worstVs = 0, worstTilt = 0;
+  for (let i = 0; i < N; i++) {
+    const start = { alt: 20000 + rnd() * 15000, speed: 800 + rnd() * 450, pitch: 36 + rnd() * 14, east: 10000 + rnd() * 14000, fuel: 0.26 + rnd() * 0.08 };
+    const r = flyReturn(start, { target: b.dir });
+    const inside = r.ok && r.miss < 10 && Math.abs(r.vs) < 2 && r.hs < 1 && r.tilt < 3;
+    if (inside) good++; else bad.push(JSON.stringify(start) + ' ' + r.log.at(-1));
+    if (r.ok) { worstMiss = Math.max(worstMiss, r.miss); worstVs = Math.max(worstVs, Math.abs(r.vs)); worstTilt = Math.max(worstTilt, r.tilt); }
+  }
+  S.check(`returns that land on the barge inside the touchdown targets, of ${N} (separation 20 to 35 km, 800 to 1,250 m/s, 10 to 24 km downrange)`, N, good, 0, { note: bad.join(' ') });
+  S.check('worst distance from the middle of the deck (the deck is 80 by 50 m)', 0, worstMiss, 10, { max: true, unit: 'm' });
+  S.check('worst vertical speed at touchdown', 0, worstVs, 2, { max: true, unit: 'm/s' });
+  S.check('worst tilt at touchdown', 0, worstTilt, 3, { max: true, unit: '°' });
+}
+
 export const groups = [
   { name: '9a. Separation: mass, momentum, and what the dropped stage becomes', fast: true, run: S => separation(S) },
   { name: '9b. A booster far from the vessel being flown vs two-body motion', fast: true, run: S => farKepler(S) },
@@ -266,4 +304,5 @@ export const groups = [
   { name: '9d. Where a falling stage comes down: predictor, flight and an independent integration', fast: true, run: S => predictorCheck(S) },
   { name: '9e. The landing burn against the rocket equation', fast: true, run: S => landingBurnCheck(S) },
   { name: '9f. Returns from varied separations', fast: false, run: S => dispersion(S) },
+  { name: '9g. The landing barge: where it is, how it holds a stage, returns that end on it', fast: false, run: S => bargeCheck(S) },
 ];

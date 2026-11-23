@@ -1065,15 +1065,36 @@ export class Body {
     return this._surf.height(this._ctx, x / l, y / l, z / l, lod);
   }
 
-  /** Height of whatever a vessel meets first: terrain, or the sea surface where the terrain is under water. */
+  /**
+   * Height (m above `radius`) of the top of a built deck at body-fixed direction d (a landing barge: `this.decks`),
+   * or -Infinity where there is none. A deck is a flat rectangle, solid to the physics, that is not part of the
+   * terrain: the height field and everything drawn from it do not know about it.
+   */
+  deckAt(d) {
+    const decks = this.decks;
+    if (!decks) return -Infinity;
+    const l = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z) || 1;
+    for (let i = 0; i < decks.length; i++) {
+      const k = decks[i], c = k.dir;
+      const dot = (d.x * c.x + d.y * c.y + d.z * c.z) / l;
+      if (dot < k.cosReach) continue;
+      const s = this.radius / (l * dot);                                // (onto the plane touching the globe at the deck)
+      const x = (d.x * k.east.x + d.y * k.east.y + d.z * k.east.z) * s, z = (d.x * k.north.x + d.y * k.north.y + d.z * k.north.z) * s;
+      const a = x * k.cosH + z * k.sinH, b = -x * k.sinH + z * k.cosH;   // along and across the deck
+      if (Math.abs(a) <= k.length / 2 && Math.abs(b) <= k.width / 2) return k.top;
+    }
+    return -Infinity;
+  }
+
+  /** Height of whatever a vessel meets first: a deck, terrain, or the sea surface where the terrain is under water. */
   surfaceHeight(d) {
-    const h = this.terrainHeight(d, 0);
+    const h = Math.max(this.terrainHeight(d, 0), this.deckAt(d));
     return this.ocean && h < this.seaLevel ? this.seaLevel : h;
   }
 
-  /** True where the terrain lies below the sea surface of an ocean world. */
+  /** True where the terrain lies below the sea surface of an ocean world (and no deck stands there). */
   isWater(d) {
-    return this.ocean && this.terrainHeight(d, 0) < this.seaLevel;
+    return this.ocean && this.terrainHeight(d, 0) < this.seaLevel && this.deckAt(d) === -Infinity;
   }
 
   /**
@@ -1182,6 +1203,8 @@ const DEFS = [
     blurb: 'The wanderer: a two-lobed comet that dives past Verda\'s orbit and swings out beyond Thal.' },
 ];
 
+/** The landing barge: metres east of the pad, deck size, compass heading of its long side, deck height above the sea. */
+export const BARGE = { east: 40000, length: 80, width: 50, heading: 90, freeboard: 4 };
 function buildSystem() {
   const bodies = [];
   const byId = {};
@@ -1218,8 +1241,18 @@ function buildSystem() {
   runway.center = site(50, -850, {});
   // Where a returning booster is told to land: open level ground 600 m north of the pad, clear of every building
   // (BASE_LAYOUT puts them all south of it). A marked pad and a barge are the next part of docs/BOOSTERS.md.
-  const landing = site(0, 600, { name: 'Landing zone' });
-  home.sites = { pad, runway, landing };
+  const landing = site(0, 600, { name: 'Return Pad', radius: 45 });
+  // The landing barge: a steel deck anchored in the ocean east of the pad, under the launch path. It does not move.
+  // The deck is solid to the physics (Body.deckAt); the sea bed there is about 470 m down.
+  const barge = site(BARGE.east, 0, { name: 'Patient Tide', deck: true });
+  {
+    const up = barge.dir, east = new Vector3().crossVectors(new Vector3(0, 1, 0), up).normalize(), north = new Vector3().crossVectors(up, east).normalize();
+    const hd = (90 - BARGE.heading) * Math.PI / 180;                    // the long side runs along `heading` (90 = east)
+    home.decks = [{ site: barge, dir: up, east, north, cosH: Math.cos(hd), sinH: Math.sin(hd), length: BARGE.length, width: BARGE.width,
+      top: home.seaLevel + BARGE.freeboard, cosReach: Math.cos(Math.hypot(BARGE.length, BARGE.width) / R) }];
+    barge.top = home.decks[0].top; barge.length = BARGE.length; barge.width = BARGE.width; barge.heading = BARGE.heading;
+  }
+  home.sites = { pad, runway, landing, barge };
   home.launchSite = pad;
   return { bodies, byId, star: byId.helion, home, launchSite: pad, sites: home.sites };
 }

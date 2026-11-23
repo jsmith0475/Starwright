@@ -15,7 +15,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { World } from '../core/world.js';
 import { stallSpeed, roverCruiseSpeed } from '../core/vessel.js';
 import { Craft } from '../core/craft.js';
-import { SYSTEM } from '../core/bodies.js';
+import { SYSTEM, BARGE } from '../core/bodies.js';
 import { EXPERIMENTS, programStep } from '../core/career.js';
 import { closestApproach } from '../core/trajectory.js';
 import { el, fmt, showModal, isModalOpen } from './dom.js';
@@ -935,7 +935,10 @@ export function createFlightScreen(app) {
           add('hold', 'Hold heading and altitude', 'wings level at ' + fmt.num(v.altitude, 0) + ' m');
           if (body === SYSTEM.home) add('land', 'Land at the runway', 'flies the approach, flares and brakes', wheels >= 2 || v.hasGear, 'No landing gear');
         }
-        if (rocket && body === SYSTEM.home && v.engines.length) add('recovery', 'Fly back and land', 'boostback to the landing zone by the pad, then a landing burn on the engine', v.enginePower().thrust > 0, 'No propellant');
+        if (rocket && body === SYSTEM.home && v.engines.length) {
+          add('recovery', 'Fly back and land', 'boostback to the Return Pad by the launch pad, then a landing burn on the engine', v.enginePower().thrust > 0, 'No propellant');
+          if (SYSTEM.sites.barge) add('recoverybarge', 'Land on the barge', 'steer to the barge ' + SYSTEM.sites.barge.name + ', ' + Math.round(BARGE.east / 1000) + ' km east of the pad, and land on its deck', v.enginePower().thrust > 0, 'No propellant');
+        }
         if (rocket && v.verticalSpeed > -5) add('ascent', 'Ascent to orbit', 'takes over the climb to a ' + Math.round((atmoH + 10000) / 1000) + ' km orbit');
       }
       if (orbiting) {
@@ -984,6 +987,7 @@ export function createFlightScreen(app) {
         else if (id === 'node') ctl = autopilot.executeNode(world, v, { useWarp: true });
         else if (id === 'landhere') { if ((v.legParts || []).length && !v.legsDown) v.toggleLegs(); ctl = autopilot.hoverslamLanding(world, v, { useWarp: true }); }
         else if (id === 'recovery') ctl = autopilot.boosterRecovery(world, v, { target: landingTarget() });
+        else if (id === 'recoverybarge') { ctl = autopilot.boosterRecovery(world, v, { target: SYSTEM.sites.barge.dir, targetName: 'the barge' }); id = 'recovery'; }
         else if (id === 'deorbit') ctl = autopilot.deorbit(world, v, { periapsis: Math.min(atmoH * 0.45, 35000) });
         if (!ctl) return false;
         assist = ctl; assistKind = id;
