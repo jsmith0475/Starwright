@@ -127,6 +127,9 @@ And around the flying:
   goes on to orbit. It lands on the Return Pad beside the launch site, or on the barge
   *Patient Tide* 40 km out to sea. Press `\` to watch it or take over. See
   [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
+- **Three pieces at separation.** A stack separator fires at both ends: the upper stage goes
+  on, the stage below falls back clean, and half a second later the ring between them is thrown clear as a piece of its own, with
+  mass and momentum shared out exactly.
 - **Landing legs with real suspension** that compress and settle on touchdown, and long
   **folding legs** for a booster: flat against the tank all the way up and back, swung out a few
   seconds before it lands.
@@ -141,6 +144,16 @@ And around the flying:
   <a href="media/structure-breakup.mp4"><b>▶ Watch a stack snap and the airflow strip a rocket (27 seconds, silent)</b></a>
   <br>
   <sub>Real gameplay recorded in Chrome, slowed to half speed at each break. How it works: <a href="docs/STRUCTURE.md">structure</a>, <a href="docs/AERO_BREAKUP.md">breakup</a>.</sub>
+</p>
+
+<p align="center">
+  <a href="media/booster-return.mp4">
+    <img src="media/booster-return-preview.gif" width="100%" alt="One flight recorded in the game: the stages part 21 km up and the ring that joined them is thrown clear as a third piece, the booster flips and burns back toward the launch site, falls, lights its engine at 993 m, swings its legs out and lands on the Return Pad">
+  </a>
+  <br>
+  <a href="media/booster-return.mp4"><b>▶ Watch a booster fly itself home (45 seconds, silent)</b></a>
+  <br>
+  <sub>Real gameplay, one flight recorded in Chrome: three pieces at separation, boostback, landing burn at 993 m, touchdown at 1.7 m/s, 0 m from the mark. <a href="docs/BOOSTERS.md">How it works and what was checked.</a></sub>
 </p>
 
 <p align="center">
@@ -451,7 +464,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 474 tests, including scripted flights flown by the autopilot
+npm test            # 478 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 

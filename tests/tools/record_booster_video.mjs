@@ -99,11 +99,12 @@ async function flight(A, aspect, plan) {
   await until(() => window.__sw.app.currentName === 'hub' && !!window.__sw.app.current, null, 'the space centre');
   await page.evaluate(q => { const s = window.__sw.app.settings; s.gfxForce = true; s.gfxQuality = q; s.showHints = false; window.__sw.app.applySettings && window.__sw.app.applySettings(); }, QUALITY);
 
-  // the rocket: an upper stage with a guidance ring, and a first stage with its own ring, grid fins and legs
+  // the rocket: an upper stage with a guidance ring under a shroud nose, and a first stage with its own ring, grid fins and legs
   await page.evaluate(async () => {
     const { Craft } = await import('/js/core/craft.js');
     const c = new Craft('Homecoming');
     const [pod] = c.setRoot('probe_wisp');
+    if (!c.attachStack('fairing_m', pod.id, 'top')[0]) throw new Error('the shroud nose did not attach');   // a payload shroud, so the top is not a blunt ring
     let cur = pod, first = null, last = null;
     const lower = ['tank_m800', 'tank_m800', 'tank_m400'];
     for (const t of ['tank_m400', 'eng_sparrow', 'dec_m', 'probe_wisp', ...lower, 'eng_goshawk']) {

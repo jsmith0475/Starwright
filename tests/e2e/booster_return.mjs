@@ -158,7 +158,10 @@ ok(await ff(900, '!window.__sw.app.flight.assist'), 'the ascent assist runs to i
 s = await state();
 ok(s.upperPeri > 72000, `the upper stage is in orbit: ${(s.upperApo / 1000).toFixed(1)} × ${(s.upperPeri / 1000).toFixed(1)} km`);
 ok(!s.dead && s.landed, 'and the booster is still standing by the pad');
-ok(!s.destroyed.length, 'nothing was destroyed');
+{ // the separator ring leaves as a third piece and comes down as debris; nothing else may be lost
+  const ring = s.destroyed.filter(d => / interstage$/.test(d.name)), other = s.destroyed.filter(d => !/ interstage$/.test(d.name));
+  ok(ring.length <= 1 && ring.every(d => d.reason === 'atmosphere' || d.reason === 'crash'), `the separator ring left as a third piece${ring.length ? ` and came down (${ring[0].reason})` : ' and is still falling'}`);
+  ok(!other.length, 'nothing else was destroyed' + (other.length ? ': ' + JSON.stringify(other) : '')); }
 console.log('   toasts: ' + s.toasts.join(' | '));
 await shot('return-6-orbit');
 

@@ -139,7 +139,7 @@ const defs = [
   // ---------- Structure ----------
   { id: 'dec_m', name: 'Stack Separator M', cat: 'structure', tech: 'start', cost: 200, mass: 0.05, size: 'M',
     shape: 'decoupler', h: 0.2, r: 0.625, attach: STACK, decoupler: { force: 12 }, tolerance: 9, maxTemp: 1500,
-    desc: 'Splits the stack in two when staged. Under an engine it carries a lattice interstage around the bell.' },
+    desc: 'Fires at both ends when staged: the two stages part, and the ring is thrown clear as a third piece. Under an engine it carries a lattice interstage around the bell.' },
   { id: 'dec_l', name: 'Stack Separator L', cat: 'structure', tech: 'heavy', cost: 420, mass: 0.2, size: 'L',
     shape: 'decoupler', h: 0.3, r: 1.25, attach: STACK, decoupler: { force: 30 }, tolerance: 9, maxTemp: 1500,
     desc: 'A wide separator for wide rockets.' },

@@ -68,6 +68,45 @@ last tank, with the foot of each leg's box about level with the foot of the tank
 The small Sprig and the heavy Stilt still work on a booster; they are stowed and lowered at the
 same moments. They are simply too small to see from any distance.
 
+## Three pieces at separation
+
+A stack separator fires at both ends. One staging leaves three pieces:
+
+- the stage above, pushed forward;
+- the stage below, pushed back, with a clean top;
+- the separator ring, with the lattice that stood round the upper engine, as a piece of debris of
+  its own named "... interstage".
+
+So a booster comes home carrying nothing of the joint that held it to the upper stage.
+
+The two ends do not fire together. The first plane lets go of the stage above and puts the
+separator's impulse between the two sides, as it always did, so the stage that flies on gets
+exactly the push it got before. The ring rides on the stage below for half a second, long enough
+for the engine above to pull clear of the lattice round its bell. Then the second plane throws the
+ring off sideways at 20 m/s, and 1 m/s off the end of the stage, and the stage takes the equal and
+opposite push (about 0.3 m/s on a booster).
+
+Why sideways: this was first built with the ring let go straight ahead of the booster, and filmed
+in the real game. At 20 km and 750 m/s the air is still pressing with 25 kPa. A 90 kg ring slows far
+faster than a 5 t booster, so it was blown straight back and, because pieces do not collide with
+each other in flight, passed through the booster and out past its engine in under half a second.
+Thrown sideways it is clear of the stack in under a tenth of a second and is then left behind
+alongside. A ring on its own is hollow to the air: it shows its rim, not a disc.
+
+Mass and momentum are shared out exactly at both planes (verification group 9i works the speeds
+out by hand from the catalogue masses).
+
+This is every Stack Separator and Blast Ring, in every size. A radial clamp, the kind that holds a
+side booster, still fires at one end and stays on the booster it drops. A ring with nothing below
+it is simply dropped. A stage saved in that half second still sheds its ring after loading.
+
+A whole flight from the pad, flown by the game: separation at 20.8 km and 758 m/s, and the booster,
+with no ring to carry, lands 0 m from the Return Pad at 1.7 m/s. The return reserve no longer
+counts the ring as part of the stage.
+
+What is simple about it: pieces still do not collide with each other in flight, and a dropped
+stage that is put on rails within that half second keeps its ring.
+
 ## Landing on the barge
 
 *Patient Tide* is a flat steel deck, 80 m long and 50 m wide, 4 m above the water, anchored 40 km
@@ -296,7 +335,7 @@ What this says (it was measured before guidance was written, and guidance was bu
   before first contact, the standing height from the dimensions to within 2 cm, no strut on its
   stop). `tests/e2e/booster_return.mjs` now flies the folding legs in a real browser: folded as
   the landing burn lights, out just before touchdown, standing afterwards.
-- The whole verification passes: 1,329 checks, 0 failed. 474 unit tests pass.
+- The whole verification passes: 1,342 checks, 0 failed. 478 unit tests pass.
 
 ## For developers
 

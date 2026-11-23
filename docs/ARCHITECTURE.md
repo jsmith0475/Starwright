@@ -1193,8 +1193,8 @@ part and nothing is saved in a design: it is derived from the part tree.
   `centerOfMass()` and `stats()`. There is no cost.
 - `Vessel.fromCraft` copies each truss onto the owner part as `part.truss = [{ side, h, r0, r1, mass }]` (`side` ±1
   along the part's OWN axis, so it survives docking's change of frame). It is saved with the vessel, counted in
-  `part.mass`, and goes wherever the owner goes: a separator stays with the stage it drops, so the truss leaves with
-  the lower stage. Once the engine it wrapped is gone, the open rim gets a bounding contact and a ring of contact
+  `part.mass`, and goes wherever the owner goes: a stack separator leaves the stage it drops half a second after staging
+  (`Vessel.ringDue`, `_shedRing`), so the truss ends up on the ring, a third piece. Once the engine it wrapped is gone, the open rim gets a bounding contact and a ring of contact
   samples (`_buildContacts`).
 - Drawing: `partmesh.setPartInterstages(group, trusses)` hangs one merged mesh (one draw call) per truss on the
   owner's mesh group; `flightscene.js` calls it when it builds a part, `builder.js` on every `syncMeshes()`.

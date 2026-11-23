@@ -35,7 +35,7 @@ function separation(S) {
   const w = new World();
   const v = spawn(w, rocket(), 'helion', [2e11, 0, 0], [0, 30, 0]);
   let booster = null;
-  w.on('decouple', d => { booster = d.debris; });
+  w.on('decouple', d => { if (!booster) booster = d.debris; });      // (the separator ring follows as a second piece)
   v.ctrl.sas = false;
   run(w, 1, 0.5);
   const m0 = v.mass, p0 = mom([v]);
@@ -49,7 +49,7 @@ function separation(S) {
   S.ok('the piece with the guidance ring is a ship, and is named a booster', booster.type === 'ship' && / booster$/.test(booster.name), booster.name);
   S.ok('the same piece without a ring is debris', (() => {
     const w2 = new World(); const u = spawn(w2, rocket({ ring: false }), 'helion', [2e11, 0, 0], [0, 30, 0]);
-    let d = null; w2.on('decouple', e => { d = e.debris; });
+    let d = null; w2.on('decouple', e => { if (!d) d = e.debris; });
     for (let i = 0; i < 4 && !d; i++) { u.ctrl.throttle = 0; w2.stage(); }
     return d && d.type === 'debris';
   })());
@@ -65,7 +65,7 @@ function farKepler(S) {
   const w = new World();
   const v = spawn(w, rocket(), 'pell', r0, v0);
   let booster = null;
-  w.on('decouple', d => { booster = d.debris; });
+  w.on('decouple', d => { if (!booster) booster = d.debris; });      // (the separator ring follows as a second piece)
   for (let i = 0; i < 4 && !booster; i++) { v.ctrl.throttle = 0; w.stage(); }
   // the upper stage flies off under power; the booster coasts
   v.ctrl.sas = true; v.ctrl.throttle = 1;
@@ -329,6 +329,43 @@ function foldingLegCheck(S) {
   { const used = Math.max(...v.legParts.map(p => p._comp)) / L.stroke; S.ok('no strut is closed to its stop', used < 1, (used * 100).toFixed(0) + ' % of the stroke used'); }
 }
 
+/** 9i. A stack separator fires at both ends: three pieces from one staging, worked by hand from the catalogue masses. */
+function threePieceCheck(S) {
+  const c = new Craft('Three Piece'); const [top] = c.setRoot('probe_wisp'); let cur = top; const id = {};
+  for (const t of ['tank_m400', 'eng_sparrow', 'dec_m', 'probe_wisp', 'tank_m800', 'eng_goshawk']) { cur = c.attachStack(t, cur.id, 'bottom')[0]; id[t] = cur.id; }
+  c.autoStage();
+  const r0 = SYSTEM.home.radius + 300e3;
+  const w = new World(), v = spawn(w, c, 'home', [r0, 0, 0], [0, 0, Math.sqrt(SYSTEM.home.gm / r0)], { crew: [] });
+  const m0 = v.mass, p0 = mom([v]), v0 = A(v.vel), ax = A(new Vector3(0, 1, 0).applyQuaternion(v.q));
+  for (let i = 0; i < 4 && w.vessels.length === 1; i++) w.stage(v);
+  v.ctrl.throttle = 0;
+  const stage = w.vessels[1];
+  S.check('pieces straight after staging (the ring still rides on the dropped stage)', 2, w.vessels.length, 0);
+  // first plane, by hand: J = force x 250 N s between the upper stage and (first stage + ring), along the stack
+  const J = 12 * 250, along = (x, ref) => -R.dot(R.sub(A(x.vel), ref), ax);      // the first stage is on the -Y side of the stack
+  S.check('first plane: upper stage speed along the stack', -J / v.mass, along(v, v0), 1e-9, { unit: 'm/s' });
+  S.check('first plane: dropped stage speed along the stack', J / stage.mass, along(stage, v0), 1e-9, { unit: 'm/s' });
+  S.check('first plane: momentum vs before', 0, R.norm(R.sub(mom([v, stage]), p0)) / R.norm(p0), 1e-12, { unit: 'rel' });
+  let t = 0; while (w.vessels.length === 2 && t < 2) { var vS = A(stage.vel), mS = stage.mass; w.step(0.02); t += 0.02; }
+  const ring = w.vessels[2];
+  S.check('second plane fires this long after the first', 0.5, t, 0.021, { unit: 's' });
+  S.check('pieces after the second plane', 3, w.vessels.length, 0);
+  S.ok('the ring is a piece of its own, on neither stage', !!ring && ring.parts.size === 1 && ring.parts.has(id.dec_m) && !stage.parts.has(id.dec_m) && !v.parts.has(id.dec_m), ring ? `${ring.mass.toFixed(1)} kg, "${ring.name}"` : 'no ring');
+  S.ok('the first stage is still a ship that can be flown', stage.type === 'ship');
+  S.check('mass of the three pieces', m0, v.mass + stage.mass + ring.mass, 1e-6, { unit: 'kg' });
+  // the step that fired it also had 0.02 s of gravity on every piece: g x dt x mass, the same for all, so compare
+  // the stage + ring pair before and after with that taken out
+  const gdt = R.scale(A(stage.pos), -SYSTEM.home.gm / Math.pow(R.norm(A(stage.pos)), 3) * 0.02);
+  const pair0 = R.add(R.scale(vS, mS), R.scale(gdt, mS)), pair1 = R.add(R.scale(A(stage.vel), stage.mass), R.scale(A(ring.vel), ring.mass));
+  S.check('second plane: momentum of stage + ring vs just before (gravity taken out)', 0, R.norm(R.sub(pair1, pair0)) / R.norm(pair0), 1e-7, { unit: 'rel' });
+  // by hand: the ring is thrown at 20 m/s sideways and 1 m/s off the end, relative to the pair; shared by mass
+  const rel = R.sub(A(ring.vel), A(stage.vel)), axS = A(new Vector3(0, 1, 0).applyQuaternion(stage.q));
+  const off = R.dot(rel, axS), side = R.norm(R.sub(rel, R.scale(axS, off)));
+  S.check('ring speed sideways from the stage', 20, side, 0.3, { unit: 'm/s', note: 'the tumbling stage top adds a few cm/s' });
+  S.check('ring speed off the end of the stage', 1, off, 0.3, { unit: 'm/s' });
+  S.check('recoil of the stage: 20.02 m/s x ring mass / (ring + stage)', Math.hypot(20, 1) * ring.mass / (ring.mass + stage.mass), R.norm(R.sub(R.sub(A(stage.vel), vS), gdt)), 2e-3, { unit: 'm/s' });
+}
+
 export const groups = [
   { name: '9a. Separation: mass, momentum, and what the dropped stage becomes', fast: true, run: S => separation(S) },
   { name: '9b. A booster far from the vessel being flown vs two-body motion', fast: true, run: S => farKepler(S) },
@@ -338,4 +375,5 @@ export const groups = [
   { name: '9f. Returns from varied separations', fast: false, run: S => dispersion(S) },
   { name: '9g. The landing barge: where it is, how it holds a stage, returns that end on it', fast: false, run: S => bargeCheck(S) },
   { name: '9h. The folding leg: one rigid swing, out before touchdown, and how the stage stands on it', fast: false, run: S => foldingLegCheck(S) },
+  { name: '9i. A stack separator fires at both ends: three pieces, their mass and momentum, by hand', fast: true, run: S => threePieceCheck(S) },
 ];

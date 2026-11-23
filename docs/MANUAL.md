@@ -178,6 +178,9 @@ A first stage with a guidance ring on it (any probe core, or a Beacon or Keyston
 below the separator) is not thrown away when you stage. It becomes a **booster**: a ship of its
 own that keeps flying under full physics however far it gets from the upper stage.
 
+A stack separator fires at both ends, so the booster comes home with a clean top: the ring
+that joined the stages, and the lattice round the upper engine, are thrown clear half a second later as a third piece.
+
 - Press **\\** to hop to the booster, and **\\** again to hop back. **[** and **]** reach it too.
 - If the ascent assist is flying the upper stage, it carries on to orbit while you fly the
   booster, and tells you when it gets there.

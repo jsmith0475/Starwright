@@ -380,11 +380,13 @@ export function boosterRecovery(world, vessel, opts = {}) {
  */
 export function recoverableStage(vessel) {
   const v = vessel;
-  const ids = v.dropSet(v.stages[v.stageIndex] || []);
+  const firing = v.stages[v.stageIndex] || [];
+  const ids = v.dropSet(firing);
   if (!ids.size) return null;
   let core = false, engine = false, legs = false, dry = 0, prop = 0;
   for (const id of ids) {
     const p = v.parts.get(id), d = p.def;
+    if (d.shape === 'decoupler' && firing.includes(id)) continue;      // the separator ring leaves as a third piece: not the stage's to carry home
     if (d.command) core = true;
     if (d.legs) legs = true;
     if (d.engine && d.engine.type === 'liquid' && p.ignited && !p.flameout) engine = true;
