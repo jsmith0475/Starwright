@@ -1840,7 +1840,7 @@ export class Vessel {
   }
 
   // Torque command (cx, cy, cz in [−1,1]) and authority (ax, ay, az in N·m). Writes this.actuation and this._auth.
-  _control(dt, qdyn, axial) {
+  _control(dt, qdyn, axial, tailFirst = false) {
     const c = this.ctrl, I = this.inertia;
     let ax = 0, ay = 0, az = 0;
     const eva = this.type === 'eva';
@@ -1923,7 +1923,9 @@ export class Vessel {
     // control surfaces follow the same command. Flying backwards (a booster coming down engine first) the same
     // deflection turns the vessel the other way, so the fly-by-wire reverses it; without this the attitude hold
     // drove a tail-first stage into a spin.
-    const rev = axial < 0 ? -1 : 1;
+    // Only when it is meant to fly that way (the attitude being held points away from the airflow): an aeroplane
+    // that stalls and slides back for a moment keeps the control sense its pilot and its autopilot expect.
+    const rev = axial < 0 && tailFirst ? -1 : 1;
     for (const p of this._wings) {
       if (!p._wCtl) continue;
       const d = rev * (p._kp * cx + p._kr * cy + p._ky * cz);
@@ -1966,7 +1968,11 @@ export class Vessel {
 
     this._envAlt = alt; this._envMach = speed / TUNING.SOUND_SPEED;
     const thrust = this._systems(dt, pAtm, ev);
-    this._control(dt, qdyn, speed > 1 ? uy / speed : 0);
+    // is the attitude hold asking for tail first? (retrograde, or a held direction more than 90° from the airflow)
+    const cs = this.ctrl;
+    const wantTail = !!cs.sas && speed > 1 && (cs.sasMode === 'retrograde' || cs.sasMode === 'srfRetrograde'
+      || (cs.sasMode === 'direction' && this.sasDir && this.sasDir.x * sx + this.sasDir.y * sy + this.sasDir.z * sz < 0));
+    this._control(dt, qdyn, speed > 1 ? uy / speed : 0, wantTail);
     const m = this.mass, com = this.com, c = this.ctrl;
 
     let Fx = this._thrFx || 0, Fy = thrust, Fz = this._thrFz || 0;

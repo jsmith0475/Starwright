@@ -1302,7 +1302,7 @@ gravity, drag from `Vessel.axialDragArea` and `machDrag` in air rotating with th
 { target })` is a controller with the same shape as the other programs (`update(dt)`, `phase`, `done`, `failed`,
 `log`) and phases flip, boostback, coast, entry, landing, final. It moves only `vessel.ctrl`. `recoverableStage` and
 `returnReserve` let `ascentProgram({ recover })` stage when the propellant left equals the return's need.
-`Vessel._control` reverses control-surface deflection when the vessel flies tail first. `flight.js` starts a parked
+`Vessel._control` reverses control-surface deflection when the vessel flies tail first and the attitude hold asks for that (retrograde modes, or a held direction more than 90° from the airflow). `flight.js` starts a parked
 `boosterRecovery` on the `decouple` event for a dropped ship with a running engine and legs over the home body, and
 toasts each new line of its log (`callouts`). The landing target is `SYSTEM.home.sites.landing`.
 Tests: `tests/unit/booster_return.test.js`, `tests/verify/checks_booster.mjs` groups 9d to 9f,

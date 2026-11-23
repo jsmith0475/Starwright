@@ -200,8 +200,11 @@ What this says (it was measured before guidance was written, and guidance was bu
   the assist stages early and says why, the return starts in the background, the hop key follows
   it, each step is called out, the booster stands by the pad and the upper stage is in orbit.
 - Fins flying backwards: a booster falls tail first, which reverses what a fin deflection does.
-  The control law now allows for it. All 16 stock designs flown for 400 s give the same digest
-  as before, so nothing that flies nose first changed.
+  The control law now allows for it, but only when the attitude being held points away from the
+  airflow (retrograde hold, or a guidance program pointing the tail into the wind). An aeroplane
+  that slides backwards for a moment in a stall keeps its normal control sense: an earlier version
+  of this change reversed it there, and the flight suite's hand-flown aeroplane crashed, which is
+  how it was caught. All 16 stock designs flown for 400 s give the same digest as before.
 - `tests/verify/checks_booster.mjs` (groups 9a to 9c, 15 checks): the separation shares out mass
   and momentum exactly; a booster 5 km from the vessel being flown, on a falling path over airless
   Pell, follows two-body motion from the independent reference to 5 micrometres over 100 s (the
