@@ -121,7 +121,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, floor: 0, sets: null, aimBurn: false, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -131,13 +131,33 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const hold = m => { v.ctrl.sas = true; v.ctrl.sasMode = m; };
   const noseError = d => ax.set(0, 1, 0).applyQuaternion(v.q).angleTo(d);
   const cg = () => v.baseHeight || 0;
+  // opts.floor (m): the height the stage is brought down to, above the ground. A stage that is to be caught is flown
+  // to the arms, not to the ground (js/core/tower.js): every height below is measured from there.
+  const ralt = () => v.radarAlt - o.floor;
+  // opts.sets { burn, final }: which engine set of a ring cluster flies the burns and which the last metres
+  const engineSet = m => { if (m == null) return; for (const en of v.engines) { const p = en.part; if (p.def.engine.modes && p.def.engine.modes[m] && (p.mode || 0) !== m) v.setEngineMode(p.id, m); } };
   const propellant = () => { let m = 0; for (const p of v.partList) m += (p.res.fuel || 0) + (p.res.ox || 0) + (p.res.lox || 0) + (p.res.ch4 || 0); return m; };
   const wy = TAU / body.rotPeriod;
   /** Unpowered prediction from now; fills c.miss and `miss` (inertial vector from the impact point to the target, level). */
   const predict = () => {
     const pw = v.enginePower();
     const plan = st.plan && !st.entryDone ? st.plan : null;
-    const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), entry: plan,
+    let pr = null;
+    // opts.aimBurn: low down, aim the point where the landing burn will stop the stage, not where it would hit
+    // unpowered. A heavy stage that lights two kilometres up and still has sideways speed stops well short of its
+    // unpowered impact point. The burn height is the one whose stop point is the hover height, found over a few calls.
+    if (o.aimBurn && !plan && pw.thrust > 0 && c.phase === 'coast' && v.radarAlt < 15000 && v.vel.dot(v.pos) < 0) {
+      const thr = clamp(o.landingAccel * v.mass / pw.thrust, 0.1, 0.85);
+      if (!(st.hb > 0)) st.hb = 1500;
+      for (let i = 0; i < 2; i++) {
+        pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), thrust: pw.thrust, ve: pw.ve, throttle: thr, burnBelow: st.hb, dryMass: v.mass * 0.3, maxT: 400 });
+        const errH = pr.stopped ? pr.alt - cg() - o.floor - o.stopAlt : -200;
+        st.hb = clamp(st.hb - errH, 200, 12000);
+        if (Math.abs(errH) < 15) break;
+      }
+      if (!pr.stopped) pr = null;
+    }
+    if (!pr) pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), entry: plan,
       thrust: plan ? pw.thrust : 0, ve: pw.ve, burnBelow: -Infinity, dryMass: st.dry0 });
     body.surfaceDirToInertial(st.aim || o.target, world.ut + pr.t, tgt).normalize().multiplyScalar(pr.pos.length());
     miss.copy(tgt).sub(pr.pos);
@@ -171,7 +191,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
     const { thrust, ve } = v.enginePower();
     const pb = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), thrust, ve, throttle, dryMass: v.mass * 0.3, maxT: 120 });
     st.stop = pb;
-    return pb.stopped ? pb.alt - cg() : -1;
+    return pb.stopped ? pb.alt - cg() - o.floor : -1;
   };
   c.update = () => {
     if (c.done) return;
@@ -188,6 +208,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
       c.result = { miss: c.miss, ut, fuel: v.estimateDeltaV(), splashed: !!v.splashed };
       const far = c.miss >= 1000 ? (c.miss / 1000).toFixed(1) + ' km' : c.miss.toFixed(0) + ' m';
       if (v.splashed) return c.finish(false, `down in the sea, ${far} from the target`);
+      if (v.surface && v.surface.held) return c.finish(true, `caught by the tower, ${far} from the mount`);
       return c.finish(true, `touchdown ${far} from the target`);
     }
     if (v.grounded && c.phase === 'final') {
@@ -202,15 +223,16 @@ export function boosterRecovery(world, vessel, opts = {}) {
       if (c.phase === 'final' || c.phase === 'landing') { v.ctrl.throttle = 0; hold('srfRetrograde'); if (!st.dry) { st.dry = true; c.note('out of propellant'); } return; }
     }
     // the legs stay folded until just before touchdown
-    if (!st.legs && (c.phase === 'landing' || c.phase === 'final') && v.radarAlt < o.legAlt) {
+    if (!st.legs && (c.phase === 'landing' || c.phase === 'final') && ralt() < o.legAlt) {
       st.legs = true;
-      if (v.legParts.length && !v.legsDown) { v.setLegs(true); c.note(`landing legs down at ${v.radarAlt.toFixed(0)} m`); }
+      if (v.legParts.length && !v.legsDown) { v.setLegs(true); c.note(`landing legs down at ${ralt().toFixed(0)} m`); }
     }
     const acc = power.thrust / v.mass;
     switch (c.phase) {
       case 'init':
         v.setLegs(false);
         if (!(power.thrust > 0)) return c.finish(false, 'no engine to fly back on');
+        if (o.sets) engineSet(o.sets.burn);
         st.dry0 = v.mass - propellant();
         planEntry();
         predict();
@@ -224,7 +246,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
           st.aim = o.target.clone().normalize().addScaledVector(_s, -o.aimShort / body.radius).normalize();
         }
         // taken over part of the way down (or handed back by the pilot): pick the flight up where it is
-        if (c.miss < 300 || (vs < 0 && v.radarAlt < 15000)) { c.phase = 'coast'; c.note(`taking over at ${(v.altitude / 1000).toFixed(1)} km, ${c.miss.toFixed(0)} m from the aim point`); break; }
+        if (c.miss < 300 || (vs < 0 && ralt() < 15000)) { c.phase = 'coast'; c.note(`taking over at ${(v.altitude / 1000).toFixed(1)} km, ${c.miss.toFixed(0)} m from the aim point`); break; }
         c.phase = 'flip'; c.note(`flip: the stage would come down ${(c.miss / 1000).toFixed(1)} km from the target`);
         break;
       case 'flip': {
@@ -271,16 +293,16 @@ export function boosterRecovery(world, vessel, opts = {}) {
         // In thick air a stage leaning a few degrees off its fall is carried sideways by its own body, away from the
         // lean (measured: about 0.3 m of ground per metre of height left, per radian). Lean it to walk the impact
         // point onto the target.
-        if (st.aim && vs < 0 && v.radarAlt < o.aimSwitch) { st.aim = null; predict(); }
+        if (st.aim && vs < 0 && ralt() < o.aimSwitch) { st.aim = null; predict(); }
         const qNow = 0.5 * body.density(v.altitude) * speed * speed;
         if (vs < 0 && qNow > 400 && !st.short && c.miss < 20000) {
-          const lean = clamp(1.5 * c.miss / (0.3 * v.radarAlt + 100), 0, o.maxLean);
+          const lean = clamp(1.5 * c.miss / (0.3 * ralt() + 100), 0, o.maxLean);
           dir.copy(srf).normalize().negate();
           _t.copy(miss).addScaledVector(up, -miss.dot(up));
           if (_t.lengthSq() > 1e-6) dir.addScaledVector(_t.normalize(), -Math.tan(lean)).normalize();
           point(dir);
         } else hold('srfRetrograde');
-        const low = v.radarAlt < 30000 && vs < 0;
+        const low = ralt() < 30000 && vs < 0;
         if (!st.entryDone && ut - st.tPlan >= 2) planEntry();
         if (ut - st.tPred >= (low ? 0.5 : o.period * 4)) predict();
         if (!st.entrySaid && vs < 0) {
@@ -294,12 +316,12 @@ export function boosterRecovery(world, vessel, opts = {}) {
             st.entryDone = true;
           }
         }
-        if (vs < 0 && v.radarAlt < 25000 && power.thrust > 0) {
+        if (vs < 0 && ralt() < 25000 && power.thrust > 0) {
           const h = stopAlt(clamp(o.landingAccel / acc, 0.1, 0.85));
           // light when the stop point comes down to the hover height (or the burn can no longer stop it at all)
           if (h < o.stopAlt + Math.max(2, speed * 0.05)) {
             c.phase = 'landing';
-            c.note(`landing burn at ${v.radarAlt.toFixed(0)} m, ${speed.toFixed(0)} m/s`);
+            c.note(`landing burn at ${ralt().toFixed(0)} m, ${speed.toFixed(0)} m/s`);
           }
         }
         break;
@@ -331,7 +353,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
         point(dir);
         const err = noseError(dir);
         v.ctrl.throttle = err < 0.5 ? clamp(need, 0.05, 1) : 0.05;
-        if (speed < 10 || v.radarAlt < o.stopAlt * 0.5) { c.phase = 'final'; c.note(`final descent from ${v.radarAlt.toFixed(0)} m, ${e.length().toFixed(0)} m from the target`); }
+        if (speed < 10 || ralt() < o.stopAlt * 0.5) { c.phase = 'final'; c.note(`final descent from ${ralt().toFixed(0)} m, ${e.length().toFixed(0)} m from the target`); }
         break;
       }
       case 'final': {
@@ -350,7 +372,9 @@ export function boosterRecovery(world, vessel, opts = {}) {
         // Fly towards the target at a speed that shrinks with the distance left. Wait at twelve metres until the
         // sideways drift is gone and the stage is over the spot, then stand it upright and come straight down: a tall
         // stage that touches down still sliding trips over its own legs.
-        const hgt = v.radarAlt, tiltNow = noseError(up);
+        const hgt = ralt(), tiltNow = noseError(up);
+        // (the last metres on the smaller engine set, once the big one has stopped the fall)
+        if (o.sets && !st.finalSet && Math.abs(vs) < 3 && speed < 6) { st.finalSet = true; engineSet(o.sets.final); }
         const vWant = hgt < 6 ? 0 : Math.min(5, off * 0.25, Math.sqrt(1.2 * off));     // (never faster than it can stop from)
         if (off > 1e-3) _s.copy(e).normalize().multiplyScalar(vWant).sub(drift); else _s.copy(drift).negate();
         const settled = drift.length() < 0.4 && (off < 3 || hgt < 6);
@@ -422,7 +446,8 @@ export function returnReserve(world, vessel, target, opts = {}) {
   _r.addScaledVector(_p, -_r.dot(_p));                                           // level offset to the target
   _r.addScaledVector(_q, -o.flip);                                               // (it flies on while it turns round)
   _r.multiplyScalar(1 / tf).sub(_q);                                             // velocity change the boostback makes
-  const dv = _r.length() * o.margin + o.landing;
+  // (a stage that is to be caught waits over the mount until it is steady, and that hover has to be paid for)
+  const dv = _r.length() * o.margin + o.landing + (stage.pins >= 2 && !stage.legs ? (o.hover ?? 120) : 0);
   const ve = v.enginePower().ve || 2900;
   return { kg: stage.dry * (Math.exp(dv / ve) - 1), have: stage.prop, dv, stage };
 }

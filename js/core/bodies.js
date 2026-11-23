@@ -1271,6 +1271,18 @@ const DEFS = [
 ];
 
 /** The landing barge: metres east of the pad, deck size, compass heading of its long side, deck height above the sea. */
+/**
+ * The catch tower and its launch mount (js/core/tower.js; drawn by js/render/tower.js). It stands in the open ground
+ * north-west of the launch pad. Five-eighths of the real one: 146 m × 5/8.
+ *   east, north   where the mount is, metres from the launch pad
+ *   height        of the tower; `offset`: the tower's axis stands this far west of the mount's
+ *   mount         height of the launch mount's table above the ground (the stack stands on it)
+ *   hang          clearance between the mount and the base of a caught stage
+ *   window        the arms take a stage while its base is within this much above `hang`
+ *   reach         how far from the mount's axis the arms can take one (they swing to meet it)
+ *   maxSink, maxDrift (m/s), maxTilt (rad), maxRate (rad/s)   what they can hold
+ */
+export const TOWER = { east: -420, north: 260, height: 91, offset: 11, mount: 0, hang: 3, window: 0.3, reach: 3.5, maxSink: 5, maxDrift: 2, maxTilt: 0.14, maxRate: 0.25 };
 export const BARGE = { east: 40000, length: 80, width: 50, heading: 90, freeboard: 4 };
 function buildSystem() {
   const bodies = [];
@@ -1319,7 +1331,9 @@ function buildSystem() {
       top: home.seaLevel + BARGE.freeboard, cosReach: Math.cos(Math.hypot(BARGE.length, BARGE.width) / R) }];
     barge.top = home.decks[0].top; barge.length = BARGE.length; barge.width = BARGE.width; barge.heading = BARGE.heading;
   }
-  home.sites = { pad, runway, landing, barge };
+  // The catch tower and its launch mount: where a stack with catch pins lifts off, and where its stages come back to.
+  const tower = site(TOWER.east, TOWER.north, { name: 'Catch Tower', catch: true, cosNear: Math.cos(400 / R) });
+  home.sites = { pad, runway, landing, barge, tower };
   home.launchSite = pad;
   return { bodies, byId, star: byId.helion, home, launchSite: pad, sites: home.sites };
 }

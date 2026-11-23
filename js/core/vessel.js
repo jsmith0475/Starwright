@@ -3096,6 +3096,7 @@ export class Vessel {
     const g = body.gm / (R * R);
     const lift = thrust * _ul.y;
     if (thrust > 0 && lift > this.mass * g) { this._release(ut, ev); return; }
+    if (s.held) return;      // hanging in the tower's arms: nothing but its own engines moves it
     // sideways thrust that beats friction makes it slide; a vehicle rolls as soon as it is asked to
     let wake = this._wantsAwake(thrust, s);
     if (!wake && thrust > 0) {
@@ -3319,7 +3320,7 @@ export class Vessel {
       com: j3(this.com),
       landed: this.landed, splashed: this.splashed,
       surface: s ? { dir: j3(s.dir), qRel: s.qRel.toArray(), h: s.h, qTarget: s.qTarget ? s.qTarget.toArray() : null,
-        fixed: s.fixed || undefined, vehicle: s.vehicle || undefined, slope: s.slope || undefined } : null,
+        fixed: s.fixed || undefined, held: s.held || undefined, vehicle: s.vehicle || undefined, slope: s.slope || undefined } : null,
       ground: this.landed ? undefined : { g: this.grounded, t: this._groundT, a: this._airT, s: this._sleepT, c: this._touched, n: !!this._nearGround,
         tc: this._list.filter(p => p._tc).map(p => p.id), wet: this._list.filter(p => p._wet).map(p => p.id) },
       actionGroups: Object.keys(this.actionGroups).length ? cloneGroups(this.actionGroups) : undefined,
@@ -3362,6 +3363,7 @@ export class Vessel {
       v.surface = { dir: v3(o.surface.dir), qRel: new Quaternion().fromArray(o.surface.qRel), h: o.surface.h,
         qTarget: o.surface.qTarget ? new Quaternion().fromArray(o.surface.qTarget) : null };
       if (o.surface.fixed) v.surface.fixed = true;
+      if (o.surface.held) v.surface.held = String(o.surface.held);
       if (o.surface.vehicle) v.surface.vehicle = true;
       if (o.surface.slope) v.surface.slope = o.surface.slope;
     }
