@@ -18,7 +18,7 @@ function ship(name, angle = Math.PI * 3 / 2) {
   let cur = pod;
   for (const t of ['bay_shearwater', 'tank_xxl_ship']) cur = c.attachStack(t, cur.id, 'bottom')[0];
   assert.equal(c.attachRadial('port_side', cur.id, cur.pos.y + 2, angle, 1).length, 1);
-  c.attachRadial('rcs', cur.id, cur.pos.y, Math.PI / 4, 4);
+  c.attachRadial('rcs_xxl', cur.id, cur.pos.y, Math.PI / 4, 4);
   c.autoStage();
   return c;
 }
@@ -163,4 +163,20 @@ test('pump: undocking cuts the line', () => {
   assert.ok(w.undock(v, pf.id));
   run(w, 0.1);
   assert.equal(v.pump, null);
+});
+
+// ---- the docking assist flies it
+import * as AP from '../../js/core/autopilot.js';
+for (const [name, turn] of [['from alongside', new Quaternion()], ['from a tumble of an attitude', new Quaternion().setFromAxisAngle(new Vector3(0.5, 0.3, 0.8).normalize(), 2.2)]]) test('side port: the docking assist brings two ships together side by side, ' + name, () => {
+  const { w, a, b } = pair({ dist: 45, closing: 0 });
+  a.q.multiply(turn); a.w.set(0, 0, 0);
+  const ev = []; w.on('dock', d => ev.push(d));
+  const ctl = AP.dockingApproach(w, a, b, {});
+  let t = 0;
+  for (; t < 1500 && !ctl.done; t += 0.05) { ctl.update(0.05); w.step(0.05); }
+  assert.ok(ctl.done && !ctl.failed, 'docked: ' + ctl.phase + ' after ' + t.toFixed(0) + ' s');
+  assert.equal(ev.length, 1);
+  const v = ev[0].vessel, pods = v.partList.filter(p => p.type === 'pod_shearwater');
+  near(Math.hypot(pods[0].pos.x - pods[1].pos.x, pods[0].pos.z - pods[1].pos.z), 2 * (R + RW), 1e-6, 'side by side');
+  assert.ok(v.w.length() < 0.02, 'and not left spinning: ' + v.w.length());
 });
