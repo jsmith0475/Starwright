@@ -68,6 +68,31 @@ last tank, with the foot of each leg's box about level with the foot of the tank
 The small Sprig and the heavy Stilt still work on a booster; they are stowed and lowered at the
 same moments. They are simply too small to see from any distance.
 
+## Three pieces at separation
+
+A plain Stack Separator fires at one end. It lets go of the stage above and stays bolted to the
+stage below, so a booster built with one lands carrying the separator and the lattice that stood
+round the upper engine. Nothing joins the two stages after it fires; the ring is just a passenger.
+
+The **Twin-Plane Interstage** (sizes M and L) fires at both ends. One staging leaves three pieces:
+
+- the upper stage, pushed forward;
+- the first stage, pushed back, with a clean top;
+- the ring and its lattice, a piece of debris of its own named "... interstage".
+
+The first plane puts the same impulse between the two sides as a Stack Separator of that size. The
+second plane then parts the ring from the first stage with the impulse that leaves the ring moving
+at the mean of the two stages' speeds, so it stays in the gap between them and neither stage runs
+into it. Mass and momentum are shared out exactly among the three (verification group 9i works the
+three speeds out by hand from the catalogue masses and compares them to nine decimal places).
+
+A whole flight from the pad with one, flown by the game: separation at 20.5 km and 745 m/s, and the
+booster, 90 kg lighter for the missing ring, lands 0 m from the Return Pad at 1.7 m/s.
+
+What is simple about it: pieces do not collide with each other in flight, so a ring that did drift
+into a stage would pass through it. The ascent assist still counts the ring as part of the first
+stage when it works out how much propellant to keep, which keeps a few kilograms more than needed.
+
 ## Landing on the barge
 
 *Patient Tide* is a flat steel deck, 80 m long and 50 m wide, 4 m above the water, anchored 40 km
@@ -296,7 +321,7 @@ What this says (it was measured before guidance was written, and guidance was bu
   before first contact, the standing height from the dimensions to within 2 cm, no strut on its
   stop). `tests/e2e/booster_return.mjs` now flies the folding legs in a real browser: folded as
   the landing burn lights, out just before touchdown, standing afterwards.
-- The whole verification passes: 1,329 checks, 0 failed. 474 unit tests pass.
+- The whole verification passes: 1,338 checks, 0 failed. 478 unit tests pass.
 
 ## For developers
 

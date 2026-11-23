@@ -1226,6 +1226,7 @@ export class Vessel {
     if (this.mass > 0) this.vel.addScaledVector(ax, j / this.mass);
     piece.w.x += hash3(ring.id, this.stageIndex, 3) * 0.3;
     piece.w.z += hash3(ring.id, this.stageIndex, 4) * 0.3;
+    piece.name = this.name.replace(/ (booster|probe|debris)$/, '') + ' interstage';
     events.push({ type: 'decouple', vessel: this, debris: piece, part: ring });
   }
   _comOf(ids) {

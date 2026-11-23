@@ -107,7 +107,7 @@ async function flight(A, aspect, plan) {
     if (!c.attachStack('fairing_m', pod.id, 'top')[0]) throw new Error('the shroud nose did not attach');   // a payload shroud, so the top is not a blunt ring
     let cur = pod, first = null, last = null;
     const lower = ['tank_m800', 'tank_m800', 'tank_m400'];
-    for (const t of ['tank_m400', 'eng_sparrow', 'dec_m', 'probe_wisp', ...lower, 'eng_goshawk']) {
+    for (const t of ['tank_m400', 'eng_sparrow', 'inter_m', 'probe_wisp', ...lower, 'eng_goshawk']) {
       const [p] = c.attachStack(t, cur.id, 'bottom');
       if (lower.includes(t)) { if (cur.type === 'probe_wisp') first = p; last = p; }
       cur = p;

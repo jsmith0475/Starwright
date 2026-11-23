@@ -329,6 +329,33 @@ function foldingLegCheck(S) {
   { const used = Math.max(...v.legParts.map(p => p._comp)) / L.stroke; S.ok('no strut is closed to its stop', used < 1, (used * 100).toFixed(0) + ' % of the stroke used'); }
 }
 
+/** 9i. The twin-plane interstage: three pieces from one staging, worked by hand from the catalogue masses. */
+function threePieceCheck(S) {
+  const c = new Craft('Three Piece'); const [top] = c.setRoot('probe_wisp'); let cur = top; const id = {};
+  for (const t of ['tank_m400', 'eng_sparrow', 'inter_m', 'probe_wisp', 'tank_m800', 'eng_goshawk']) { cur = c.attachStack(t, cur.id, 'bottom')[0]; id[t] = cur.id; }
+  c.autoStage();
+  const w = new World(), v = spawn(w, c, 'home', [SYSTEM.home.radius + 300e3, 0, 0], [0, 0, 2000], { crew: [] });
+  const m0 = v.mass, p0 = mom([v]), ax = A(new Vector3(0, 1, 0).applyQuaternion(v.q)), v0 = A(v.vel);
+  const before = w.vessels.length;
+  for (let i = 0; i < 4 && w.vessels.length === before; i++) w.stage(v);
+  const stage = w.vessels.find(x => x !== v && x.parts.has(id.tank_m800)), ring = w.vessels.find(x => x.parts.has(id.inter_m));
+  S.check('pieces after one staging', 3, w.vessels.length - before + 1, 0);
+  S.ok('the ring is a piece of its own, on neither stage', !!ring && ring !== v && ring !== stage && ring.parts.size === 1, ring ? `${ring.parts.size} part, ${ring.mass.toFixed(0)} kg, "${ring.name}"` : 'no ring');
+  S.ok('the first stage is still a ship that can be flown', !!stage && stage.type === 'ship');
+  S.check('mass of the three pieces', m0, v.mass + stage.mass + ring.mass, 1e-6, { unit: 'kg' });
+  const p1 = mom([v, stage, ring]);
+  S.check('momentum of the three pieces vs before', 0, R.norm(R.sub(p1, p0)) / R.norm(p0), 1e-12, { unit: 'rel' });
+  // by hand: the first plane puts J = force x 250 N s between the upper stage and (first stage + ring); the second plane
+  // then leaves the ring at the mean of the two stages' speeds. Along the stack, towards the first stage:
+  const J = 12 * 250, mu = v.mass, ms = stage.mass, mr = ring.mass;
+  const u = -J / mu, s0 = J / (ms + mr), j = 0.5 * (s0 - u) / (1 / mr + 0.5 / ms), sHand = s0 + j / ms, rHand = s0 - j / mr;
+  const along = x => -R.dot(R.sub(A(x.vel), v0), ax);     // the first stage is on the -Y side of the stack
+  S.check('upper stage speed along the stack', u, along(v), 1e-9, { unit: 'm/s' });
+  S.check('first stage speed along the stack', sHand, along(stage), 1e-9, { unit: 'm/s' });
+  S.check('ring speed along the stack', rHand, along(ring), 1e-9, { unit: 'm/s' });
+  S.check('the ring leaves at the mean of the two stages', (along(v) + along(stage)) / 2, along(ring), 1e-9, { unit: 'm/s' });
+}
+
 export const groups = [
   { name: '9a. Separation: mass, momentum, and what the dropped stage becomes', fast: true, run: S => separation(S) },
   { name: '9b. A booster far from the vessel being flown vs two-body motion', fast: true, run: S => farKepler(S) },
@@ -338,4 +365,5 @@ export const groups = [
   { name: '9f. Returns from varied separations', fast: false, run: S => dispersion(S) },
   { name: '9g. The landing barge: where it is, how it holds a stage, returns that end on it', fast: false, run: S => bargeCheck(S) },
   { name: '9h. The folding leg: one rigid swing, out before touchdown, and how the stage stands on it', fast: false, run: S => foldingLegCheck(S) },
+  { name: '9i. The twin-plane interstage: three pieces, their mass and momentum, by hand', fast: true, run: S => threePieceCheck(S) },
 ];
