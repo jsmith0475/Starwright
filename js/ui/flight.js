@@ -285,11 +285,18 @@ export function createFlightScreen(app) {
           if (hud) hud.refreshPanels();
         }
         break;
+      case 'pump': {
+        if (p.vessel !== world.active && p.vessel !== controlled) break;
+        const t = (p.moved / 1000).toFixed(1) + ' t';
+        if (p.why === 'done') toast('Pump finished: ' + t + ' of propellant across', 'good', 6000);
+        else if (p.why !== 'stopped') toast('Pump stopped after ' + t + ': ' + p.why, 'warn', 8000);
+        break;
+      }
       case 'dock': {
         const a = p.vessel, b = p.absorbed;
         const here = a && (a === controlled || a === world.active);
         if (here) { controlled = a; if (cam) cam.frame(a, { keepAngles: true }); }
-        if (a && b) app.toast(here ? 'Docked with ' + b.name + '. Fuel can be moved between the two (Fuel button).' : a.name + ' docked with ' + b.name, 'good', 6000);
+        if (a && b) app.toast(here ? 'Docked with ' + b.name + (a.propellantLines && a.propellantLines.length ? '. The propellant line is connected: open the Fuel panel to pump.' : '. Fuel can be moved between the two (Fuel button).') : a.name + ' docked with ' + b.name, 'good', 6000);
         app.audio.play('stage');
         if (map && map.selection === b) { try { map.select(null); } catch { /* map closed */ } }
         if (hud) { hud.invalidate(); hud.refreshPanels(); }
@@ -776,7 +783,35 @@ export function createFlightScreen(app) {
       }
       return out;
     },
-    transferResources() { return ['fuel', 'lox', 'ch4', 'mono', 'elec'].filter(r => actions.transferParts(r).length >= 2); },
+    transferResources() { return ['fuel', 'mono', 'elec'].filter(r => actions.transferParts(r).length >= 2); },
+    // ---- the propellant line through a pair of docked Flank Ports (vessel.startPump): the cold liquids cross only here
+    /** → null, or { mine: {name, port, amount, max}, other: {…}, rate, pump: {state, moved, total, toMine} | null, last: {moved, why} | null, settleAccel } */
+    pumpInfo() {
+      const v = active(); if (!v || v.type !== 'ship' || !v.propellantLines) return null;
+      const line = v.propellantLines[0]; if (!line) return null;
+      const s0 = v.lineSide(line[0].id), mineFirst = s0.has(v.controlId);
+      const side = (port, ids) => {
+        let amount = 0, max = 0;
+        for (const q of v.partList) if (ids.has(q.id) && q.def.res && ('lox' in q.def.res || 'ch4' in q.def.res)) { amount += (q.res.lox || 0) + (q.res.ch4 || 0); max += (q.def.res.lox || 0) + (q.def.res.ch4 || 0); }
+        return { name: port.dockName || v.name, port: port.id, amount, max };
+      };
+      const a = side(line[0], s0), b = side(line[1], v.lineSide(line[1].id));
+      const mine = mineFirst ? a : b, other = mineFirst ? b : a, pu = v.pump;
+      return { mine, other, rate: line[2], settleAccel: v.axialAccel || 0,
+        pump: pu ? { state: pu.state, moved: pu.moved, total: pu.total, toMine: pu.toPort === mine.port } : null, last: v.lastPump || null };
+    },
+    /** dir: 'in' fills this ship from the other, 'out' gives to the other. */
+    pumpStart(dir = 'in') {
+      const v = active(), info = actions.pumpInfo();
+      if (!v || !info) { toast('No propellant line is connected. Dock two Flank Ports first.', 'info'); return false; }
+      const from = dir === 'in' ? info.other : info.mine, to = dir === 'in' ? info.mine : info.other;
+      if (!(v.rcsThrust > 0) || !(v.resources.mono && v.resources.mono.amount > 0.5)) toast('No thrusters or no monopropellant to settle the tanks: the pump will draw only while the engines push the ship', 'warn', 7000);
+      const r = v.startPump(from.port);
+      if (!r.ok) { toast('Pump: ' + r.why, 'info'); return false; }
+      toast('Pumping from ' + from.name + ' to ' + to.name + '. Thrusters are holding the liquid on the outlet.', 'good', 6000);
+      return true;
+    },
+    pumpStop() { const v = active(); if (v && v.pump) { v.stopPump('stopped'); toast('Pump stopped', 'info'); } },
     /** amount: a number, 'all' (as much as fits) or 'balance' (equal fill level in both). → amount moved (signed for balance). */
     transfer(fromId, toId, resource, amount = 'all') {
       const v = active(); if (!v || v.type !== 'ship') return 0;

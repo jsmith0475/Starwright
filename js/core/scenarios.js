@@ -653,8 +653,8 @@ const DEFS = [
   {
     id: 'topping-up', name: 'Topping Up', world: 'verda', situation: 'In orbit beside a propellant depot', difficulty: 'Medium', start: 'flight',
     goal: 'Dock Shearwater side by side with the depot Deepwell, fill its tanks, and let go.',
-    brief: 'Shearwater reached orbit with its tanks 43 % full, which is not enough to go anywhere. The depot Deepwell is 150 m away with 400 tonnes of liquid oxygen and methane aboard. Its Flank Port is on its side, and so is yours.',
-    tips: ['Open the Dock panel and start the docking assist: it turns the ship so the two Flank Ports face each other with the hulls parallel, then closes at walking pace.', 'Once docked, open the Fuel panel and pump from the depot. Liquid in free fall floats about in its tank, so the pump fires the thrusters gently along the stack to hold it on the outlet. That push is real: watch the orbit creep.', 'Ninety tonnes cross in about five minutes. Physics warp (.) makes that shorter.', 'By hand: RCS is on. H/N push forward and back, I/K up and down, J/L left and right. Under 1 m/s, hulls parallel.'],
+    brief: 'Shearwater reached orbit with its tanks 41 % full, which is not enough to go anywhere. The depot Deepwell is 150 m away with 400 tonnes of liquid oxygen and methane aboard. Its Flank Port is on its side, and so is yours.',
+    tips: ['Open the Dock panel and start the docking assist: it turns the ship so the two Flank Ports face each other with the hulls parallel, then closes at walking pace.', 'Once docked, open the Fuel panel and pump from the depot. Liquid in free fall floats about in its tank, so the pump fires the thrusters gently along the stack to hold it on the outlet. That push is real: watch the orbit creep.', 'Ninety-four tonnes cross in a little over five minutes. Physics warp (.) makes that shorter.', 'By hand: RCS is on. H/N push forward and back, I/K up and down, J/L left and right. Under 1 m/s, hulls parallel.'],
     objectives: [
       { id: 'dock', text: 'Dock with Deepwell', test: T.docked() },
       { id: 'fill', text: "Fill Shearwater's tanks to 95 %", test: w => ships(w).some(v => { const t = v.partList.find(p => p.type === 'tank_xxl_ship'); return !!t && (t.res.lox + t.res.ch4) >= 0.95 * (t.def.res.lox + t.def.res.ch4); }) },
@@ -669,7 +669,7 @@ const DEFS = [
       depot.ctrl.rcs = true;
       const pos = st.pos.clone().addScaledVector(pro, -150).addScaledVector(out, 12);
       const v = w.spawn(shearwaterShip(), { crew: ['Juno', 'Bram'], body: b, pos, vel: st.vel.clone(), q: attitude(out, pro) });
-      setFuel(v, 0.43);
+      setFuel(v, 0.41);
       readyInSpace(v);
       w.switchTo(v);
       w.setTarget(v, depot);

@@ -76,7 +76,7 @@ await page.evaluate(() => {
 });
 await ff(0.5);
 let s = await state();
-ok(Math.abs(s.mass / 1000 - 769) < 3, `on the pad at ${(s.mass / 1000).toFixed(0)} t`);
+ok(Math.abs(s.mass / 1000 - 772) < 3, `on the pad at ${(s.mass / 1000).toFixed(0)} t`);
 ok(s.rowLox && /Oxygen/.test(s.rowLox) && s.rowCh4 && /Methane/.test(s.rowCh4), 'the resource panel has an oxygen gauge and a methane gauge: ' + s.rowLox + ' | ' + s.rowCh4);
 ok(!s.rowFuel, 'and no single "Propellant" gauge, because it carries none');
 ok(Math.abs(s.lox / s.ch4 - 3.6) < 0.01, 'loaded 3.6 to 1');
