@@ -129,9 +129,9 @@ function watching(S) {
 // Phase 2: the fall predictor and the program that flies a stage back (js/core/booster.js).
 // ------------------------------------------------------------------------------------------------------------
 const home = SYSTEM.home;
+const homeRef = R.readSystem().byId[home.id];          // the same world as plain data, for the reference's own atmosphere
 /** The drag multiplier against Mach number, restated from the specification (not imported from the game). */
 function machRef(m) { return m <= 0.7 ? 1 : m < 1.1 ? 1 + (m - 0.7) * 2.5 : m < 2.5 ? 2 - (m - 1.1) / 1.4 * 0.5 : 1.5; }
-const SOUND = 320;
 /**
  * A point mass under inverse-square gravity and drag in air that turns with the planet, on the reference's own
  * integrator with its own exponential atmosphere. y = [r, v]; stops at `stopAlt` above the reference sphere.
@@ -144,15 +144,15 @@ function refFall(r0, v0, mass, area, stopAlt) {
     const r = Math.hypot(s[0], s[1], s[2]), alt = r - Rb, g = -mu / (r * r * r);
     const ax = s[3] - wy * s[2], ay = s[4], az = s[5] + wy * s[0];
     const sp = Math.hypot(ax, ay, az);
-    const rho = alt < at.height ? at.rho0 * Math.exp(-Math.max(0, alt) / at.scale) : 0;
-    const k = 0.5 * rho * sp * machRef(sp / SOUND) * area / mass;
+    const rho = R.airDensity(homeRef, alt);
+    const k = 0.5 * rho * sp * machRef(sp / R.soundSpeed(homeRef, alt)) * area / mass;
     o[0] = s[3]; o[1] = s[4]; o[2] = s[5];
     o[3] = g * s[0] - k * ax; o[4] = g * s[1] - k * ay; o[5] = g * s[2] - k * az;
   };
   R.integrate(deriv, y, 0, 3000, { rtol: 1e-10, hmax: 0.25, onStep: (t, s) => {
     const r = Math.hypot(s[0], s[1], s[2]), alt = r - Rb;
     const sx = s[3] - wy * s[2], sz = s[5] + wy * s[0], sp = Math.hypot(sx, s[4], sz);
-    const rho = alt < at.height ? at.rho0 * Math.exp(-Math.max(0, alt) / at.scale) : 0;
+    const rho = R.airDensity(homeRef, alt);
     maxQ = Math.max(maxQ, 0.5 * rho * sp * sp);
     if (alt <= stopAlt) {
       const f = prev ? (prev.alt - stopAlt) / (prev.alt - alt) : 1;      // the crossing, between the last two steps
@@ -185,7 +185,7 @@ function predictorCheck(S) {
       const r = R.norm(pos), g = R.scale(pos, -home.gm / (r * r * r));
       const dv = R.sub(R.sub(A(v.vel), before), R.scale(g, 0.02));
       const qNow = 0.5 * home.density(r - home.radius) * sp * sp;
-      areaMeas = R.norm(dv) / 0.02 * mBefore / (qNow * machRef(sp / SOUND));
+      areaMeas = R.norm(dv) / 0.02 * mBefore / (qNow * machRef(sp / R.soundSpeed(homeRef, r - home.radius)));
     }
   }
   const T = w.ut - t0, endDir = home.inertialToSurfaceDir(v.pos.clone(), w.ut), flown = groundDistance(home, startDir, endDir);

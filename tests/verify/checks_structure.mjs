@@ -630,10 +630,12 @@ function handNumbers(S) {
       w.step(DT);
       if (!v.structure.valid || w.substeps !== 1) continue;
       const alt = norm(pos) - b.radius, speed = norm(vel);
-      const rho = b.atmo.rho0 * Math.exp(-alt / b.atmo.scale);
+      const rho = R.airDensity(b, alt);
       // drag on the capsule, from the part data: its whole frontal area x the coefficient of its top face;
       // falling tail first it sits in the wake and feels the base-drag fraction of that (TUNING.BASE_DRAG, data)
-      const dPod = -dir * 0.5 * rho * speed * speed * area * (dir > 0 ? 1 : TUNING.BASE_DRAG);
+      // the drag rise with Mach number, on the reference's own speed of sound: 1 below Mach 0.7, 2.0 at 1.1 (restated)
+      const mach = speed / R.soundSpeed(b, alt), rise = mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 : mach < 2.5 ? 2 - (mach - 1.1) / 1.4 * 0.5 : 1.5;
+      const dPod = -dir * 0.5 * rho * speed * speed * area * rise * (dir > 0 ? 1 : TUNING.BASE_DRAG);
       // the game's own deceleration: velocity change over the step less gravity, along the nose
       const g = scale(add(grav(b.gm, pos), grav(b.gm, A(v.pos))), 0.5);
       const fy = toBody(q0, sub(scale(sub(A(v.vel), vel), 1 / DT), g))[1];
@@ -803,7 +805,7 @@ function failure(S) {
   // --- (2) a long thin stack flying broadside in thick air
   {
     const b = sys.byId.verda, speed = 360, alt = 3000;
-    const rho = b.atmo.rho0 * Math.exp(-alt / b.atmo.scale);
+    const rho = R.airDensity(b, alt);
     S.info(`noodle (10 parts, 0.3 m wide, ${NOODLE.reduce((s2, t) => s2 + PARTS[t].h, 0).toFixed(1)} m long): dynamic pressure broadside at ${speed} m/s, ${alt / 1000} km`, (0.5 * rho * speed * speed).toFixed(0), 'Pa');
     const r = flyToFailure(() => {
       const w = new World();

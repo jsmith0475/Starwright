@@ -113,7 +113,11 @@ Near the speed of sound shock waves form and drag climbs steeply, then eases at 
 - Mach 1.1 to 2.5: $M = ${T.MACH_PEAK.toFixed(1)} - ${sig(slopeDown, 3)}\,(\mathrm{Ma} - 1.1)$, a straight line down to ${T.MACH_HIGH}.
 - Above Mach 2.5: $M = ${T.MACH_HIGH}$.
 
-> game: The speed of sound is held at ${T.SOUND_SPEED} m/s on every world and at every height. A real atmosphere's sound speed changes with temperature and with the gas, so the Mach number on the instruments is a fair guide on ${home.name} and only a label elsewhere.
+The speed of sound is not one number. It follows from the gas and its temperature, $c_s = \sqrt{\gamma R T / M_{gas}}$, with $\gamma$ the ratio of specific heats, $R$ the gas constant and $M_{gas}$ the molar mass. Hydrostatics ties a world's temperature to the scale height it already has, $T_{iso} = M_{gas}\, g\, H / R$, so for air that is all at one temperature $c_s = \sqrt{\gamma g H}$: a heavy gas or a shallow atmosphere means slow sound, and the same speed is a higher Mach number.
+
+> example: ${home.name}'s air (γ 1.40) with $g = ${sig(home.surfaceG, 3)}$ m/s² and $H = ${int(at.scale)}$ m gives $\sqrt{\gamma g H} = ${int(at.aIso)}$ m/s. The temperature profile warms the surface and cools the middle layer, so sound travels at ${int(home.soundSpeed(0))} m/s on the ground, ${int(home.soundSpeed(2 * at.scale))} m/s at ${km(2 * at.scale)} and ${int(home.soundSpeed(at.height))} m/s at the top. A rocket at ${int(home.soundSpeed(2 * at.scale))} m/s is at Mach 1 up there and only Mach ${sig(home.soundSpeed(2 * at.scale) / home.soundSpeed(0), 2)} on the pad.
+
+> game: Each world has its own gas: air on ${home.name} and Marn, carbon dioxide on Murk and Rusk, hydrogen and helium on Thal and Orrin. The temperature profile has one shape for every world (warm ground, cold middle, a warm layer above, as on Earth) scaled to that world's own $T_{iso}$. The drag-rise curve above has not changed; only the Mach number it is read at is now the true one. Below Mach 0.7 nothing is different.
 
 ## Wings and fins
 
@@ -181,7 +185,7 @@ with $\dot{q}$ in W/m² and $T$ in kelvin. A leading face has an exposure up to 
 ## What the model leaves out
 
 - One scale height per atmosphere, no weather and no wind.
-- A constant speed of sound, so one drag-rise curve for every world.
+- One temperature profile shape for every world, and one drag-rise curve. The density stays a single exponential and does not follow the temperature profile; the top 8% of each atmosphere fades smoothly to nothing in place of a step.
 - Capsules, tanks and debris make no lift of their own shape. Only wings, fins and open solar panels do.
 - Parts do not shield each other from the flow: a booster in the lee of the core feels the same air as one in front. (For heating, a covered end face is protected.)
 - No shock or boundary-layer model beyond the flux law, and no flutter or buckling. Thin parts carry a stated air rating instead (two chapters on).
