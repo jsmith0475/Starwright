@@ -213,6 +213,12 @@ export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WI
 }
 const _cf = [0, 0];
 
+/** The drag multiplier of _stepFlight at a Mach number: 1 below 0.7, a peak at 1.1, lower again above 2.5. */
+export function machDrag(mach) {
+  return mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 * (TUNING.MACH_PEAK - 1)
+    : mach < 2.5 ? TUNING.MACH_PEAK + (mach - 1.1) / 1.4 * (TUNING.MACH_HIGH - TUNING.MACH_PEAK) : TUNING.MACH_HIGH;
+}
+
 /** Range (m) of an antenna part definition (parts without an explicit range reach across the home system). */
 export function antennaRange(def) {
   const a = def && def.antenna;
@@ -1502,6 +1508,37 @@ export class Vessel {
     return true;
   }
 
+
+
+  /**
+   * Highest skin temperature, as a fraction of the part's limit, that a steady heating flux (W/m²) would bring any
+   * part to with the vessel flying along its own axis, tail first or nose first: _stepFlight's equilibrium rule.
+   */
+  axialHeatRatio(flux, tailFirst = true) {
+    if (!(flux > TUNING.HEAT_MIN_FLUX)) return 0;
+    let worst = 0;
+    for (const p of this._list) {
+      const ex = p._stack ? (tailFirst ? p._eDown : p._eUp) : TUNING.RADIAL_EXPOSURE;
+      const r = (TUNING.AMBIENT_T + TUNING.HEAT_K * Math.pow(flux * ex, TUNING.HEAT_EXP)) / p.def.maxTemp;
+      if (r > worst) worst = r;
+    }
+    return worst;
+  }
+  /**
+   * Drag area (m²) of the whole vessel flying straight along its own axis with no spin, tail first (the engine
+   * end into the wind) or nose first: the drag force is then q · machDrag(Mach) · area. It adds up the same
+   * per-part terms _stepFlight does for that attitude, so a point-mass prediction made with it follows the flight.
+   */
+  axialDragArea(tailFirst = true) {
+    let a = 0;
+    for (const p of this._list) {
+      const d = p.def;
+      if (p._stack) a += tailFirst ? p._aDown + TUNING.BASE_DRAG * p._aUp : p._aUp + TUNING.BASE_DRAG * p._aDown;
+      else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf)[1];
+      else { let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area; a += aR; }
+    }
+    return a;
+  }
   /** Would the engines push right now (ignited, fed, and throttled up)? */
   wouldThrust() {
     for (const e of this._engines) {
@@ -1803,7 +1840,7 @@ export class Vessel {
   }
 
   // Torque command (cx, cy, cz in [−1,1]) and authority (ax, ay, az in N·m). Writes this.actuation and this._auth.
-  _control(dt, qdyn, axial) {
+  _control(dt, qdyn, axial, tailFirst = false) {
     const c = this.ctrl, I = this.inertia;
     let ax = 0, ay = 0, az = 0;
     const eva = this.type === 'eva';
@@ -1883,10 +1920,15 @@ export class Vessel {
     }
     this.actuation.set(cx, cy, cz);
     this._tqx = cx * dx; this._tqy = cy * dy; this._tqz = cz * dz;
-    // control surfaces follow the same command
+    // control surfaces follow the same command. Flying backwards (a booster coming down engine first) the same
+    // deflection turns the vessel the other way, so the fly-by-wire reverses it; without this the attitude hold
+    // drove a tail-first stage into a spin.
+    // Only when it is meant to fly that way (the attitude being held points away from the airflow): an aeroplane
+    // that stalls and slides back for a moment keeps the control sense its pilot and its autopilot expect.
+    const rev = axial < 0 && tailFirst ? -1 : 1;
     for (const p of this._wings) {
       if (!p._wCtl) continue;
-      const d = p._kp * cx + p._kr * cy + p._ky * cz;
+      const d = rev * (p._kp * cx + p._kr * cy + p._ky * cz);
       p._defl = d > 1 ? 1 : d < -1 ? -1 : d;
     }
   }
@@ -1926,7 +1968,11 @@ export class Vessel {
 
     this._envAlt = alt; this._envMach = speed / TUNING.SOUND_SPEED;
     const thrust = this._systems(dt, pAtm, ev);
-    this._control(dt, qdyn, speed > 1 ? uy / speed : 0);
+    // is the attitude hold asking for tail first? (retrograde, or a held direction more than 90° from the airflow)
+    const cs = this.ctrl;
+    const wantTail = !!cs.sas && speed > 1 && (cs.sasMode === 'retrograde' || cs.sasMode === 'srfRetrograde'
+      || (cs.sasMode === 'direction' && this.sasDir && this.sasDir.x * sx + this.sasDir.y * sy + this.sasDir.z * sz < 0));
+    this._control(dt, qdyn, speed > 1 ? uy / speed : 0, wantTail);
     const m = this.mass, com = this.com, c = this.ctrl;
 
     let Fx = this._thrFx || 0, Fy = thrust, Fz = this._thrFz || 0;

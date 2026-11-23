@@ -184,7 +184,22 @@ own that keeps flying under full physics however far it gets from the upper stag
 - Fast time warp waits while the other vessel is still in flight. The message names it.
 - A stage without a guidance ring is debris, as before.
 
-Nothing lands the booster for you yet: that is the next part of the work. The full description
+### Bringing it back
+
+Give that first stage **landing legs** near the bottom and **grid fins** (Lattice Vanes) near the
+top as well, and it comes home by itself:
+
+1. Launch with the ascent assist. It stages early, when the booster has just enough propellant
+   left to return, and tells you so.
+2. The booster flips, burns back toward the pad, steers on its fins and lands on its legs at the
+   landing zone, 600 m north of the pad. Every step is called out on screen.
+3. Press **\\** to watch it. Touch the controls and you are flying it. The assist takes the upper
+   stage to orbit either way.
+
+Flying by hand instead? When you are in the air over Verda, Guidance has **Fly back and land**.
+Without legs a stage is never flown back, and without grid fins it misses by kilometres. A stage
+dropped too late and too fast cannot reach the pad: the program says so and lands where it can.
+The landing zone is open ground for now, and landing there pays nothing yet. The full description
 is in [BOOSTERS.md](BOOSTERS.md).
 
 ## Targeting, rendezvous and docking

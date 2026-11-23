@@ -120,11 +120,12 @@ And around the flying:
 - **Rockets that come apart in the air.** Flip or tumble in thick air and the side boosters are
   ripped from their clamps, antennas and open solar panels are stripped, nose cones go, and
   the pieces fly on as debris. A clean climb loses nothing.
-- **Boosters that fly on.** Put a guidance ring on the first stage and it is no longer thrown
-  away at separation. It becomes a ship of its own under full physics at any distance. Press
-  `\` to hop to it and fly it while the ascent assist takes the upper stage on to orbit by
-  itself. This is the first part of [reusable boosters](docs/BOOSTERS.md): nothing lands the
-  booster for you yet.
+- **Boosters that fly back and land.** Give the first stage a guidance ring, grid fins and legs
+  and it is no longer thrown away. The ascent assist lets it go early with enough propellant to
+  return, and it flies itself home under full physics: flip, boostback burn, an entry burn if it
+  needs one, steering on the fins, a landing burn, and down on its legs by the pad while the
+  upper stage goes on to orbit. Press `\` to watch it or take over. See
+  [reusable boosters](docs/BOOSTERS.md) for how it is flown and what is not built yet.
 - **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
   [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
@@ -305,6 +306,13 @@ Starwright does not fake its orbits, and it shows its work.
   follows the independent two-body reference to 5 micrometres over 100 seconds, and the same
   launch watched from the upper stage, from the booster, or switching every five seconds comes
   out identical to the last bit. See [docs/BOOSTERS.md](docs/BOOSTERS.md).
+- **A booster that predicts its own fall.** The return program integrates the stage's fall four
+  times a second (gravity, drag in air that turns with the planet, the drag rise at Mach 1) and
+  steers the predicted impact point onto the target. **20 more checks, 0 failures**: against a
+  separate integrator with its own atmosphere, over a 63 km fall, the impact point agrees within
+  0.1% of the distance, the speed within 0.13%, and the predictor is 2.4 m from the reference.
+  The landing burn stops within 0.03% of the rocket equation. 312 of 312 varied returns landed
+  within 0.3 m at 1.75 m/s.
 
 <p align="center">
   <img src="media/shot-science.png" width="100%" alt="The in-game science reference open on chapter 1, gravity and the two-body problem, with numbered equations">
@@ -432,7 +440,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 454 tests, including scripted flights flown by the autopilot
+npm test            # 461 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
@@ -475,11 +483,11 @@ what the game does today, and what building it involves.
    crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
    air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
    move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
-5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **First part built.** Flip,
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **Two parts built.** Flip,
    boost back, steer on the grid fins and land the first stage on its legs while the upper stage
-   flies on to orbit. Today a first stage with a guidance ring keeps flying under full physics
-   after separation and one key hops between it and the upper stage. Landing guidance, a barge
-   at sea and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
+   flies on to orbit. Today a first stage with a guidance ring, fins and legs flies itself back
+   and lands by the pad, and one key hops between it and the upper stage. A marked pad, a barge
+   at sea, a stock reusable rocket and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
    Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
 7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,

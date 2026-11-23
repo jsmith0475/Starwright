@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'booster-return', date: '2026-11-22', title: 'Boosters that fly back and land',
+    text: 'Give your first stage a guidance ring, grid fins and landing legs, and launch with the ascent assist. It lets the booster go early with enough propellant to come home, and the booster flips, burns back, steers on its fins and lands on its legs beside the pad while the upper stage goes on to orbit. Press \\ to watch it or take over.' },
   { id: 'booster-flies-on', date: '2026-11-22', title: 'A dropped booster keeps flying',
     text: 'Put a guidance ring on your first stage and it is no longer thrown away at separation: it flies on under full physics however far away it gets. Press \\ to hop between the booster and the upper stage. The ascent assist keeps flying the upper stage to orbit while you fly the booster down. Landing guidance comes next.' },
   { id: 'menu-groups', date: '2026-11-22', title: 'A tidier front menu',
