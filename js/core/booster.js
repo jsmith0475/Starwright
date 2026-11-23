@@ -120,7 +120,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -199,6 +199,11 @@ export function boosterRecovery(world, vessel, opts = {}) {
     const power = v.enginePower();
     if (!(power.thrust > 0) && c.phase !== 'coast' && c.phase !== 'init') {
       if (c.phase === 'final' || c.phase === 'landing') { v.ctrl.throttle = 0; hold('srfRetrograde'); if (!st.dry) { st.dry = true; c.note('out of propellant'); } return; }
+    }
+    // the legs stay folded until just before touchdown
+    if (!st.legs && (c.phase === 'landing' || c.phase === 'final') && v.radarAlt < o.legAlt) {
+      st.legs = true;
+      if (v.legParts.length && !v.legsDown) { v.setLegs(true); c.note(`landing legs down at ${v.radarAlt.toFixed(0)} m`); }
     }
     const acc = power.thrust / v.mass;
     switch (c.phase) {
@@ -292,7 +297,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
           const h = stopAlt(clamp(o.landingAccel / acc, 0.1, 0.85));
           // light when the stop point comes down to the hover height (or the burn can no longer stop it at all)
           if (h < o.stopAlt + Math.max(2, speed * 0.05)) {
-            c.phase = 'landing'; v.setLegs(true);
+            c.phase = 'landing';
             c.note(`landing burn at ${v.radarAlt.toFixed(0)} m, ${speed.toFixed(0)} m/s`);
           }
         }

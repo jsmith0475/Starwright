@@ -70,7 +70,7 @@ function approach(cur, target, maxStep) { return cur < target ? Math.min(target,
 // Shape table
 // ---------------------------------------------------------------------------------------------
 const { clamp_: clampShape, solarLayout, ...radialRest } = radialShapes;
-const { legGeometry, wheelGeometry, ...aeroRest } = aeroShapes;
+const { legGeometry, foldLegGeometry, wheelGeometry, ...aeroRest } = aeroShapes;
 const { DORSAL: _d, ...stackRest } = stackShapes;
 const shapes = {
   ...stackRest, engine: engineShapes.engine, srb: engineShapes.srb, radialengine: engineShapes.radialengine, ...aeroRest, ...radialRest, clamp: clampShape,
@@ -169,7 +169,7 @@ function hookEnvironment(mesh) {
 
 function deployInfo(def) {
   const s = def.shape;
-  if (s === 'leg') return { time: 1.4, initial: 0 };
+  if (s === 'leg') return { time: def.variant === 'fold' ? 2.4 : 1.4, initial: 0 };
   if (s === 'solar') return def.solar && def.solar.fixed ? null : { time: def.variant === 'grand' ? 4.5 : 2.6, initial: 0 };
   if (s === 'wheel') return def.wheel && def.wheel.retract ? { time: 1.8, initial: 1 } : null;
   if (s === 'airbrake') return { time: 0.6, initial: 0 };
@@ -307,7 +307,18 @@ export function setPartInterstages(group, trusses, { quality } = {}) {
 // ---------------------------------------------------------------------------------------------
 function applyAnim(g, def, initial = false) {
   const u = g.userData, r = u.refs, s = def.shape;
-  if (s === 'leg' && r.legPivot) {
+  if (s === 'leg' && def.variant === 'fold' && r.legPivot) {
+    // one rigid swing about the hinge: straight up against the hull when stowed, out and down when deployed; a
+    // loaded strut closes by lifting the pad, which opens the leg a little further
+    const k = smooth(u.deployK || 0), L = def.legs, { px, py, len, ax, ay, drop } = foldLegGeometry(def);
+    const comp = k * Math.min(u.compress || 0, L.stroke || 0.4);
+    const down = Math.acos(clamp((L.reach - drop - comp + py) / len, -1, 1));
+    const ang = Math.PI + (down - Math.PI) * k;
+    r.legPivot.rotation.z = ang; r.legFoot.rotation.z = -ang;
+    const f = 0.55, bx = px + Math.sin(ang) * len * f - 0.06 * Math.cos(ang), by = py - Math.cos(ang) * len * f - 0.06 * Math.sin(ang);
+    const ex = bx - ax, ey = by - ay, bl = Math.hypot(ex, ey);
+    r.legBrace.rotation.z = Math.atan2(-ex, ey); r.legBrace.scale.set(1, Math.max(bl, 0.01), 1);
+  } else if (s === 'leg' && r.legPivot) {
     const k = smooth(u.deployK || 0), { h, rw } = def, L = def.legs, { px, py, s: sc } = legGeometry(def);
     // stowed: foot tucked at the bottom of the housing; deployed: foot at (spread, -reach)
     const sx = px + 0.07 * sc, sy = -h / 2 + 0.04 * sc, dx = L.spread, dy = -L.reach + 0.07 * sc + k * Math.min(u.compress || 0, L.stroke || 0.3 * L.reach);   // the pad's sole, 7 cm under its hinge, is what stands at `reach`

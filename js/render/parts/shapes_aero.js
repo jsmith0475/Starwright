@@ -194,7 +194,43 @@ export function legGeometry(def) {
   const { h, rw } = def, s = h / 1.2;
   return { px: -rw / 2 + 0.12 * s, py: h / 2 - 0.1 * s, s };
 }
+/** The folding leg's hinge (at the foot of its box) and the length from the hinge to the pad's own hinge. */
+export function foldLegGeometry(def) {
+  const { h, rw } = def, L = def.legs, px = -rw / 2 + 0.1, py = -h / 2 + 0.1, drop = 0.3 * (L.foot || 0.24);
+  return { px, py, drop, len: Math.hypot(L.spread - px, -L.reach + drop - py), ax: -rw / 2 + 0.07, ay: h / 2 - 0.25 };
+}
+// A folding leg (variant 'fold'): a tapered shell hinged at the foot of its box. Stowed it stands straight up, flat
+// against the hull, its smooth back to the airflow; deployed it has swung out and down and its back faces the ground.
+// A telescoping strut (legBrace, scaled by partmesh) runs from high on the hull to the middle of the leg.
+function legFold(def, g, pb) {
+  const { h, rw, t } = def, { px, py, len, ax, ay, drop } = foldLegGeometry(def), x0 = -rw / 2, fr = def.legs.foot || 0.24;
+  // on the hull: the hinge block, the strut's anchor and a thin rail between them
+  pb.rbox(0.16, 0.24, t * 0.9, 0.02, P.gun, M(x0 + 0.06, py, 0), 'metal');
+  pb.rbox(0.12, 0.2, t * 0.42, 0.02, P.gun, M(x0 + 0.05, ay, 0), 'metal');
+  pb.rbox(0.03, h - 0.5, t * 0.2, 0.008, P.iron, M(x0 + 0.015, 0, 0), 'metal');
+  for (const z of [-1, 1]) pb.cyl(0.04, 0.04, 0.05, 0, P.steel, 'metal', 10, false, M(px, py, z * t * 0.46, Math.PI / 2));
+  // the leg, along its own -Y from the hinge; its smooth back is its -X face
+  const piv = sub(g, 'legPivot', px, py, 0), sp = new PB(pb.q), n = 5;
+  for (let i = 0; i < n; i++) {
+    const y0 = -len * i / n, y1 = -len * (i + 1) / n, w = t * (1 - 0.5 * (i + 0.5) / n), d = 0.13 - 0.05 * (i + 0.5) / n;
+    sp.rbox(0.035, y0 - y1 + 0.01, w, 0.012, P.hull, M(-0.11, (y0 + y1) / 2, 0), 'hull');                     // the back shell
+    for (const z of [-1, 1]) sp.rbox(d, y0 - y1 + 0.01, 0.045, 0.01, P.gun, M(-0.1 + d / 2, (y0 + y1) / 2, z * (w / 2 - 0.03)), 'metal');   // side beams
+    if (sp.med) sp.rbox(0.03, 0.05, w - 0.06, 0.008, P.iron, M(-0.07, y1 + 0.04, 0), 'metal');               // cross ribs
+  }
+  sp.rbox(0.037, len * 0.16, t * 0.3, 0.008, P.teal, M(-0.112, -len * 0.34, 0), 'paint');
+  sp.cyl(0.035, 0.035, t * 0.92, 0, P.steel, 'metal', 10, false, M(0, 0, 0, Math.PI / 2));
+  sp.build(piv);
+  const pis = sub(piv, 'legPiston', 0, -len, 0), pp = new PB(pb.q);
+  pp.sphere(0.06, P.gun, M(0, 0, 0), 'metal', 10, 8); pp.build(pis);
+  const foot = sub(pis, 'legFoot', 0, 0, 0), fp = new PB(pb.q);
+  fp.rev([[0.002, -drop, P.gun], [fr * 0.7, -drop], [fr, -drop + 0.03], [fr, -drop + 0.045], [fr * 0.4, -0.02], [0.06, 0.02], [0.002, 0.02]], 'metal', { crease: 0.5, seg: 16 });
+  fp.build(foot);
+  // the strut: an outer tube and a bright inner rod, each a unit long and scaled by partmesh
+  const br = sub(g, 'legBrace', ax, ay, 0), bp = new PB(pb.q);
+  bp.cyl(0.05, 0.05, 0.5, 0.25, P.gun, 'metal', 10); bp.cyl(0.032, 0.032, 0.5, 0.75, P.silver, 'chrome', 10); bp.build(br);
+}
 export function leg(def, g, pb) {
+  if (def.variant === 'fold') return legFold(def, g, pb);
   const { h, rw, t, variant } = def, { px, py, s } = legGeometry(def), heavy = variant === 'heavy', x0 = -rw / 2;
   // housing
   pb.rbox(0.07 * s, h, t * 0.8, 0.014 * s, P.hull, M(x0 + 0.035 * s, 0, 0), 'hull');

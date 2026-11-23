@@ -112,7 +112,7 @@ async function flight(A, aspect, plan) {
       cur = p;
     }
     c.attachRadial('fin_grid', first.id, first.pos.y + 0.6, Math.PI / 4, 4);
-    c.attachRadial('leg_sprig', last.id, last.pos.y - 0.3, Math.PI / 4, 4);
+    c.attachRadial('leg_heron', last.id, last.pos.y - 3.75 / 2 + 1.9, Math.PI / 4, 4);   // folding legs, hinged at the foot of the last tank
     c.autoStage();
     window.__sw.app.goto('flight', { craft: c.toJSON(), crew: [] });
   });

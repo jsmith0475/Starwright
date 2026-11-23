@@ -16,6 +16,18 @@ export function boosterCraft() {
   c.autoStage();
   return c;
 }
+/** A first stage on four Heron folding legs: guidance ring, tanks, Goshawk, grid fins. */
+export function heronBooster() {
+  const c = new Craft('Heron booster');
+  const [core] = c.setRoot('probe_wisp');
+  let cur = core, top = null, low = null;
+  for (const t of ['tank_m800', 'tank_m400', 'eng_goshawk']) { const [p] = c.attachStack(t, cur.id, 'bottom'); if (!p) throw new Error('attach ' + t); if (t === 'tank_m800') top = p; if (t === 'tank_m400') low = p; cur = p; }
+  c.attachRadial('fin_grid', top.id, top.pos.y + 0.8, Math.PI / 4, 4);
+  const legs = c.attachRadial('leg_heron', low.id, low.pos.y - 3.75 / 2 + 1.9, Math.PI / 4, 4);   // hinge 10 cm above the foot of the tank
+  if (legs.length !== 4) throw new Error('four legs');
+  c.autoStage();
+  return c;
+}
 /** The booster placed in flight: alt (m), speed (m/s), pitch above the horizon (deg) heading east, `east` m downrange, fuel fraction. */
 export function dropped({ alt = 30000, speed = 1000, pitch = 45, east = 20000, fuel = 0.25, craft = boosterCraft() } = {}) {
   const w = new World();
