@@ -3,6 +3,7 @@ import { PARTS, INTERSTAGE } from '../../js/core/parts.js';   // part table, rea
 import * as AP from '../../js/core/autopilot.js';
 import { applyManeuver } from '../../js/core/trajectory.js';
 import { World, SYSTEM, V, A, simpleShip, twoStage, spawn, run } from './harness.mjs';
+import { Craft } from '../../js/core/craft.js';
 import * as R from './ref.mjs';
 
 const sys = R.readSystem();
@@ -165,9 +166,46 @@ function maneuverNodes(S, long) {
   }
 }
 
+function methalox(S) {
+  // two liquids burnt at a fixed mass ratio, in a cluster whose rings can be switched: the same laws, ring by ring
+  const mk = () => { const c = new Craft('Verifier M'); const [p] = c.setRoot('pod_shearwater'); const t = c.attachStack('tank_xxl_ship', p.id, 'bottom')[0]; c.attachStack('eng_peregrine6', t.id, 'bottom'); c.autoStage(); return c; };
+  const liquid = v => { let lox = 0, ch4 = 0; for (const p of v.partList) { lox += p.res.lox || 0; ch4 += p.res.ch4 || 0; } return { lox, ch4, all: lox + ch4 }; };
+  const en = PARTS.eng_peregrine6.engine;
+  const sets = [['all six', en.rings], ['sea-level three', [en.rings[0]]], ['vacuum three', [en.rings[1]]]];
+  for (let mode = 0; mode < sets.length; mode++) {
+    const [name, rings] = sets[mode];
+    const F = rings.reduce((s, r) => s + r.n * r.thrust * 1000, 0), flow = rings.reduce((s, r) => s + r.n * r.thrust * 1000 / (r.ispVac * R.G0), 0), isp = F / (flow * R.G0);
+    const w = new World();
+    const v = spawn(w, mk(), 'helion', DEEP, [0, 0, 0]);
+    const m0 = tableMass(['pod_shearwater', 'tank_xxl_ship', 'eng_peregrine6']);
+    S.check(`${name}: vessel mass = sum of the part table`, m0, v.mass, 1e-6, { unit: 'kg' });
+    v.ctrl.sas = true; v.ctrl.throttle = 1;
+    w.stage();
+    const eng = v.partList.find(p => p.type === 'eng_peregrine6');
+    if (mode) v.setEngineMode(eng.id, mode);
+    const dir = A(V([0, 1, 0]).applyQuaternion(v.q));
+    const v0 = A(v.vel), a = liquid(v), t0 = w.ut;
+    run(w, 30, 1);
+    const b = liquid(v), mdot = (a.all - b.all) / (w.ut - t0);
+    S.check(`${name}: mass flow = sum over lit engines of F / (Isp g0)`, flow, mdot, 1e-9, { unit: 'kg/s', rel: true });
+    S.check(`${name}: vacuum thrust reading`, F, v.thrust, 1e-6, { unit: 'N', rel: true });
+    S.check(`${name}: oxygen drawn / methane drawn`, 3.6, (a.lox - b.lox) / (a.ch4 - b.ch4), 1e-9, { rel: true });
+    S.check(`${name}: delta-v after 30 s vs rocket equation`, R.rocketDv(isp, m0, m0 - mdot * (w.ut - t0)), R.dot(R.sub(A(v.vel), v0), dir), 0.05, { unit: 'm/s' });
+    const readout = v.deltaV, vNow = A(v.vel);
+    run(w, b.all / mdot + 20, 1);
+    const c = liquid(v), prop = PARTS.tank_xxl_ship.res.lox + PARTS.tank_xxl_ship.res.ch4;
+    const T = PARTS.tank_xxl_ship.res, spare = T.lox - 3.6 * T.ch4;      // the tank is filled 3.6 to 1 to the nearest 10 kg
+    S.check(`${name}: oxygen left when the methane is gone = the table's surplus`, Math.max(spare, 0), c.lox, 1e-3, { unit: 'kg' });
+    S.check(`${name}: methane left`, Math.max(-spare / 3.6, 0), c.ch4, 1e-3, { unit: 'kg' });
+    S.check(`${name}: total delta-v to depletion vs Isp g0 ln(m0/m1)`, R.rocketDv(isp, m0, m0 - prop + c.all), R.dot(R.sub(A(v.vel), v0), dir), 0.2, { unit: 'm/s' });
+    S.check(`${name}: delta-v readout mid-burn vs what the burn then delivered`, R.dot(R.sub(A(v.vel), vNow), dir), readout, 1.5, { unit: 'm/s' });
+  }
+}
+
 export const groups = [
   { name: '2a. Rocket equation, mass flow, throttle (vacuum)', fast: true, run: S => rocketEquation(S) },
   { name: '2b. Thrust and Isp at sea level', fast: true, run: S => seaLevel(S) },
   { name: '2c. Staging: mass bookkeeping, momentum, delta-v readout', fast: true, run: S => staging(S) },
+  { name: '2e. Methane and oxygen: mixture ratio, cluster engine sets, rocket equation', fast: true, run: S => methalox(S) },
   { name: '2d. Maneuver nodes: prediction vs the orbit achieved by flying the burn', fast: true, run: (S, long) => maneuverNodes(S, long) },
 ];

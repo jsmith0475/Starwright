@@ -136,7 +136,7 @@ export function ascentProgram(world, opts = {}) {
           const f = clamp((alt - o.turnStart) / (o.turnEnd - o.turnStart), 0, 1);
           el = 90 - (90 - o.finalPitch) * Math.pow(f, o.turnShape);
         }
-        // A stage that cannot hold its own weight (an upper stage with thrust below its weight, as on the Wayfarer)
+        // A stage that cannot hold its own weight (an upper stage with thrust below its weight, as on the Shearwater)
         // sinks if it flies the turn the altitude asks for: it keeps its nose up enough to hold a climb rate until
         // its sideways speed carries it. Stages that can lift themselves are not touched.
         const accNow = v.maxThrust / v.mass, rNow = v.pos.length(), gNow = body.gm / (rNow * rNow);

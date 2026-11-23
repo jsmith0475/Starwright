@@ -152,7 +152,7 @@ test('wings, wheels and other second-pass fields', () => {
 test('coverage: the catalog offers every family in every size', () => {
   const has = f => PART_LIST.some(f);
   for (const s of Object.keys(SIZES)) {
-    if (s === 'XXL') continue;      // the Wayfarer stack's own size: a rocket, not a family of parts (see the test below)
+    if (s === 'XXL') continue;      // the Shearwater stack's own size: a rocket, not a family of parts (see the test below)
     assert.ok(has(d => d.shape === 'tank' && d.size === s), 'tank ' + s);
     assert.ok(has(d => d.shape === 'decoupler' && d.size === s), 'decoupler ' + s);
     assert.ok(has(d => d.shape === 'heatshield' && d.size === s), 'heat shield ' + s);

@@ -26,7 +26,7 @@ existing curve (5, 15, 30, 45, 90, 160, 300).
 | `orbital_assembly` | Meeting in Orbit | 5 | 3 | 220 | `command2` | Latch Ring L, Gyro Ring L, big/linear RCS, mono tanks S and L |
 | `supersonic_flight` | Faster Than Sound | 5 | -1 | 260 | `aviation`, `heavy` | ramjet, delta and long wings, flight deck, wide fuselage, shock cone |
 | `advanced_science` | Orbital Workshop | 5 | 5 | 280 | `field_science`, `command2` | lab module, survey scope, magnetometer boom |
-| `very_heavy` | Colossal Lifting | 6 | 1 | 450 | `heavy`, `advanced_construction` | every XL part, Anvil SRB, Homestead pod |
+| `very_heavy` | Colossal Lifting | 6 | 1 | 450 | `heavy`, `advanced_construction` | every XL part, Anvil SRB, Homestead pod, the XXL Shearwater stack ([SHEARWATER.md](SHEARWATER.md)) |
 | `ion_propulsion` | Quiet Push | 6 | 4 | 500 | `advanced_electrics`, `miniature` | ion drives, xenon tanks |
 | `high_power` | Power to Spare | 6 | 5 | 450 | `advanced_electrics` | Grand Array, Sunfoil Fan, isotope cell |
 | `nuclear_propulsion` | Atomic Age | 7 | 2 | 800 | `advanced_propulsion` | Furnace Atomic Engine |

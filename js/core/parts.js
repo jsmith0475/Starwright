@@ -26,7 +26,7 @@ export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875, XXL: 2.8125 };
 //   attach.surface on wings and tail fins (WING): surface parts may mount on them
 //   shape 'pylon' (attach.outer without a decoupler): a fixed hardpoint; a stack part (a jet, a pod, a tank) mounts
 //   on its outer face exactly like a booster on a radial clamp, shares fuel with the craft and never separates.
-// Methane and oxygen (docs/WAYFARER.md):
+// Methane and oxygen (docs/SHEARWATER.md):
 //   res.lox, res.ch4 (kg)      two real liquids. An engine with engine.prop: 'methalox' burns them together in the
 //                              proportion PROP_MIX.methalox (3.6 to 1 by mass) and stops when either runs out.
 //   engine.rings: [{ n, thrust (kN, vacuum, EACH engine), ispVac, ispAtm, gimbal }]   a cluster drawn bell by bell
@@ -767,7 +767,7 @@ const defs = [
     shape: 'lab', h: 3.0, r: 1.25, attach: STACK, crew: 2, res: { elec: 200 }, experiment: 'lab_study', lab: { rate: 1, mult: 1.5, elecUse: 0.4 }, tolerance: 8, maxTemp: 1500,
     desc: 'A pressurised workshop for two. Benches, sample racks and a slightly sticky centrifuge.' },
 
-  // ---------- The Wayfarer stack (docs/WAYFARER.md): a two-stage methane and oxygen rocket, 5.6 m across ----------
+  // ---------- The Shearwater stack (docs/SHEARWATER.md): a two-stage methane and oxygen rocket, 5.6 m across ----------
   { id: 'eng_peregrine33', name: 'Peregrine Cluster 33', cat: 'engines', tech: 'very_heavy', cost: 98000, mass: 17.0, size: 'XXL',
     joint: 2, shape: 'engine', variant: 'cluster33', h: 3.2, r: 2.8125, attach: STACK,
     engine: { type: 'liquid', prop: 'methalox', thrust: 0, ispVac: 0, ispAtm: 0, gimbal: 0,   // filled from the rings below
@@ -786,19 +786,19 @@ const defs = [
   { id: 'tank_xxl_long', name: 'Stalwart Tank XXL-200', cat: 'tanks', tech: 'very_heavy', cost: 21000, mass: 25.0, size: 'XXL',
     joint: 2, shape: 'tank', variant: 'steel', h: 18.75, r: 2.8125, attach: STACK, res: { lox: 156520, ch4: 43480 }, tolerance: 7, maxTemp: 1500,
     desc: 'A stainless tank for two liquids: 157 tonnes of liquid oxygen above 43 tonnes of liquid methane, in the 3.6 to 1 the Peregrine burns.' },
-  { id: 'tank_xxl_ship', name: 'Wayfarer Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 30.0, size: 'XXL',
+  { id: 'tank_xxl_ship', name: 'Shearwater Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 30.0, size: 'XXL',
     joint: 2, shape: 'tank', variant: 'steel', h: 15, r: 2.8125, attach: STACK, res: { lox: 125220, ch4: 34780 }, tolerance: 7, maxTemp: 1700,
     desc: 'The ship\'s own tank, tiled down one side: 125 tonnes of liquid oxygen and 35 tonnes of liquid methane.' },
   { id: 'ring_hotstage', name: 'Hot-Stage Ring XXL', cat: 'structure', tech: 'very_heavy', cost: 4200, mass: 3.0, size: 'XXL',
     joint: 2, shape: 'hotring', h: 2.2, r: 2.8125, attach: STACK, decoupler: { force: 40, hot: true }, command: 'probe', crew: 0, torque: 60, res: { elec: 600 }, elecDrain: 0.2,
     tolerance: 9, maxTemp: 2000,
     desc: 'A vented ring on top of a booster. The stage above lights its engines through the vents before it lets go, and the ring stays on the booster. It also carries the booster\'s guidance.' },
-  { id: 'pod_wayfarer', name: 'Wayfarer Forward Section', cat: 'command', tech: 'very_heavy', cost: 42000, mass: 45.0, size: 'XXL',
+  { id: 'pod_shearwater', name: 'Shearwater Forward Section', cat: 'command', tech: 'very_heavy', cost: 42000, mass: 45.0, size: 'XXL',
     joint: 2, shape: 'capsule', variant: 'ogive', h: 9.0, r: 2.8125, rTop: 0.35, rBottom: 2.8125, attach: STACK,
     command: 'crew', crew: 6, torque: 120, res: { mono: 600, elec: 2400 }, tolerance: 12, maxTemp: 2300,
     drag: { top: 0.15, bottom: 0.9, side: 0.45 }, experiment: 'crew_report', comY: -1.5,
     desc: 'The front of the ship: a long steel nose with the crew deck inside.' },
-  { id: 'bay_wayfarer', name: 'Wayfarer Cargo Bay', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 49.0, size: 'XXL',
+  { id: 'bay_shearwater', name: 'Shearwater Cargo Bay', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 49.0, size: 'XXL',
     joint: 2, shape: 'cargobay', h: 4.5, r: 2.8125, attach: STACK, tolerance: 10, maxTemp: 2300,
     desc: 'A loaded cargo bay: about forty tonnes of freight bound for Pell behind a steel door. The ship is sized to carry it, and cannot reach Pell with it unless it is refuelled in orbit.' },
   { id: 'fin_grid_xxl', name: 'Lattice Vane XXL', cat: 'aero', tech: 'very_heavy', cost: 2600, mass: 1.1,
@@ -807,10 +807,10 @@ const defs = [
   { id: 'pin_catch', name: 'Catch Pin', cat: 'structure', tech: 'very_heavy', cost: 900, mass: 0.35,
     shape: 'catchpin', h: 0.5, rw: 0.55, t: 0.5, attach: RADIAL, catchPin: true, aRad: 0.1, tolerance: 30, maxTemp: 2300,
     desc: 'A stub of solid steel that sticks out of a stage near its top. A stage with two of these and no legs is built to be caught by its pins. There is nothing to catch it yet.' },
-  { id: 'flap_fore', name: 'Wayfarer Forward Flap', cat: 'aero', tech: 'very_heavy', cost: 1800, mass: 1.0,
+  { id: 'flap_fore', name: 'Shearwater Forward Flap', cat: 'aero', tech: 'very_heavy', cost: 1800, mass: 1.0,
     joint: 2, shape: 'flap', variant: 'fore', h: 4.6, rw: 2.3, t: 0.3, attach: RADIAL, flap: { area: 8, where: 'fore' }, aRad: 0.7, tolerance: 10, maxTemp: 2300,
     desc: 'One of the ship\'s two forward flaps. Fitted and weighed; it does not steer yet.' },
-  { id: 'flap_aft', name: 'Wayfarer Aft Flap', cat: 'aero', tech: 'very_heavy', cost: 2200, mass: 1.6,
+  { id: 'flap_aft', name: 'Shearwater Aft Flap', cat: 'aero', tech: 'very_heavy', cost: 2200, mass: 1.6,
     joint: 2, shape: 'flap', variant: 'aft', h: 6.4, rw: 2.9, t: 0.3, attach: RADIAL, flap: { area: 15, where: 'aft' }, aRad: 0.9, tolerance: 10, maxTemp: 2300,
     desc: 'One of the ship\'s two aft flaps. Fitted and weighed; it does not steer yet.' },
   // ---------- Internal (not in catalog) ----------

@@ -505,9 +505,9 @@ test('balance: facility levels fit the stock designs and the early game can pay 
   assert.ok(heavy.length >= 2, 'some stock rockets are too heavy for the first pad');
   for (const cr of heavy) assert.equal(c.checkLaunch(cr, 'pad').reason, 'mass');
   c.facilities.pad = 2; c.facilities.hangar = 2;
-  // (the very heavy stack, Wayfarer, is the one design that needs the pad at its top level)
+  // (the very heavy stack, Shearwater, is the one design that needs the pad at its top level)
   const giant = crafts.filter(x => x.mass() / 1000 > FACILITIES.pad.values[1]);
-  assert.deepEqual(giant.map(x => x.name), ['Wayfarer']);
+  assert.deepEqual(giant.map(x => x.name), ['Shearwater']);
   for (const cr of crafts.filter(x => !giant.includes(x))) assert.deepEqual(c.checkLaunch(cr, cr.site === 'runway' ? 'runway' : 'pad'), { ok: true }, cr.name + ' launches after one upgrade');
   c.facilities.pad = 3; c.facilities.hangar = 3;
   for (const cr of crafts) assert.deepEqual(c.checkLaunch(cr, cr.site === 'runway' ? 'runway' : 'pad'), { ok: true }, cr.name + ' launches from the top buildings');

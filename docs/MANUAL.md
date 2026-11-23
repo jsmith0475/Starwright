@@ -47,6 +47,7 @@ The key names are for a Mac keyboard. On Windows and Linux, `Cmd` is `Ctrl`.
 | T | SAS (stability assist) on/off |
 | R | RCS thrusters on/off |
 | H / N, I / K, J / L | RCS translate forward/back, up/down, left/right |
+| = | Cluster engines: burn the next set of engines (see *Shearwater* below) |
 | G | Landing legs |
 | U | Solar panels |
 | M | Map view (click your orbit to plan a maneuver) |
@@ -214,6 +215,27 @@ when you zoom in on Verda.
 
 Landing a booster pays nothing yet. The full description
 is in [BOOSTERS.md](BOOSTERS.md).
+
+## Shearwater: methane, oxygen and 39 engines
+
+The stock rocket **Shearwater** is modelled on SpaceX's Starship at five-eighths size: a booster
+with 33 Peregrine engines and a ship with 6. Three things about it are new.
+
+- **Two gauges.** It burns methane and liquid oxygen, 3.6 kg of oxygen to each kilogram of
+  methane, and the resource panel shows the two separately. If either runs out the engines
+  stop.
+- **Engine sets.** Press **=** and the lit cluster moves to its next set: on the booster all 33,
+  the inner 13, then the centre 3; on the ship all 6, the three sea-level engines, then the three
+  vacuum engines. Fewer engines burn less and push less. The ship's vacuum three alone are its
+  most efficient setting once it is out of the air.
+- **Hot staging.** Press Space at booster burn-out and the ship lights its engines first. The
+  ring between the stages lets go 0.8 s later and stays on the booster.
+
+Launch it with the ascent assist and it reaches an 80 km orbit with about 44 % of the ship's
+propellant left. That is not enough to go to Pell and come back. The propellant depot that
+makes up the difference, the tower that catches the booster and the ship's return are not built
+yet: [SHEARWATER.md](SHEARWATER.md) has the numbers and the plan. In career mode it needs the
+launch pad at its top level (769 t).
 
 ## Targeting, rendezvous and docking
 

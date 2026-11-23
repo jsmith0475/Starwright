@@ -130,7 +130,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const hold = m => { v.ctrl.sas = true; v.ctrl.sasMode = m; };
   const noseError = d => ax.set(0, 1, 0).applyQuaternion(v.q).angleTo(d);
   const cg = () => v.baseHeight || 0;
-  const propellant = () => { let m = 0; for (const p of v.partList) m += (p.res.fuel || 0) + (p.res.ox || 0); return m; };
+  const propellant = () => { let m = 0; for (const p of v.partList) m += (p.res.fuel || 0) + (p.res.ox || 0) + (p.res.lox || 0) + (p.res.ch4 || 0); return m; };
   const wy = TAU / body.rotPeriod;
   /** Unpowered prediction from now; fills c.miss and `miss` (inertial vector from the impact point to the target, level). */
   const predict = () => {

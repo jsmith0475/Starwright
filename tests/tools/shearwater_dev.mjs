@@ -1,5 +1,5 @@
-// Development bench for the Wayfarer stack (docs/WAYFARER.md): build it, fly it to orbit headless, print the numbers.
-//   node tests/tools/wayfarer_dev.mjs [--alt=80000]
+// Development bench for the Shearwater stack (docs/SHEARWATER.md): build it, fly it to orbit headless, print the numbers.
+//   node tests/tools/shearwater_dev.mjs [--alt=80000]
 import { World } from '../../js/core/world.js';
 import { stockCrafts } from '../../js/core/craft.js';
 import { SYSTEM } from '../../js/core/bodies.js';
@@ -7,9 +7,9 @@ import * as AP from '../../js/core/autopilot.js';
 import { propIn } from '../../js/core/vessel.js';
 
 const arg = (k, d) => { const a = process.argv.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : d; };
-export function wayfarer() { const craft = stockCrafts().find(c => c.name === 'Wayfarer'); return { craft }; }
+export function shearwater() { const craft = stockCrafts().find(c => c.name === 'Shearwater'); return { craft }; }
 if (import.meta.url === 'file://' + process.argv[1]) {
-  const { craft } = wayfarer();
+  const { craft } = shearwater();
   const st = craft.stats(SYSTEM.home);
   console.log('stages', craft.stages.map(s => s.map(id => craft.parts.find(p => p.id === id).type)));
   for (const s of st) console.log(`stage ${s.stage}: dvVac ${s.dvVac.toFixed(0)} dvAtm ${s.dvAtm.toFixed(0)} twr ${s.twr.toFixed(2)} burn ${s.burnTime.toFixed(0)} s, ${(s.startMass / 1000).toFixed(1)} -> ${(s.endMass / 1000).toFixed(1)} t`);

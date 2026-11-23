@@ -1423,12 +1423,12 @@ function moonstep() {
   return c;
 }
 
-// The Wayfarer stack (docs/WAYFARER.md): a two-stage methane and oxygen rocket modelled on SpaceX's Starship. A booster
+// The Shearwater stack (docs/SHEARWATER.md): a two-stage methane and oxygen rocket modelled on SpaceX's Starship. A booster
 // with thirty-three engines, three grid fins and two catch pins; on it, through a hot-staging ring, a ship with six.
-function wayfarer() {
-  const c = new Craft('Wayfarer');
-  const [pod] = c.setRoot('pod_wayfarer');
-  const s = stackDown(c, pod, ['bay_wayfarer', 'tank_xxl_ship', 'eng_peregrine6', 'ring_hotstage', 'tank_xxl_long', 'tank_xxl_long', 'eng_peregrine33']);
+function shearwater() {
+  const c = new Craft('Shearwater');
+  const [pod] = c.setRoot('pod_shearwater');
+  const s = stackDown(c, pod, ['bay_shearwater', 'tank_xxl_ship', 'eng_peregrine6', 'ring_hotstage', 'tank_xxl_long', 'tank_xxl_long', 'eng_peregrine33']);
   const ship = s[1], top = s[4];
   const topY = top.pos.y + partDef(top.type).h / 2;
   for (const a of [0, Math.PI / 2, Math.PI]) if (c.attachRadial('fin_grid_xxl', top.id, topY - 1.6, a, 1).length !== 1) throw new Error('stock craft: grid fin');
@@ -1474,9 +1474,9 @@ const STOCK_NOTES = {
   'Whisper Probe': 'An ion probe on a two-stage launcher. Unfold the solar wings before lighting the Whisper drive.',
   'Hearthstone Core': 'A station core with a two-seat lab, Latch Rings fore and aft and its own power.',
   'Moonstep': 'A squat two-seat lander for small moons. No launcher: carry it on a Latch Ring.',
-  'Wayfarer': 'Modelled on SpaceX\'s Starship: a 33-engine booster and a 6-engine ship on methane and oxygen. It reaches orbit with a loaded cargo bay and too little left to go on to Pell.',
+  'Shearwater': 'Modelled on SpaceX\'s Starship: a 33-engine booster and a 6-engine ship on methane and oxygen. It reaches orbit with a loaded cargo bay and too little left to go on to Pell.',
 };
-const SECOND_PASS = [kiteTrainer, skimmer, trundleScout, trundleLander, colossus, farwind, whisperProbe, hearthstone, moonstep, wayfarer];
+const SECOND_PASS = [kiteTrainer, skimmer, trundleScout, trundleLander, colossus, farwind, whisperProbe, hearthstone, moonstep, shearwater];
 /** Where a stock design is meant to start: 'runway' for aircraft and rovers, else 'pad'. */
 export function stockSite(craft) {
   const defs = craft.parts.map(p => partDef(p.type));

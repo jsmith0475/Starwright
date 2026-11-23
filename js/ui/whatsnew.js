@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'shearwater-rocket', date: '2026-11-23', title: 'Shearwater: 39 engines on methane and oxygen',
+    text: 'A new stock rocket modelled on SpaceX\'s Starship at five-eighths size, with 33 engines under the booster and 6 under the ship. It burns methane and liquid oxygen from separate gauges, and = chooses which rings of engines burn. The ship lights its engines before the staging ring lets go. It reaches orbit 44% full; the propellant depot comes next.' },
   { id: 'three-piece-separation', date: '2026-11-23', title: 'Separation leaves three pieces',
     text: 'A stack separator now fires at both ends. Stage and you get three pieces: the upper stage goes on, the stage below falls away with a clean top, and half a second later the ring with its lattice is thrown clear sideways as a piece of its own. A booster that flies home no longer carries the ring down with it. Side-booster clamps work as before.' },
   { id: 'folding-legs', date: '2026-11-23', title: 'Booster legs that fold',
