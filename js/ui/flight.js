@@ -1620,7 +1620,12 @@ export function createFlightScreen(app) {
   function landingTarget() { const s = SYSTEM.sites && SYSTEM.sites.landing; return (s || SYSTEM.launchSite).dir; }
   /** A booster's return is called out step by step, whichever vessel is being watched. */
   function callouts(ctl, kind, pv) {
-    if (kind !== 'recovery' || !ctl.log) return;
+    if (!ctl.log) return;
+    if (kind === 'ascent') {                                           // (the assist is quiet, except to say why it staged early)
+      for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
+      ctl._said = ctl.log.length; return;
+    }
+    if (kind !== 'recovery') return;
     const upTo = ctl.done ? ctl.log.length - 1 : ctl.log.length;      // (the last line of a finished program is its own toast)
     for (let i = ctl._said || 0; i < upTo; i++) toast((pv ? pv.name + ': ' : 'Booster: ') + ctl.log[i].msg, 'info');
     ctl._said = Math.max(ctl._said || 0, upTo);

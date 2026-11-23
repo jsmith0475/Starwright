@@ -1293,3 +1293,17 @@ and holds rails warp off while it is in flight. `vessel.released`, `vessel.progr
 `js/ui/flight.js` a program that never warps (`PARKABLE`) stays with its vessel when the player
 switches away (`parked`, `tickParked`), and `hopVessel` (key `\`) steps through the vessels of the
 flight. The contract is [BOOSTERS.md](BOOSTERS.md).
+
+## Additions (reusable boosters, part 2: guidance)
+
+`js/core/booster.js` (pure simulation, runs in Node). `predictFall` is a point-mass fall predictor: inverse-square
+gravity, drag from `Vessel.axialDragArea` and `machDrag` in air rotating with the body, optional thrust below a height
+(the landing burn) and an optional entry burn planned from a heat-flux threshold. `boosterRecovery(world, vessel,
+{ target })` is a controller with the same shape as the other programs (`update(dt)`, `phase`, `done`, `failed`,
+`log`) and phases flip, boostback, coast, entry, landing, final. It moves only `vessel.ctrl`. `recoverableStage` and
+`returnReserve` let `ascentProgram({ recover })` stage when the propellant left equals the return's need.
+`Vessel._control` reverses control-surface deflection when the vessel flies tail first. `flight.js` starts a parked
+`boosterRecovery` on the `decouple` event for a dropped ship with a running engine and legs over the home body, and
+toasts each new line of its log (`callouts`). The landing target is `SYSTEM.home.sites.landing`.
+Tests: `tests/unit/booster_return.test.js`, `tests/verify/checks_booster.mjs` groups 9d to 9f,
+`tests/e2e/booster_return.mjs`.
