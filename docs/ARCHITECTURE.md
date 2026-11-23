@@ -1283,3 +1283,13 @@ Air ratings (`AIR_RATING`, `airRating` in `js/core/parts.js`), judged in the aer
 wings in `js/core/structure.js` (`rootSection`, the `root` argument of `jointUtilisation`); the debris
 limit in `js/core/world.js` (`MAX_DEBRIS`). A torn-off part raises the `structure` event with
 `mode: 'airflow'`. Words: `js/ui/stress.js`. The contract is [AERO_BREAKUP.md](AERO_BREAKUP.md).
+
+## Additions (reusable boosters, part 1: two vessels at once)
+
+`World.isTrackable`, `world.tracked`, `world.trackedInFlight()`, `world.release()`, `MAX_TRACKED` and
+`world.stage(vessel)` in `js/core/world.js`: a ship that can be controlled and is coming down (or is
+under thrust, or has a guidance program) keeps full physics at any distance from the active vessel,
+and holds rails warp off while it is in flight. `vessel.released`, `vessel.program`. In
+`js/ui/flight.js` a program that never warps (`PARKABLE`) stays with its vessel when the player
+switches away (`parked`, `tickParked`), and `hopVessel` (key `\`) steps through the vessels of the
+flight. The contract is [BOOSTERS.md](BOOSTERS.md).

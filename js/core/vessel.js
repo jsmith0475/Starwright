@@ -419,6 +419,8 @@ export class Vessel {
     this.ladder = null;           // EVA holding a ladder: {vesselId, partId, y} (see World.evaGrab)
     this.launchSite = null;       // 'pad' | 'runway' for a vessel put there by World.launch
     this.stranded = false;        // a contract's castaway pod
+    this.released = false;        // let go by the player: no longer kept under full physics far from the active vessel (World.release)
+    this.program = null;          // name of the guidance program flying this vessel, if one is (World.isTrackable keeps such a vessel loaded)
     this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = [];
     this._antennas = []; this._ladders = []; this._pts = []; this._ctlAuth = new Vector3();
     this._groundT = 0; this._airT = 99; this._sleepT = 0; this._touched = false; this._gnd = null; this._onWheels = false; this._rollUt = -1e9;
@@ -1212,7 +1214,10 @@ export class Vessel {
       if (p.def.command && (p.def.command !== 'crew' || p.crew.length)) hasCmd = true;
     }
     d.type = hasCmd ? 'ship' : 'debris';
-    d.name = this.name + (hasCmd ? ' probe' : ' debris');
+    // a dropped stage that can still be flown and has engines of its own is a booster; without engines, a probe
+    let hasEngine = false;
+    if (hasCmd) for (const p of d.parts.values()) if (p.def.engine) { hasEngine = true; break; }
+    d.name = this.name + (hasCmd ? (hasEngine ? ' booster' : ' probe') : ' debris');
     d.stages = this.stages.map(s => s.filter(id => d.parts.has(id)));
     for (const g in this.actionGroups) {
       const mine = this.actionGroups[g].filter(x => d.parts.has(x.part));
@@ -3176,6 +3181,7 @@ export class Vessel {
         tc: this._list.filter(p => p._tc).map(p => p.id), wet: this._list.filter(p => p._wet).map(p => p.id) },
       actionGroups: Object.keys(this.actionGroups).length ? cloneGroups(this.actionGroups) : undefined,
       ladder: this.ladder ? { ...this.ladder } : undefined, launchSite: this.launchSite || undefined, stranded: this.stranded || undefined,
+      released: this.released || undefined, program: this.program || undefined,
       onRails: this.onRails, orbit: this.onRails && this.orbit ? this.orbit.toJSON() : null,
       ctrl: { ...this.ctrl }, sasTarget: this.sasTarget ? this.sasTarget.toArray() : null, sasDir: j3(this.sasDir),
       sasCoast: this._sasCoast, targetId: this.targetId,
@@ -3222,6 +3228,7 @@ export class Vessel {
     }
     v.actionGroups = cloneGroups(o.actionGroups);
     v.ladder = o.ladder ? { ...o.ladder } : null; v.launchSite = o.launchSite || null; v.stranded = !!o.stranded;
+    v.released = !!o.released; v.program = o.program || null;
     v.ctrl = { ...defaultCtrl(), ...o.ctrl };
     v.sasTarget = o.sasTarget ? new Quaternion().fromArray(o.sasTarget) : null;
     if (o.sasDir) v.sasDir.copy(v3(o.sasDir));

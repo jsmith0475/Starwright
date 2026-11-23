@@ -150,6 +150,12 @@ switch between them. Write boostback, entry and landing guidance that works in a
 recovery credit in career mode for stages landed intact. Item 1 makes the touchdown worth
 watching.
 
+**Where it stands.** The first of three parts is built: a dropped stage with a guidance ring
+keeps flying under full physics at any distance, one key hops between booster and upper stage,
+and the ascent assist takes the upper stage to orbit while you fly the booster. Still to come:
+guidance that flies the return and lands it, a landing zone and a barge at sea, a stock reusable
+rocket, and recovery pay. [What is built, what was measured and what was checked.](BOOSTERS.md)
+
 ## 6. Deeper aerodynamics and re-entry
 
 **What it is.** Lift on capsules and bodies, so you can steer a re-entry by rolling. A speed of

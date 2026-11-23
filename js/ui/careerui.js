@@ -90,7 +90,7 @@ export const CONTROL_GROUPS = [
   ]],
   ['Navigation and view', [
     ['Orbital map', K('M')], ['Missions: program and contracts', K('O')], ['Camera: orbital / chase / free / locked', K('V')], ['Speed read-out: surface / orbit / target', K('C')],
-    ['Next target / clear target', K('Y', 'or', 'Shift', 'Y')], ['Switch to a nearby vessel', K('[', ']')],
+    ['Next target / clear target', K('Y', 'or', 'Shift', 'Y')], ['Switch to a nearby vessel', K('[', ']')], ['Hop between booster and upper stage', K('\\')],
     ['Hide the instruments', K('F2')], ['Save a screenshot', K('F1')], ['Pause menu (revert, recover, Flight Center)', K('Esc')],
   ]],
   ['Time', [

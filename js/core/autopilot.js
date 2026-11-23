@@ -37,7 +37,7 @@ function mode(vessel, m) { vessel.ctrl.sas = true; vessel.ctrl.sasMode = m; }
 
 /** Fire the next stage when the burning one is spent. Returns true if it staged. */
 export function autoStage(world, vessel, state) {
-  if (world.active !== vessel || !vessel.hasEngineStagesLeft()) return false;
+  if (!vessel.hasEngineStagesLeft()) return false;
   if (state.lastStage !== undefined && world.ut - state.lastStage < 0.6) return false;
   let go = false;
   if (vessel.enginePower().thrust <= 0) go = true;
@@ -56,7 +56,7 @@ export function autoStage(world, vessel, state) {
   }
   if (!go) return false;
   state.lastStage = world.ut;
-  world.stage();
+  world.stage(vessel);
   return true;
 }
 
@@ -83,7 +83,7 @@ export function stagedBurnTime(vessel, dv) {
  * turnShape (exponent), finalPitch (deg above the horizon at turnEnd), maxG, useWarp.
  */
 export function ascentProgram(world, opts = {}) {
-  const v = world.active;
+  const v = opts.vessel || world.active;
   const body = v.body;
   const atmoH = body.atmo ? body.atmo.height : 0;
   const o = {
@@ -99,7 +99,8 @@ export function ascentProgram(world, opts = {}) {
 
   c.update = () => {
     if (c.done) return;
-    if (v.dead || world.active !== v) return c.finish(false, 'vessel lost');
+    // (the program flies its own vessel whether or not it is the one being watched: see World.isTrackable)
+    if (v.dead || !world.vessels.includes(v)) return c.finish(false, 'vessel lost');
     if (dv0 === null) dv0 = v.deltaV;
     const ut = world.ut;
     up.copy(v.pos).normalize();
@@ -112,7 +113,7 @@ export function ascentProgram(world, opts = {}) {
         point(v, up);
         // a lander standing on an engine that is already lit (it landed on it) only needs the throttle: firing the
         // next stage would throw that engine away
-        if (!v.engines.some(e => e.part.ignited && !e.part.flameout && e.part.def.engine.type !== 'solid')) world.stage();
+        if (!v.engines.some(e => e.part.ignited && !e.part.flameout && e.part.def.engine.type !== 'solid')) world.stage(v);
         st.lastStage = ut;
         c.phase = 'ascent';
         c.note('liftoff');

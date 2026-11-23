@@ -59,6 +59,7 @@ The key names are for a Mac keyboard. On Windows and Linux, `Cmd` is `Ctrl`.
 | Y | Target the nearest vessel; press again for the next one |
 | Shift+Y | Clear the target |
 | [ / ] | Switch to a nearby vessel |
+| \\ | Hop between a booster and its upper stage, at any distance (see *Boosters that fly on* below) |
 | F5 or Shift+K | Quicksave |
 | F9 or Shift+L | Quickload |
 | Esc | Pause menu (revert, recover, return to Flight Center) |
@@ -168,6 +169,21 @@ arriving sideways, goes over. A wide stance and a low centre of mass stand steep
 Once you are standing on the ground with the throttle closed, the attitude hold (T) lets go so
 the craft can settle onto all its feet. Your own stick input still works. The full description
 of the model is in [LANDING_LEGS.md](LANDING_LEGS.md).
+
+## Boosters that fly on
+
+A first stage with a guidance ring on it (any probe core, or a Beacon or Keystone ring, placed
+below the separator) is not thrown away when you stage. It becomes a **booster**: a ship of its
+own that keeps flying under full physics however far it gets from the upper stage.
+
+- Press **\\** to hop to the booster, and **\\** again to hop back. **[** and **]** reach it too.
+- If the ascent assist is flying the upper stage, it carries on to orbit while you fly the
+  booster, and tells you when it gets there.
+- Fast time warp waits while the other vessel is still in flight. The message names it.
+- A stage without a guidance ring is debris, as before.
+
+Nothing lands the booster for you yet: that is the next part of the work. The full description
+is in [BOOSTERS.md](BOOSTERS.md).
 
 ## Targeting, rendezvous and docking
 

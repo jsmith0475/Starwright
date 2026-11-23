@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'booster-flies-on', date: '2026-11-22', title: 'A dropped booster keeps flying',
+    text: 'Put a guidance ring on your first stage and it is no longer thrown away at separation: it flies on under full physics however far away it gets. Press \\ to hop between the booster and the upper stage. The ascent assist keeps flying the upper stage to orbit while you fly the booster down. Landing guidance comes next.' },
   { id: 'menu-groups', date: '2026-11-22', title: 'A tidier front menu',
     text: 'The front menu is sorted into four groups: Play, Learn and tour, Options and About. Each entry has its own small picture, the arrow keys walk the list, and deleting a saved game is now the small bin beside Continue.' },
   { id: 'worlds-1', date: '2026-11-22', title: 'Worlds with ground of their own',
