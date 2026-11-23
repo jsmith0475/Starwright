@@ -20,7 +20,7 @@ test('C3: the predictor agrees with the flight: impact point, time, speed and pe
   v.ctrl.sas = true; v.ctrl.sasMode = 'srfRetrograde';
   for (let i = 0; i < 1500; i++) w.step(0.02);                     // let it settle engine first
   const t0 = w.ut, start = home.inertialToSurfaceDir(v.pos.clone(), w.ut);
-  const first = predictFall(home, v.pos, v.vel, v.mass, w.ut, { area: v.axialDragArea(true), floor: v.baseHeight });
+  const first = predictFall(home, v.pos, v.vel, v.mass, w.ut, { drag: v.axialDragTable(true), floor: v.baseHeight });
   let low = null, maxQ = 0, worstAngle = 0;
   const nose = new Vector3(), wind = new Vector3();
   while (!v.dead && !v.landed && w.ut - t0 < 900) {
@@ -28,7 +28,7 @@ test('C3: the predictor agrees with the flight: impact point, time, speed and pe
     if (v.dead) break;
     maxQ = Math.max(maxQ, v.dynamicPressure || 0);
     if ((v.dynamicPressure || 0) > 2000) worstAngle = Math.max(worstAngle, nose.set(0, 1, 0).applyQuaternion(v.q).angleTo(wind.copy(v.surfaceVel).negate()));
-    if (!low && v.altitude < 5000) low = { ut: w.ut, pr: predictFall(home, v.pos, v.vel, v.mass, w.ut, { area: v.axialDragArea(true), floor: v.baseHeight }) };
+    if (!low && v.altitude < 5000) low = { ut: w.ut, pr: predictFall(home, v.pos, v.vel, v.mass, w.ut, { drag: v.axialDragTable(true), floor: v.baseHeight }) };
   }
   const end = home.inertialToSurfaceDir(v.pos.clone(), w.ut), flown = groundDistance(home, start, end);
   const miss = groundDistance(home, first.dir, end);
@@ -75,7 +75,7 @@ test('C7: with too little propellant it says so, keeps the landing burn, and com
 test('C6: handed the controls part of the way down, the program picks the flight up from there', () => {
   const { w, v } = dropped({ alt: 12000, speed: 260, pitch: -80, east: 300, fuel: 0.2 });
   // a target 150 m from where it would come down by itself: inside what the fins can still do from here
-  const free = predictFall(home, v.pos, v.vel, v.mass, w.ut, { area: v.axialDragArea(true), floor: v.baseHeight });
+  const free = predictFall(home, v.pos, v.vel, v.mass, w.ut, { drag: v.axialDragTable(true), floor: v.baseHeight });
   const target = free.dir.clone().addScaledVector(new Vector3(0, 1, 0), 150 / home.radius).normalize();
   const c = boosterRecovery(w, v, { target });
   for (let i = 0; i < 20000 && !c.done; i++) { c.update(0.02); w.step(0.02); if (v.dead) { c.update(0.02); break; } }

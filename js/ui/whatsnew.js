@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'shape-at-speed', date: '2026-11-23', title: 'Shape matters above the speed of sound',
+    text: 'Above Mach 1.5 the air now presses on the real shape of every part. A pointed rocket has less drag at speed, and a blunt capsule has more and slows higher up. A capsule held at an angle lifts, a stage behind a wide heat shield is sheltered, and a long rocket coasting fast should keep its nose into the wind. Below Mach 0.7 nothing has changed. The mathematics is in the science reference, chapter 10.' },
   { id: 'true-speed-of-sound', date: '2026-11-23', title: 'A true speed of sound on every world',
     text: 'The game now flies on a true Mach number. Each world has its own gas and its own temperature with height, so sound is slower in cold thin air: 303 m/s on Verda\'s ground, 262 m/s at 10 km. Rockets meet the sound barrier a little sooner and a little lower than before. The top of every atmosphere now fades out smoothly in place of a hard edge. This is the first step of the re-entry work.' },
   { id: 'three-piece-separation', date: '2026-11-23', title: 'Separation leaves three pieces',
