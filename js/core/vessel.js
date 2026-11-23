@@ -6,7 +6,7 @@
 // in LOCAL axes. A part's world position is  pos + q·(part.pos − com).
 // Torque command axes (local): x = pitch, y = roll, z = −yaw.
 import { Vector3, Quaternion } from '../lib/three.module.min.js';
-import { partDef, currentPartId, engineThrust, engineIsp, G0, airRating } from './parts.js';
+import { partDef, currentPartId, engineThrust, engineIsp, engineNow, PROP_MIX, G0, airRating } from './parts.js';
 import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
 import { maneuverBasis } from './trajectory.js';
@@ -21,6 +21,7 @@ export const TUNING = {
   DT_COAST: 0.1,             // sub-step while coasting in vacuum under physics warp (s)
   DECOUPLE_IMPULSE: 250,     // N·s of separation impulse per unit of def.decoupler.force
   RING_BORE: 0.72,           // the hole through a separator ring, as a fraction of its radius
+  HOT_STAGE_DELAY: 0.8,      // s a hot-staging ring holds on after the stage above has lit its engines through its vents
   RING_DELAY: 0.5,           // s between a stack separator's two planes: the ring leaves the dropped stage this long after staging
   RING_KICK: 20, RING_LIFT: 1, // m/s the ring is thrown sideways, and off the end of the stage, relative to the two together
   HEAT_FLUX_K: 1.83e-4,      // Sutton-Graves-like: flux = K·sqrt(rho)·v³  (W/m²)
@@ -146,11 +147,29 @@ const j3 = v => ({ x: v.x, y: v.y, z: v.z });
 const defaultCtrl = () => ({ pitch: 0, yaw: 0, roll: 0, throttle: 0, tx: 0, ty: 0, tz: 0, sas: false, sasMode: 'hold', rcs: false,
   brake: false, drive: 0, steer: 0, lights: false });
 
-/** Propellant resource an engine burns: 'solid' | 'xenon' | 'fuel'. */
+/** Propellant an engine burns: 'solid' | 'xenon' | 'fuel', or a named mix of two liquids ('methalox': PROP_MIX). */
 export function engineProp(def) {
   const t = def.engine && def.engine.type;
+  if (def.engine && def.engine.prop) return def.engine.prop;
   return t === 'solid' ? 'solid' : t === 'ion' ? 'xenon' : 'fuel';
 }
+/** Kilograms of propellant `prop` a part (or a part definition's `res`) can give. For a mix that is what its two
+ *  liquids can make together in the mix's proportion: the scarcer one sets it, and the rest of the other stays behind. */
+export function propIn(res, prop) {
+  const mix = PROP_MIX[prop];
+  if (!mix) return res[prop] || 0;
+  let a = Infinity;
+  for (const k in mix) { const x = (res[k] || 0) / mix[k]; if (x < a) a = x; }
+  return a > 1e-9 ? a : 0;
+}
+/** Take `kg` of propellant `prop` out of `res` (a mix leaves in its proportion). */
+export function propTake(res, prop, kg) {
+  const mix = PROP_MIX[prop];
+  if (!mix) { res[prop] = Math.max(0, (res[prop] || 0) - kg); return; }
+  for (const k in mix) res[k] = Math.max(0, (res[k] || 0) - kg * mix[k]);
+}
+/** Empty `res` of propellant `prop` as far as an engine can: a mix stops at the first liquid to run out. */
+function propDrain(res, prop) { if (PROP_MIX[prop]) propTake(res, prop, propIn(res, prop)); else res[prop] = 0; }
 /** Does this body have an atmosphere jets can breathe? */
 export function hasOxygen(body) { return !!(body && body.atmo && body.atmo.oxygen); }
 /**
@@ -306,13 +325,14 @@ const ACTION_LABELS = {
   toggleEngine: 'Toggle engine', activateEngine: 'Start engine', shutdownEngine: 'Shut down engine', deployChute: 'Deploy parachute',
   cutChute: 'Cut parachute', decouple: 'Decouple', toggleLegs: 'Toggle leg', toggleGear: 'Toggle landing gear', toggleSolar: 'Toggle panel',
   toggleLight: 'Toggle light', toggleAirbrake: 'Toggle air brake', runExperiment: 'Run experiment', undock: 'Undock',
+  engineMode: 'Next engine set',
 };
 /** Actions a part of this definition offers to action groups: [{id, label}] (empty for inert parts). */
 export function partActions(def) {
   const out = [];
   if (!def) return out;
   const add = id => out.push({ id, label: ACTION_LABELS[id] });
-  if (def.engine) { add('toggleEngine'); add('activateEngine'); add('shutdownEngine'); }
+  if (def.engine) { add('toggleEngine'); add('activateEngine'); add('shutdownEngine'); if (def.engine.modes) add('engineMode'); }
   if (def.chute) { add('deployChute'); add('cutChute'); }
   if (def.decoupler) add('decouple');
   if (def.legs) add('toggleLegs');
@@ -339,7 +359,7 @@ function makePart(id, type, pos, rot, sym) {
   const def = partDef(type);
   return {
     id, type, def, pos: new Vector3(pos.x, pos.y, pos.z), rot: rot || 0, links: [], res: { ...def.res },
-    ignited: false, flameout: false, deployed: def.chute ? 'stowed' : (def.wheel ? true : false), deployT: 0,
+    ignited: false, flameout: false, mode: 0, deployed: def.chute ? 'stowed' : (def.wheel ? true : false), deployT: 0,
     temp: TUNING.AMBIENT_T, crew: [], sym: sym || 0, destroyed: false, thrust: 0, level: 0, mass: 0,
     pitch: 0, roll: 0,    // optional tilt of a surface part (craft.js "part orientation"): Ry(rot)·Rx(flip)·Rz(pitch)·Rx(roll)
     flip: false,          // true: the part is upside down in craft coords (orientation = yaw(rot) · flipX); set by docking
@@ -434,6 +454,7 @@ export class Vessel {
     this.launchSite = null;       // 'pad' | 'runway' for a vessel put there by World.launch
     this.stranded = false;        // a contract's castaway pod
     this.released = false;        // let go by the player: no longer kept under full physics far from the active vessel (World.release)
+    this.hotDue = null;           // {id, t}: a hot-staging ring that has been told to let go, and the seconds until it does
     this.ringDue = null;          // {id, t}: a separator ring this dropped stage still carries, and the seconds until its second plane fires
     this.program = null;          // name of the guidance program flying this vessel, if one is (World.isTrackable keeps such a vessel loaded)
     this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = [];
@@ -680,7 +701,7 @@ export class Vessel {
         const seen = new Set([p.id]), queue = [p];
         for (let i = 0; i < queue.length; i++) {
           const cur = queue[i];
-          if (cur.def.res[prop]) tanks.push(cur);
+          if (propIn(cur.def.res, prop) > 0) tanks.push(cur);
           for (const id of cur.links) {
             if (seen.has(id)) continue;
             const n = parts.get(id);
@@ -990,7 +1011,7 @@ export class Vessel {
     if (!(moved > 0)) return 0;
     a.res[resource] -= moved; b.res[resource] += moved;
     if (resource !== 'elec') this._updateMass(true);
-    for (const e of this._engines) if (e.part.flameout && e.part.def.engine.type !== 'solid' && e.tanks.some(t => t.res[e.prop] > 0)) e.part.flameout = false;
+    for (const e of this._engines) if (e.part.flameout && e.part.def.engine.type !== 'solid' && e.tanks.some(t => propIn(t.res, e.prop) > 0)) e.part.flameout = false;
     this.updateResources();
     this.estimateDeltaV();
     return moved;
@@ -1185,7 +1206,12 @@ export class Vessel {
     events.push({ type: 'stage', vessel: this, stage: si });
     for (const id of ids) {
       const p = this.parts.get(id);
-      if (p && p.def.decoupler) this._decouple(p, events);
+      if (!p || !p.def.decoupler) continue;
+      // hot staging: the engines in this stage light now, and the ring lets go a moment later (see simulate)
+      if (p.def.decoupler.hot && !this.landed && ids.some(x => { const e = this.parts.get(x); return e && e.def.engine; })) {
+        this.hotDue = { id: p.id, t: TUNING.HOT_STAGE_DELAY };
+        events.push({ type: 'hotstage', vessel: this, part: p });
+      } else this._decouple(p, events);
     }
     for (const id of ids) {
       const p = this.parts.get(id);
@@ -1490,6 +1516,9 @@ export class Vessel {
         if (p.ignited && p.flameout && d.engine.type !== 'solid') p.flameout = false;
         this.estimateDeltaV();
         return true;
+      case 'engineMode':
+        if (!d.engine || !d.engine.modes) return false;
+        return this.setEngineMode(partId, ((p.mode || 0) + 1) % d.engine.modes.length, ev);
       case 'deployChute':
         if (!d.chute || p.deployed !== 'stowed') return false;
         p.deployed = 'armed'; ev.push({ type: 'chute', vessel: this, part: p, state: 'armed' });
@@ -1628,6 +1657,15 @@ export class Vessel {
     for (let i = 0; i <= 120; i++) t[i] = this.axialDragAt(i / 10, tailFirst);
     return t;
   }
+  /** Choose which rings of a cluster engine burn (an index into its def.engine.modes; 0 is all of them). */
+  setEngineMode(partId, mode, ev = []) {
+    const p = this.parts.get(partId), en = p && p.def.engine;
+    if (!en || !en.modes || !en.modes[mode] || (p.mode || 0) === mode) return false;
+    p.mode = mode;
+    ev.push({ type: 'engineMode', vessel: this, part: p, mode, name: en.modes[mode].name });
+    this.estimateDeltaV();
+    return true;
+  }
   /** Would the engines push right now (ignited, fed, and throttled up)? */
   wouldThrust() {
     for (const e of this._engines) {
@@ -1635,7 +1673,7 @@ export class Vessel {
       if (!p.ignited || p.flameout) continue;
       if (p.def.engine.type === 'solid') { if (p.res.solid > 0) return true; continue; }
       if (p.def.engine.type === 'jet' && !(p._jf > 0) && p._jf !== undefined) continue;
-      if (this.ctrl.throttle > 0) for (const t of e.tanks) if (t.res[e.prop] > 0) return true;
+      if (this.ctrl.throttle > 0) for (const t of e.tanks) if (propIn(t.res, e.prop) > 0) return true;
     }
     return false;
   }
@@ -1643,9 +1681,9 @@ export class Vessel {
   enginePower() {
     let F = 0, mdot = 0;
     for (const e of this._engines) {
-      const p = e.part, en = p.def.engine;
+      const p = e.part, en = engineNow(p.def, p.mode);
       if (!p.ignited) continue;
-      const fed = en.type === 'solid' ? p.res.solid > 0 : e.tanks.some(t => t.res[e.prop] > 0);
+      const fed = en.type === 'solid' ? p.res.solid > 0 : e.tanks.some(t => propIn(t.res, e.prop) > 0);
       if (!fed) continue;
       if (en.type === 'jet') {       // a jet only counts where it can breathe
         const jf = p._jf === undefined ? jetFactor(p.def, this.body, this.altitude || 0, this.mach || 0) : p._jf;
@@ -1816,8 +1854,8 @@ export class Vessel {
       const p = e.part;
       p.thrust = 0; p.level = 0;
       if (!p.ignited) continue;
-      const d = p.def, en = d.engine, prop = e.prop;
-      let full = engineThrust(d, pAtm);
+      const d = p.def, en = engineNow(d, p.mode), prop = e.prop;
+      let full = engineThrust(d, pAtm, p.mode);
       let mdot = en.thrust * 1000 / (en.ispVac * G0);
       let level = 0;
       if (en.type === 'solid') {
@@ -1840,7 +1878,7 @@ export class Vessel {
           }
         }
         let avail = 0;
-        for (const t of e.tanks) avail += t.res[prop];
+        for (const t of e.tanks) avail += propIn(t.res, prop);
         if (avail <= 0) {
           if (throttle > 0 && !p.flameout) { p.flameout = true; ev.push({ type: 'flameout', vessel: this, part: p }); }
           continue;
@@ -1860,19 +1898,19 @@ export class Vessel {
         let got;
         if (avail <= need) {
           got = avail;
-          for (const t of e.tanks) t.res[prop] = 0;
+          for (const t of e.tanks) propDrain(t.res, prop);
           p.flameout = true; ev.push({ type: 'flameout', vessel: this, part: p });
         } else {
           got = need;
           let rem = need, n = 0;
-          for (const t of e.tanks) if (t.res[prop] > 0) n++;
+          for (const t of e.tanks) if (propIn(t.res, prop) > 0) n++;
           for (let pass = 0; pass < 4 && rem > 1e-12 && n > 0; pass++) {
             const share = rem / n;
             n = 0;
             for (const t of e.tanks) {
-              const f = t.res[prop];
+              const f = propIn(t.res, prop);
               if (f <= 0) continue;
-              if (f <= share) { rem -= f; t.res[prop] = 0; } else { rem -= share; t.res[prop] = f - share; n++; }
+              if (f <= share) { rem -= f; propDrain(t.res, prop); } else { rem -= share; propTake(t.res, prop, share); n++; }
             }
           }
         }
@@ -2041,6 +2079,17 @@ export class Vessel {
     const st = this.structure;
     if (st) { if (st.pending && !this.dead) this._breakJoints(ev); else if (this.landed) st.rest(dt); }
     if (this.ringDue && (this.ringDue.t -= dt) <= 0) this._shedRing(ev);
+    if (this.hotDue && (this.hotDue.t -= dt) <= 0) this.finishHotStage(ev);
+  }
+
+  /** A hot-staging ring that is waiting out its delay lets go now. → true if one did. */
+  finishHotStage(ev = []) {
+    if (!this.hotDue) return false;
+    const ring = this.parts.get(this.hotDue.id);
+    this.hotDue = null;
+    if (!ring || this.dead) return false;
+    this._decouple(ring, ev); this.estimateDeltaV();
+    return true;
   }
 
   _stepFlight(dt, ut, ev) {
@@ -3247,11 +3296,12 @@ export class Vessel {
     for (const p of this._list) {
       mass += p.mass || (p.def.mass * 1000);
       if (p.res.fuel) fuel.set(p.id, p.res.fuel);
+      if (p.res.lox && p.res.ch4) { const mx = propIn(p.res, 'methalox'); if (mx > 0) fuel.set(p.id + 0.5, mx); }   // key id + ½: the two liquids as one
       if (p.res.xenon) xen.set(-p.id, p.res.xenon);
       if (p.res.solid) solid.set(p.id, p.res.solid);
       if (p.ignited) ignited.add(p.id);
     }
-    const partMass = id => { const p = parts.get(id); return p.mass - (p.res.fuel || 0) - (p.res.solid || 0) - (p.res.xenon || 0) + (fuel.get(id) || 0) + (solid.get(id) || 0) + (xen.get(-id) || 0); };
+    const partMass = id => { const p = parts.get(id); const mx = fuel.get(id + 0.5); return p.mass - (p.res.fuel || 0) - (p.res.solid || 0) - (p.res.xenon || 0) + (fuel.get(id) || 0) + (solid.get(id) || 0) + (xen.get(-id) || 0) + (mx !== undefined ? mx - propIn(p.res, 'methalox') : 0); };
     const comp = (start, blocked, within) => {
       const seen = new Set();
       if (!within.has(start) || blocked.has(start)) return seen;
@@ -3274,7 +3324,7 @@ export class Vessel {
       for (const e of this._engines) {
         const p = e.part;
         if (!ignited.has(p.id) || !alive.has(p.id)) continue;
-        const en = p.def.engine, mdot = en.thrust * 1000 / (en.ispVac * G0);
+        const en = engineNow(p.def, p.mode), mdot = en.thrust * 1000 / (en.ispVac * G0);
         if (en.type === 'jet') continue;      // air-breathers do not count towards vacuum delta-v
         if (en.type === 'solid') { if ((solid.get(p.id) || 0) > 1e-9) list.push({ id: p.id, F: en.thrust * 1000, mdot, tanks: null }); }
         else {
@@ -3282,6 +3332,7 @@ export class Vessel {
           const tanks = [];
           // tank keys: +id for fuel, −id for xenon (both live in the `fuel` bookkeeping below)
           if (e.prop === 'xenon') { for (const id of sec) if ((xen.get(-id) || 0) > 1e-9) tanks.push(-id); }
+          else if (e.prop === 'methalox') { for (const id of sec) if ((fuel.get(id + 0.5) || 0) > 1e-9) tanks.push(id + 0.5); }
           else for (const id of sec) if ((fuel.get(id) || 0) > 1e-9) tanks.push(id);
           if (tanks.length) list.push({ id: p.id, F: en.thrust * 1000, mdot, tanks });
         }
@@ -3342,7 +3393,7 @@ export class Vessel {
     for (const p of this.parts.values()) {
       parts.push({
         id: p.id, type: p.type, pos: j3(p.pos), rot: p.rot, links: p.links.slice(), res: { ...p.res },
-        ignited: p.ignited, flameout: p.flameout, deployed: p.deployed, deployT: p.deployT, comp: p._comp > 0.001 ? +p._comp.toFixed(4) : undefined, temp: p.temp,
+        ignited: p.ignited, flameout: p.flameout, mode: p.mode || undefined, deployed: p.deployed, deployT: p.deployT, comp: p._comp > 0.001 ? +p._comp.toFixed(4) : undefined, temp: p.temp,
         crew: p.crew.slice(), sym: p.sym,
         flip: p.flip || undefined, pitch: p.pitch || undefined, roll: p.roll || undefined, dockedTo: p.dockedTo ?? undefined, dockName: p.dockName, dockType: p.dockType,
         truss: p.truss && p.truss.length ? p.truss.map(t => ({ ...t })) : undefined,
@@ -3363,6 +3414,7 @@ export class Vessel {
       ladder: this.ladder ? { ...this.ladder } : undefined, launchSite: this.launchSite || undefined, stranded: this.stranded || undefined,
       released: this.released || undefined, program: this.program || undefined,
       ringDue: this.ringDue ? { ...this.ringDue } : undefined,
+      hotDue: this.hotDue ? { ...this.hotDue } : undefined,
       onRails: this.onRails, orbit: this.onRails && this.orbit ? this.orbit.toJSON() : null,
       ctrl: { ...this.ctrl }, sasTarget: this.sasTarget ? this.sasTarget.toArray() : null, sasDir: j3(this.sasDir),
       sasCoast: this._sasCoast, targetId: this.targetId,
@@ -3380,7 +3432,7 @@ export class Vessel {
     for (const j of o.parts) {
       const p = makePart(j.id, currentPartId(j.type), j.pos, j.rot, j.sym);
       p.links = j.links.slice(); p.res = { ...j.res };
-      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.deployed = j.deployed; p.deployT = j.deployT || 0; if (j.comp > 0) p._comp = j.comp;
+      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.mode = j.mode | 0; p.deployed = j.deployed; p.deployT = j.deployT || 0; if (j.comp > 0) p._comp = j.comp;
       p.temp = j.temp ?? TUNING.AMBIENT_T; p.crew = (j.crew || []).slice();
       p.flip = !!j.flip; p.pitch = +j.pitch || 0; p.roll = +j.roll || 0; p.dockedTo = j.dockedTo ?? null;
       if (j.dockName !== undefined) p.dockName = j.dockName;
@@ -3409,6 +3461,7 @@ export class Vessel {
     }
     v.actionGroups = cloneGroups(o.actionGroups);
     if (o.ringDue && o.ringDue.id !== undefined) v.ringDue = { id: o.ringDue.id, t: +o.ringDue.t || 0 };
+    if (o.hotDue && o.hotDue.id !== undefined) v.hotDue = { id: o.hotDue.id, t: +o.hotDue.t || 0 };
     v.ladder = o.ladder ? { ...o.ladder } : null; v.launchSite = o.launchSite || null; v.stranded = !!o.stranded;
     v.released = !!o.released; v.program = o.program || null;
     v.ctrl = { ...defaultCtrl(), ...o.ctrl };

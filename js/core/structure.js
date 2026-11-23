@@ -129,7 +129,7 @@ export function jointUtilisation(F, M, n, r, capT, capC, capS, root = null) {
 
 function strengthFactor(def) {
   const f = STRUCT.FACTOR[def.shape];
-  return f === undefined ? 1 : f;
+  return (f === undefined ? 1 : f) * (def.joint || 1);      // def.joint: a part built with heavier end rings (parts.js)
 }
 function mountFactor(a, b) {
   // `m` is the mounted part, as in jointGeometry. A host's own factor counts when it is a fitting (a booster on its
@@ -137,7 +137,7 @@ function mountFactor(a, b) {
   const m = isStack(a) ? b : isStack(b) ? a : b, host = m === b ? a : b;
   const fm = isStack(m) ? undefined : STRUCT.MOUNT_FACTOR[m.def.shape];
   const fh = isStack(host) || host.def.fin || host.def.wing ? undefined : STRUCT.MOUNT_FACTOR[host.def.shape];
-  const f = fm === undefined ? 1 : fm;
+  const f = (fm === undefined ? 1 : fm) * (isStack(m) ? 1 : m.def.joint || 1);
   return fh === undefined ? f : Math.max(f, fh);
 }
 const isStack = p => !!(p.def.attach && p.def.attach.stack);

@@ -21,7 +21,7 @@ import { ROLES, roleOf, roleName, iconElement, ROLE_COLORS } from './map/glyphs.
 
 const TYPE_NAME = { ship: 'Vessel', debris: 'Debris', eva: 'Pip on EVA', flag: 'Flag' };
 const FILTERS = ['ship', 'probe', 'lander', 'rover', 'plane', 'station', 'base', 'relay', 'eva', 'flag', 'debris'];
-const RES = [['fuel', 'Fuel', '#ffb347', 'kg'], ['solid', 'Solid', '#e6c88a', 'kg'], ['mono', 'Mono', '#c9f27a', 'kg'], ['xenon', 'Xenon', '#b79cff', 'kg'], ['elec', 'Charge', '#6cc4ff', 'EC'], ['ablator', 'Ablator', '#c58a5c', 'kg']];
+const RES = [['fuel', 'Fuel', '#ffb347', 'kg'], ['lox', 'Oxygen', '#9fd8ff', 'kg'], ['ch4', 'Methane', '#c9a6ff', 'kg'], ['solid', 'Solid', '#e6c88a', 'kg'], ['mono', 'Mono', '#c9f27a', 'kg'], ['xenon', 'Xenon', '#b79cff', 'kg'], ['elec', 'Charge', '#6cc4ff', 'EC'], ['ablator', 'Ablator', '#c58a5c', 'kg']];
 const NODE_LEAD = 60;                // s: warp stops this long before a planned burn
 const DEG = Math.PI / 180;
 

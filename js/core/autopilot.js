@@ -127,7 +127,8 @@ export function ascentProgram(world, opts = {}) {
           if (need && need.have <= need.kg) {
             st.recovered = true; st.lastStage = ut;
             world.stage(v);
-            c.note(`staged with ${need.have.toFixed(0)} kg left in the booster to fly back`);
+            // (a stage with catch pins and no legs has nowhere to come down yet: say so, do not promise a return)
+            c.note(need.stage.legs ? `staged with ${need.have.toFixed(0)} kg left in the booster to fly back` : `staged with ${need.have.toFixed(0)} kg left in the booster for its return. There is no tower to catch it yet`);
           }
         }
         if (autoStage(world, v, st)) c.note('staged → stage ' + v.stageIndex);
@@ -135,6 +136,16 @@ export function ascentProgram(world, opts = {}) {
         if (alt > o.turnStart) {
           const f = clamp((alt - o.turnStart) / (o.turnEnd - o.turnStart), 0, 1);
           el = 90 - (90 - o.finalPitch) * Math.pow(f, o.turnShape);
+        }
+        // A stage that cannot hold its own weight (an upper stage with thrust below its weight, as on the Shearwater)
+        // sinks if it flies the turn the altitude asks for: it keeps its nose up enough to hold a climb rate until
+        // its sideways speed carries it. Stages that can lift themselves are not touched.
+        const accNow = v.maxThrust / v.mass, rNow = v.pos.length(), gNow = body.gm / (rNow * rNow);
+        if (alt > o.turnStart && accNow > 0 && accNow < gNow) {
+          const vsN = v.vel.dot(up), vh2 = v.vel.lengthSq() - vsN * vsN;
+          const want = clamp((o.targetAlt - alt) / 90, 0, 400);
+          const sn = clamp((gNow - vh2 / rNow - (vsN - want) / 10) / accNow, 0, 0.94);
+          el = Math.max(el, Math.asin(sn) / DEG);
         }
         const h = o.heading * DEG;
         hd.copy(east).multiplyScalar(Math.sin(h)).addScaledVector(north, Math.cos(h));

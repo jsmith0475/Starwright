@@ -22,6 +22,7 @@
 import { el, clear, fmt, uiScale, tooltip } from './dom.js';
 import { stressLevel, stressPercent, describeJoint } from './stress.js';
 import { SYSTEM } from '../core/bodies.js';
+import { propIn } from '../core/vessel.js';
 import { EXPERIMENTS, SITUATION_NAMES, situationOf, programProgress } from '../core/career.js';
 import { objectiveProgress, VERDA_DAY } from '../core/contracts.js';
 import { renderPartThumbnail } from '../render/partmesh.js';
@@ -32,7 +33,7 @@ const SIT_TEXT = {
   orbit: 'Orbiting', escape: 'Escaping',
 };
 const RES = [
-  ['fuel', 'Propellant', 'kg', ''], ['solid', 'Solid fuel', 'kg', 'amber'], ['mono', 'Monoprop', 'kg', ''], ['xenon', 'Xenon', 'kg', 'violet'],
+  ['fuel', 'Propellant', 'kg', ''], ['lox', 'Oxygen', 'kg', ''], ['ch4', 'Methane', 'kg', 'violet'], ['solid', 'Solid fuel', 'kg', 'amber'], ['mono', 'Monoprop', 'kg', ''], ['xenon', 'Xenon', 'kg', 'violet'],
   ['elec', 'Charge', 'EC', 'green'], ['ablator', 'Ablator', 'kg', 'amber'], ['evafuel', 'Jetpack', 'kg', ''],
 ];
 export const SAS_BUTTONS = [
@@ -45,7 +46,7 @@ export const TARGET_SAS_BUTTONS = [
   ['target', 'Point at the target', 'target'], ['antiTarget', 'Point away from the target', 'antiTarget'],
   ['relPrograde', 'Along your drift relative to the target', 'relPrograde'], ['relRetrograde', 'Against your drift relative to the target (burn to stop beside it)', 'relRetrograde'],
 ];
-const XFER = { fuel: ['Propellant', 'kg'], mono: ['Monoprop', 'kg'], elec: ['Charge', 'EC'], xenon: ['Xenon', 'kg'] };
+const XFER = { fuel: ['Propellant', 'kg'], lox: ['Oxygen', 'kg'], ch4: ['Methane', 'kg'], mono: ['Monoprop', 'kg'], elec: ['Charge', 'EC'], xenon: ['Xenon', 'kg'] };
 const PANEL_TITLE = { crew: 'Crew', science: 'Science', target: 'Target', dock: 'Docking', fuel: 'Fuel transfer', groups: 'Action groups', guide: 'Autopilot', missions: 'Missions' };
 const ORDINAL = n => 'Stage ' + n;
 const FONT = 'ui-rounded, "SF Pro Rounded", system-ui, sans-serif';
@@ -555,7 +556,7 @@ export function createHud(app, act) {
         const p = e.part;
         if (!v.parts.has(p.id)) continue;
         if (p.def.engine.type === 'solid') { amt += p.res.solid || 0; max += p.def.res.solid || 0; }
-        else for (const t of e.tanks) { if (seen.has(t.id) || !v.parts.has(t.id)) continue; seen.add(t.id); const key = p.def.engine.type === 'ion' && 'xenon' in t.res ? 'xenon' : 'fuel'; amt += t.res[key] || 0; max += t.def.res[key] || 0; }
+        else for (const t of e.tanks) { if (seen.has(t.id) || !v.parts.has(t.id)) continue; seen.add(t.id); const key = p.def.engine.type === 'ion' && 'xenon' in t.res ? 'xenon' : e.prop || 'fuel'; amt += propIn(t.res, key); max += propIn(t.def.res, key); }
       }
       setW(s.fill, max > 0 ? amt / max : 0);
       const info = (v.stageInfo || []).find(x => x.stage === s.i);
@@ -1150,7 +1151,7 @@ export function createHud(app, act) {
       for (const e of v.engines || []) {
         const p = e.part; if (!p.ignited) continue;
         if (p.def.engine.type === 'solid') { amt += p.res.solid || 0; max += p.def.res.solid || 0; }
-        else for (const t of e.tanks) { if (seen.has(t.id)) continue; seen.add(t.id); amt += t.res.fuel || 0; max += t.def.res.fuel || 0; }
+        else for (const t of e.tanks) { if (seen.has(t.id)) continue; seen.add(t.id); amt += propIn(t.res, e.prop || 'fuel'); max += propIn(t.def.res, e.prop || 'fuel'); }
       }
       // after burnout there is nothing left to show: "This stage 0%" only repeats the flame-out message
       const burning = max > 0 && amt > max * 1e-4;
