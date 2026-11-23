@@ -634,7 +634,7 @@ const defs = [
   { id: 'leg_stilt', name: 'Stilt Heavy Leg', cat: 'ground', tech: 'heavy', cost: 780, mass: 0.2,
     shape: 'leg', variant: 'heavy', h: 2.2, rw: 0.5, t: 0.36, attach: RADIAL, legs: { reach: 2.1, spread: 1.7, stroke: 0.55 }, tolerance: 18, maxTemp: 1600,
     desc: 'A braced leg with a wide footpad for heavy landers. Toggle with G.' },
-  { id: 'leg_heron', name: 'Heron Folding Leg', cat: 'ground', tech: 'heavy', cost: 640, mass: 0.09,
+  { id: 'leg_heron', name: 'Heron Folding Leg', cat: 'ground', tech: 'landing', cost: 640, mass: 0.09,
     shape: 'leg', variant: 'fold', h: 3.8, rw: 0.26, t: 0.62, attach: RADIAL, legs: { reach: 3.8, spread: 2.9, stroke: 0.4, foot: 0.24 }, tolerance: 22, maxTemp: 1900,
     desc: 'A long leg for a booster that comes back. It lies flat against the tank for the whole flight and swings down and out just before touchdown. Toggle with G.' },
   { id: 'wheel_scamper', name: 'Scamper Rover Wheel', cat: 'ground', tech: 'ground_ops', cost: 320, mass: 0.04,
