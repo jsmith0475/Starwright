@@ -164,7 +164,7 @@ test('coverage: the catalog offers every family in every size', () => {
   }
   for (const [a, b] of [['M', 'S'], ['L', 'M'], ['XL', 'L']])
     assert.ok(has(d => d.shape === 'adapter' && d.rBottom === SIZES[a] && d.rTop === SIZES[b]), `adapter ${a}-${b}`);
-  assert.equal(PART_LIST.filter(d => d.shape === 'leg').length, 3);
+  assert.equal(PART_LIST.filter(d => d.shape === 'leg').length, 4);      // (three fixed-housing legs and the folding booster leg)
   assert.ok(PART_LIST.filter(d => d.shape === 'wheel' && d.wheel.drive > 0).length >= 2);
   assert.ok(has(d => d.shape === 'wheel' && d.wheel.retract));
   assert.ok(PART_LIST.filter(d => d.shape === 'wing').length >= 6);
