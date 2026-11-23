@@ -454,7 +454,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 477 tests, including scripted flights flown by the autopilot
+npm test            # 478 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 

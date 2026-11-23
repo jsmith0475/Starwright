@@ -35,7 +35,7 @@ function separation(S) {
   const w = new World();
   const v = spawn(w, rocket(), 'helion', [2e11, 0, 0], [0, 30, 0]);
   let booster = null;
-  w.on('decouple', d => { booster = d.debris; });
+  w.on('decouple', d => { if (!booster) booster = d.debris; });      // (the separator ring follows as a second piece)
   v.ctrl.sas = false;
   run(w, 1, 0.5);
   const m0 = v.mass, p0 = mom([v]);
@@ -49,7 +49,7 @@ function separation(S) {
   S.ok('the piece with the guidance ring is a ship, and is named a booster', booster.type === 'ship' && / booster$/.test(booster.name), booster.name);
   S.ok('the same piece without a ring is debris', (() => {
     const w2 = new World(); const u = spawn(w2, rocket({ ring: false }), 'helion', [2e11, 0, 0], [0, 30, 0]);
-    let d = null; w2.on('decouple', e => { d = e.debris; });
+    let d = null; w2.on('decouple', e => { if (!d) d = e.debris; });
     for (let i = 0; i < 4 && !d; i++) { u.ctrl.throttle = 0; w2.stage(); }
     return d && d.type === 'debris';
   })());
@@ -65,7 +65,7 @@ function farKepler(S) {
   const w = new World();
   const v = spawn(w, rocket(), 'pell', r0, v0);
   let booster = null;
-  w.on('decouple', d => { booster = d.debris; });
+  w.on('decouple', d => { if (!booster) booster = d.debris; });      // (the separator ring follows as a second piece)
   for (let i = 0; i < 4 && !booster; i++) { v.ctrl.throttle = 0; w.stage(); }
   // the upper stage flies off under power; the booster coasts
   v.ctrl.sas = true; v.ctrl.throttle = 1;

@@ -335,7 +335,7 @@ What this says (it was measured before guidance was written, and guidance was bu
   before first contact, the standing height from the dimensions to within 2 cm, no strut on its
   stop). `tests/e2e/booster_return.mjs` now flies the folding legs in a real browser: folded as
   the landing burn lights, out just before touchdown, standing afterwards.
-- The whole verification passes: 1,338 checks, 0 failed. 477 unit tests pass.
+- The whole verification passes: 1,342 checks, 0 failed. 478 unit tests pass.
 
 ## For developers
 
