@@ -35,7 +35,7 @@ export const DOCKING = Object.freeze({
   UNDOCK_SPEED: 0.3,    // m/s separation after undocking
 });
 const COS_DOCK = Math.cos(DOCKING.MAX_ANGLE * Math.PI / 180);
-const _pa = new Vector3(), _pb = new Vector3(), _na = new Vector3(), _nb = new Vector3(), _ua = new Vector3(), _ub = new Vector3();
+const _pa = new Vector3(), _pb = new Vector3(), _na = new Vector3(), _nb = new Vector3(), _ua = new Vector3(), _ub = new Vector3(), _sa = new Vector3(), _sb = new Vector3();
 
 const _a = new Vector3(), _b = new Vector3(), _c = new Vector3();
 const _qInv = new Quaternion();
@@ -392,11 +392,13 @@ export class World {
         const [pa, pb] = best;
         a.portWorld(pa, _pa, _na); b.portWorld(pb, _pb, _nb);
         const cosAxes = -_na.dot(_nb);                      // 1 = exactly nose to nose
-        a.pointVelocity(pa.pos.x, pa.pos.y + pa._face * pa.def.h / 2, pa.pos.z, _ua);
-        b.pointVelocity(pb.pos.x, pb.pos.y + pb._face * pb.def.h / 2, pb.pos.z, _ub);
+        a.portLocal(pa, _ua); a.pointVelocity(_ua.x, _ua.y, _ua.z, _ua);
+        b.portLocal(pb, _ub); b.pointVelocity(_ub.x, _ub.y, _ub.z, _ub);
         _ub.sub(_ua);                                        // velocity of b's port relative to a's
         const speed = _ub.length();
-        if (bestD <= DOCKING.CAPTURE && speed < DOCKING.MAX_SPEED && cosAxes >= COS_DOCK) {
+        // side ports also want the two stacks lying parallel (either way round), or the hulls would cross
+        const lined = !pa._side || Math.abs(_sa.set(0, 1, 0).applyQuaternion(a.q).dot(_sb.set(0, 1, 0).applyQuaternion(b.q))) >= COS_DOCK;
+        if (bestD <= DOCKING.CAPTURE && speed < DOCKING.MAX_SPEED && cosAxes >= COS_DOCK && lined) {
           this._dock(a, pa, b, pb);
           if (a.dead) break;
           continue;

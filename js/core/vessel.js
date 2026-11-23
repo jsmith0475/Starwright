@@ -644,6 +644,9 @@ export class Vessel {
         _a.set(0, 0, -1).applyQuaternion(_pq); p._nx = _a.x; p._ny = _a.y; p._nz = _a.z;
         _a.set(1, 0, 0).applyQuaternion(_pq); p._sx = _a.x; p._sy = _a.y; p._sz = _a.z;
       } else { p._ax = 0; p._ay = p.flip ? -1 : 1; p._az = 0; }
+      // a side port (dock.side) is a radial part whose mating face looks straight out from the hull; free until docked
+      p._side = !!(d.dock && d.dock.side);
+      if (p._side) { p._face = p.dockedTo === null || p.dockedTo === undefined ? 1 : 0; if (p._face) this._ports.push(p); }
       if (p._stack) {
         let coverTop = 0, coverBot = 0, hasTop = false, hasBot = false;
         for (const id of p.links) {
@@ -1025,10 +1028,18 @@ export class Vessel {
   // ------------------------------------------------------------------ docking
   /** World position of a docking port's mating face and its outward axis (unit, world). Returns `outPos`. */
   portWorld(port, outPos = new Vector3(), outAxis = null) {
-    const f = port._face || 1;
-    outPos.set(port.pos.x, port.pos.y + f * port.def.h / 2, port.pos.z).sub(this.com).applyQuaternion(this.q).add(this.pos);
-    if (outAxis) outAxis.set(0, f, 0).applyQuaternion(this.q);
+    this.portLocal(port, outPos).sub(this.com).applyQuaternion(this.q).add(this.pos);
+    if (outAxis) this.portAxisLocal(port, outAxis).applyQuaternion(this.q);
     return outPos;
+  }
+  /** A port's mating face in craft coordinates: the exposed end of a stack ring, or the outer face of a side port. */
+  portLocal(port, out = new Vector3()) {
+    if (port._side) { const h = (port.def.rw || 0) / 2; return out.set(port.pos.x + Math.cos(port.rot) * h, port.pos.y, port.pos.z - Math.sin(port.rot) * h); }
+    return out.set(port.pos.x, port.pos.y + (port._face || 1) * port.def.h / 2, port.pos.z);
+  }
+  /** The way a port's face looks, in craft coordinates (unit): along the stack for a ring, straight out for a side port. */
+  portAxisLocal(port, out = new Vector3()) {
+    return port._side ? out.set(Math.cos(port.rot), 0, -Math.sin(port.rot)) : out.set(0, port._face || 1, 0);
   }
   /** Inertial velocity of a point fixed to the vessel at craft coordinates (x, y, z). */
   pointVelocity(x, y, z, out = new Vector3()) {
@@ -1064,11 +1075,19 @@ export class Vessel {
     // --- snapped relative attitude: yaw θ about the stack axis, plus a flip when the ports face the same way
     _qa.copy(this.q).invert().multiply(other.q);
     _a.set(1, 0, 0).applyQuaternion(_qa);
-    const theta = Math.atan2(-_a.z, _a.x);
-    const flip = sA * sB > 0;
+    let theta = Math.atan2(-_a.z, _a.x);
+    let flip = sA * sB > 0;
+    const side = !!(myPort._side && otherPort._side);
+    if (!!myPort._side !== !!otherPort._side) return null;
+    if (side) {
+      // side by side: the stacks lie parallel, nose by nose or nose by tail, whichever they are nearer; the yaw is
+      // the one that turns the other's port to look straight back into this one
+      flip = _a.set(0, 1, 0).applyQuaternion(_qa).y < 0;
+      theta = myPort.rot + Math.PI + (flip ? otherPort.rot : -otherPort.rot);
+    }
     const ct = Math.cos(theta), st = Math.sin(theta);
-    const fax = myPort.pos.x, fay = myPort.pos.y + sA * myPort.def.h / 2, faz = myPort.pos.z;
-    const fbx = otherPort.pos.x, fby = otherPort.pos.y + sB * otherPort.def.h / 2, fbz = otherPort.pos.z;
+    this.portLocal(myPort, _a); const fax = _a.x, fay = _a.y, faz = _a.z;
+    other.portLocal(otherPort, _a); const fbx = _a.x, fby = _a.y, fbz = _a.z;
     let offset = 0;
     for (const id of this.parts.keys()) if (id > offset) offset = id;
     for (const st2 of this.stages) for (const id of st2) if (id > offset) offset = id;
