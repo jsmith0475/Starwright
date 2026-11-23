@@ -91,7 +91,7 @@ export function partStatRows(d) {
   const wet = d.mass * 1000 + Object.entries(res).reduce((s, [k, v]) => s + (k === 'elec' ? 0 : v), 0);
   rows.push(['Mass', wet > d.mass * 1000 + 0.5 ? `${fmt.mass(wet)} full · ${fmt.mass(d.mass * 1000)} empty` : fmt.mass(d.mass * 1000)]);
   if (d.size) rows.push(['Size', sizeLabel(d.size)]);
-  const RES = { fuel: ['Liquid fuel', 'kg'], solid: ['Solid fuel', 'kg'], mono: ['Monoprop', 'kg'], xenon: ['Xenon', 'kg'], elec: ['Charge', 'EC'], ablator: ['Ablator', 'kg'] };
+  const RES = { lox: ['Liquid oxygen', 'kg'], ch4: ['Methane', 'kg'], fuel: ['Liquid fuel', 'kg'], solid: ['Solid fuel', 'kg'], mono: ['Monoprop', 'kg'], xenon: ['Xenon', 'kg'], elec: ['Charge', 'EC'], ablator: ['Ablator', 'kg'] };
   for (const [k, v] of Object.entries(res)) { if (!v || k === 'evafuel') continue; const [label, unit] = RES[k] || [k[0].toUpperCase() + k.slice(1), '']; rows.push([label, fmt.num(v) + (unit ? ' ' + unit : '')]); }
   if (d.engine) {
     const e = d.engine, type = e.type || 'liquid';
@@ -100,13 +100,20 @@ export function partStatRows(d) {
     if (e.ispVac) rows.push(['Isp', `${num(e.ispVac)} s vac · ${num(e.ispAtm)} s sea level`]);
     const TYPE = { solid: 'Solid (no throttle)', liquid: 'Liquid', ion: 'Ion (xenon + charge)', nuclear: 'Nuclear thermal', jet: 'Air-breathing jet' };
     rows.push(['Type', (TYPE[type] || type) + (e.gimbal ? ` · gimbal ${e.gimbal}°` : '')]);
+    if (e.rings) {
+      rows.push(['Engines', e.rings.map(r => `${r.n} × ${num(r.thrust)} kN${r.gimbal ? '' : ' fixed'}`).join(' · ')]);
+      if (e.modes) rows.push(['Engine sets', e.modes.map(m => m.name).join(' · ') + ' (key = in flight)']);
+    }
+    if (e.prop === 'methalox') rows.push(['Burns', 'Methane and liquid oxygen, 3.6 kg of oxygen to 1 of methane']);
     if (e.elecUse) rows.push(['Power draw', e.elecUse + ' EC/s']);
     if (e.jet) rows.push(['Envelope', `to ${num((e.jet.maxAlt || 0) / 1000, 1)} km · Mach ${e.jet.maxMach ?? '—'}`]);
     if (res.solid && e.thrust && e.ispVac) rows.push(['Burn time', fmt.time(res.solid / (e.thrust * 1000 / (e.ispVac * 9.80665)))]);
   }
   if (d.command) rows.push(['Control', d.command === 'crew' ? `Crewed · ${d.crew} seat${d.crew > 1 ? 's' : ''}` : 'Probe (needs charge)']);
   if (d.torque) rows.push(['Reaction torque', d.torque + ' kN·m']);
-  if (d.decoupler) rows.push(['Separation', d.decoupler.force + ' kN kick']);
+  if (d.decoupler) rows.push(['Separation', d.decoupler.hot ? 'Hot staging: the stage above lights first; the ring stays on the stage below' : d.decoupler.force + ' kN kick']);
+  if (d.catchPin) rows.push(['Catch pin', 'Two of these and no legs: a stage built to be caught']);
+  if (d.flap) rows.push(['Flap', `${d.flap.area} m² · fitted, does not steer yet`]);
   // interstage trusses are not parts in the bin: say on the parts that make one what will appear and what it weighs
   if (typeof PARTS_MOD.wantsInterstage === 'function' && PARTS_MOD.wantsInterstage(d)) {
     let kg = 0; try { kg = PARTS_MOD.interstageMass(d.h, d.r, d.r); } catch { kg = 0; }
