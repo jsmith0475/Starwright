@@ -48,6 +48,10 @@ last tank, with the foot of each leg's box about level with the foot of the tank
 - **On the pad and all the way up and back down, the legs are folded.** Each lies flat against
   the tank, inside its own outline, its smooth back to the airflow. Folded, a leg adds nothing
   below the engine and nothing beside the tank that the ground could catch.
+- **Folded, a leg shows the air very little**: 0.2 m² each, not the area of its long box. (The
+  first version counted the whole box, 1.9 m² a leg. The climb was so draggy that the booster was
+  let go at 15 km and 380 m/s instead of about 20 km and 680 m/s. It still came home, but that was
+  wrong, and a whole-flight test now holds it.)
 - **Just before touchdown they swing out.** The booster's own landing lowers them when it is
   60 m above the ground, in the landing burn, and says so ("landing legs down at 60 m"). The
   swing takes 2.4 seconds; in the flights measured the legs were told down 7 seconds or more
@@ -284,14 +288,15 @@ What this says (it was measured before guidance was written, and guidance was bu
 - `tests/e2e/booster.mjs`, in a real browser through the real flight screen: launch with the
   ascent assist, separation, the hop key, the stages 14 km apart and both flying, the warp hold and
   its message, the hop back, and the upper stage reaching an 83 × 81 km orbit by itself.
-- The folding leg: `tests/unit/folding_leg.test.js` (3 tests: the leg fits its box and its pad
-  stands below the engine; folded it adds nothing below or beside; a whole return with the legs
-  folded down to 60 m, then landed and standing on them with the engine clear) and verification
+- The folding leg: `tests/unit/folding_leg.test.js` (5 tests: the leg fits its box and its pad
+  stands below the engine; folded it adds nothing below or beside and little drag; a return with
+  the legs folded down to 60 m, then landed and standing on them with the engine clear; a whole
+  flight from the pad that stages above 17 km and 600 m/s and is at rest within 8 s of touching) and verification
   group 9h (8 checks: the rigid swing worked from the part's dimensions, the legs fully out
   before first contact, the standing height from the dimensions to within 2 cm, no strut on its
   stop). `tests/e2e/booster_return.mjs` now flies the folding legs in a real browser: folded as
   the landing burn lights, out just before touchdown, standing afterwards.
-- The whole verification passes: 1,329 checks, 0 failed. 472 unit tests pass.
+- The whole verification passes: 1,329 checks, 0 failed. 474 unit tests pass.
 
 ## For developers
 
