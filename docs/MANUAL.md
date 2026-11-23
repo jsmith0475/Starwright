@@ -172,6 +172,8 @@ of the model is in [LANDING_LEGS.md](LANDING_LEGS.md).
 
 ## Boosters that fly on
 
+![A dropped first stage flown as its own vessel high above the coast](../media/shot-booster.jpg)
+
 A first stage with a guidance ring on it (any probe core, or a Beacon or Keystone ring, placed
 below the separator) is not thrown away when you stage. It becomes a **booster**: a ship of its
 own that keeps flying under full physics however far it gets from the upper stage.

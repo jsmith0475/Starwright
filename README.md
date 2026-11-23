@@ -120,6 +120,11 @@ And around the flying:
 - **Rockets that come apart in the air.** Flip or tumble in thick air and the side boosters are
   ripped from their clamps, antennas and open solar panels are stripped, nose cones go, and
   the pieces fly on as debris. A clean climb loses nothing.
+- **Boosters that fly on.** Put a guidance ring on the first stage and it is no longer thrown
+  away at separation. It becomes a ship of its own under full physics at any distance. Press
+  `\` to hop to it and fly it while the ascent assist takes the upper stage on to orbit by
+  itself. This is the first part of [reusable boosters](docs/BOOSTERS.md): nothing lands the
+  booster for you yet.
 - **Landing legs with real suspension** that compress and settle on touchdown.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
   [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
@@ -132,6 +137,12 @@ And around the flying:
   <a href="media/structure-breakup.mp4"><b>▶ Watch a stack snap and the airflow strip a rocket (27 seconds, silent)</b></a>
   <br>
   <sub>Real gameplay recorded in Chrome, slowed to half speed at each break. How it works: <a href="docs/STRUCTURE.md">structure</a>, <a href="docs/AERO_BREAKUP.md">breakup</a>.</sub>
+</p>
+
+<p align="center">
+  <a href="media/shot-booster.jpg"><img src="media/shot-booster.jpg" width="100%" alt="A dropped first stage 28 km above the coast, flown as its own vessel named Test Returner booster, while the upper stage climbs to orbit out of view"></a>
+  <br>
+  <sub>A dropped first stage, flown as its own ship 28 km up while the upper stage flies itself to orbit. <a href="docs/BOOSTERS.md">How it works and what was checked.</a></sub>
 </p>
 
 <p align="center">
@@ -288,6 +299,12 @@ Starwright does not fake its orbits, and it shows its work.
   heating and rendezvous, to the game's own aerodynamics, structural loads and aerodynamic
   breakup, with worked examples computed from the game's own worlds and flight code and
   three calculators. It is on the title menu under **Science**.
+- **Two vessels flown at once.** A dropped booster and its upper stage are both integrated
+  with the same 20 ms step however far apart they get. **15 more checks, 0 failures**: mass and
+  momentum are shared out exactly at separation, a booster 5 km from the ship being flown
+  follows the independent two-body reference to 5 micrometres over 100 seconds, and the same
+  launch watched from the upper stage, from the booster, or switching every five seconds comes
+  out identical to the last bit. See [docs/BOOSTERS.md](docs/BOOSTERS.md).
 
 <p align="center">
   <img src="media/shot-science.png" width="100%" alt="The in-game science reference open on chapter 1, gravity and the two-body problem, with numbered equations">
@@ -415,7 +432,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 431 tests, including scripted flights flown by the autopilot
+npm test            # 454 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 
