@@ -1642,7 +1642,7 @@ export function createFlightScreen(app) {
   function callouts(ctl, kind, pv) {
     if (!ctl.log) return;
     if (kind === 'ascent') {                                           // (the assist is quiet, except to say why it staged early)
-      for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
+      for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back|for its return/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
       ctl._said = ctl.log.length; return;
     }
     if (kind !== 'recovery') return;
