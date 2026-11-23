@@ -342,7 +342,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
         // sideways drift is gone and the stage is over the spot, then stand it upright and come straight down: a tall
         // stage that touches down still sliding trips over its own legs.
         const hgt = v.radarAlt, tiltNow = noseError(up);
-        const vWant = hgt < 6 ? 0 : Math.min(4, off * 0.3);
+        const vWant = hgt < 6 ? 0 : Math.min(5, off * 0.25, Math.sqrt(1.2 * off));     // (never faster than it can stop from)
         if (off > 1e-3) _s.copy(e).normalize().multiplyScalar(vWant).sub(drift); else _s.copy(drift).negate();
         const settled = drift.length() < 0.4 && (off < 3 || hgt < 6);
         let vsT = -clamp((hgt - 1) / 3, o.touchdownSpeed, 8);
@@ -352,7 +352,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
           else if (hgt < 14) vsT = clamp((12 - hgt) * 0.4, -1.5, 1.5);
         }
         const leanMax = st.committed ? 0.015 : hgt < 16 ? 0.14 : 0.25;
-        const lean = Math.min(leanMax, 0.1 * _s.length());
+        const lean = Math.min(leanMax, 0.07 * _s.length());
         dir.copy(up);
         if (_s.lengthSq() > 1e-6) dir.addScaledVector(_s.normalize(), Math.tan(lean));
         point(dir);
@@ -363,6 +363,56 @@ export function boosterRecovery(world, vessel, opts = {}) {
     }
   };
   return c;
+}
+
+/**
+ * The stage the next staging event would drop, if it is one built to come back: it carries a guidance part, a
+ * liquid engine that is burning, and landing legs. → { ids (Set of part ids), dry (kg without propellant),
+ * prop (kg of propellant in it now) } or null.
+ */
+export function recoverableStage(vessel) {
+  const v = vessel;
+  const ids = v.dropSet(v.stages[v.stageIndex] || []);
+  if (!ids.size) return null;
+  let core = false, engine = false, legs = false, dry = 0, prop = 0;
+  for (const id of ids) {
+    const p = v.parts.get(id), d = p.def;
+    if (d.command) core = true;
+    if (d.legs) legs = true;
+    if (d.engine && d.engine.type === 'liquid' && p.ignited && !p.flameout) engine = true;
+    const fuel = (p.res.fuel || 0) + (p.res.ox || 0);
+    prop += fuel;
+    dry += (p.mass || d.mass * 1000) - fuel - (p.res.mono || 0) - (p.res.solid || 0);
+  }
+  return core && engine && legs ? { ids, dry, prop } : null;
+}
+
+/**
+ * Propellant (kg) a recoverable first stage must still hold at separation to fly back to `target` (a body-fixed
+ * direction) and land, from where the rocket is now: the boostback has to cancel the sideways speed and cover the
+ * ground back in the time the stage takes to fall, and the landing burn has to stop a stage falling at its terminal
+ * speed. A deliberately simple estimate with a margin: the boostback itself is closed-loop and uses what it needs.
+ * → { kg, have, dv, stage } or null when the next stage to drop is not built to come back.
+ */
+export function returnReserve(world, vessel, target, opts = {}) {
+  const v = vessel, body = v.body;
+  const stage = recoverableStage(v);
+  if (!stage) return null;
+  const o = { landing: 650, margin: 1.25, flip: 15, ...opts };
+  const wy = TAU / body.rotPeriod, R = v.pos.length();
+  _p.copy(v.pos).normalize();                                                    // up
+  _q.set(v.vel.x - wy * v.pos.z, v.vel.y, v.vel.z + wy * v.pos.x);              // air-relative velocity
+  const vs = _q.dot(_p);
+  _q.addScaledVector(_p, -vs);                                                   // its level part
+  const g = body.gm / (R * R), h = Math.max(0, v.altitude);
+  const tf = Math.max(20, (vs + Math.sqrt(vs * vs + 2 * g * h)) / g);            // time to fall back, no air
+  body.surfaceDirToInertial(target, world.ut, _r).normalize().multiplyScalar(R).sub(v.pos);
+  _r.addScaledVector(_p, -_r.dot(_p));                                           // level offset to the target
+  _r.addScaledVector(_q, -o.flip);                                               // (it flies on while it turns round)
+  _r.multiplyScalar(1 / tf).sub(_q);                                             // velocity change the boostback makes
+  const dv = _r.length() * o.margin + o.landing;
+  const ve = v.enginePower().ve || 2900;
+  return { kg: stage.dry * (Math.exp(dv / ve) - 1), have: stage.prop, dv, stage };
 }
 
 void G0;

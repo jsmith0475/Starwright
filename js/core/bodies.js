@@ -1216,7 +1216,10 @@ function buildSystem() {
   const runway = site(-950, -850, { heading: 90, length: 2000, width: 56, name: 'Flight Center Runway' });
   runway.start = site(-850, -850, { heading: 90, name: runway.name });
   runway.center = site(50, -850, {});
-  home.sites = { pad, runway };
+  // Where a returning booster is told to land: open level ground 600 m north of the pad, clear of every building
+  // (BASE_LAYOUT puts them all south of it). A marked pad and a barge are the next part of docs/BOOSTERS.md.
+  const landing = site(0, 600, { name: 'Landing zone' });
+  home.sites = { pad, runway, landing };
   home.launchSite = pad;
   return { bodies, byId, star: byId.helion, home, launchSite: pad, sites: home.sites };
 }

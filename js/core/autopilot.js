@@ -9,6 +9,8 @@ import { Orbit } from './orbit.js';
 import { predictPatches, applyManeuver, closestApproach } from './trajectory.js';
 import { SYSTEM } from './bodies.js';
 import { flightAngles, stallSpeed, surfaceAt, roverCruiseSpeed } from './vessel.js';
+import { returnReserve } from './booster.js';
+export { boosterRecovery, predictFall, returnReserve, recoverableStage } from './booster.js';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -119,6 +121,15 @@ export function ascentProgram(world, opts = {}) {
         c.note('liftoff');
         break;
       case 'ascent': {
+        // a first stage built to come back is let go while it still holds the propellant to do so
+        if (o.recover && !st.recovered && (st.lastStage === undefined || ut - st.lastStage > 1)) {
+          const need = returnReserve(world, v, o.recover.target || body.launchSite.dir);
+          if (need && need.have <= need.kg) {
+            st.recovered = true; st.lastStage = ut;
+            world.stage(v);
+            c.note(`staged with ${need.have.toFixed(0)} kg left in the booster to fly back`);
+          }
+        }
         if (autoStage(world, v, st)) c.note('staged → stage ' + v.stageIndex);
         let el = 90;
         if (alt > o.turnStart) {
