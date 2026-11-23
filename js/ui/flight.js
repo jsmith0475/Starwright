@@ -42,7 +42,7 @@ const RES_UNIT = { fuel: 'kg', mono: 'kg', elec: 'EC', xenon: 'kg' };
 const DOCK_ASSIST_RANGE = 1500;   // m: the docking assist takes over from here
 /** Guidance programs (the Autopilot panel): what the alert line and the toasts call them. */
 const PROGRAM_NAME = { ascent: 'Ascent assist', dock: 'Docking assist', takeoff: 'Take-off', hold: 'Heading and altitude hold', land: 'Runway landing',
-  drive: 'Cruise control', node: 'Maneuver autopilot', landhere: 'Landing autopilot', deorbit: 'Deorbit burn' };
+  drive: 'Cruise control', node: 'Maneuver autopilot', landhere: 'Landing autopilot', deorbit: 'Deorbit burn', recovery: 'Booster return' };
 const WARP_REASON = {
   atmosphere: 'entering the atmosphere', impact: 'close to the surface', soi: 'entering a new sphere of influence', node: 'maneuver coming up',
   thrust: 'engines are running', altitude: 'too low for that rate', warpTo: 'arrived', stage: 'staging', eva: 'spacewalk', switch: 'switched vessel',
@@ -108,7 +108,7 @@ export function createFlightScreen(app) {
   // Guidance programs that keep flying their vessel while the player watches another one (a booster and its upper
   // stage): vessel id → { ctl, kind }. Only programs that never touch time warp may be parked.
   const parked = new Map();
-  const PARKABLE = new Set(['ascent']);
+  const PARKABLE = new Set(['ascent', 'recovery']);
   // The vessels of this flight that the hop key steps between: the one launched and every flyable stage it drops.
   const family = new Set();
 
@@ -181,7 +181,15 @@ export function createFlightScreen(app) {
         // a dropped stage that can still be flown: it stays in the flight, and the hop key reaches it
         if (p.debris && p.debris.type === 'ship' && p.vessel && (mine || family.has(p.vessel.id))) {
           family.add(p.vessel.id); family.add(p.debris.id);
-          if (p.debris.engines && p.debris.engines.length) toast(p.debris.name + ' is flying on its own. Press ' + keyLabel(K('hopVessel')) + ' to fly it.', 'info');
+          const b = p.debris;
+          // a stage built to come back (engine, propellant and legs) starts flying itself home at once
+          if (autopilot && b.engines && b.engines.length && (b.legParts || []).length && b.body === SYSTEM.home && b.enginePower().thrust > 0 && !parked.has(b.id)) {
+            try {
+              parked.set(b.id, { ctl: autopilot.boosterRecovery(world, b, { target: landingTarget() }), kind: 'recovery' });
+              b.program = 'recovery';
+              toast(b.name + ' is flying itself back to land. Press ' + keyLabel(K('hopVessel')) + ' to watch it or take over.', 'good');
+            } catch (err) { console.warn('[flight] booster return failed to start:', err && err.message); }
+          } else if (b.engines && b.engines.length) toast(b.name + ' is flying on its own. Press ' + keyLabel(K('hopVessel')) + ' to fly it.', 'info');
         }
         break;
       case 'structure':
@@ -927,6 +935,7 @@ export function createFlightScreen(app) {
           add('hold', 'Hold heading and altitude', 'wings level at ' + fmt.num(v.altitude, 0) + ' m');
           if (body === SYSTEM.home) add('land', 'Land at the runway', 'flies the approach, flares and brakes', wheels >= 2 || v.hasGear, 'No landing gear');
         }
+        if (rocket && body === SYSTEM.home && v.engines.length) add('recovery', 'Fly back and land', 'boostback to the landing zone by the pad, then a landing burn on the engine', v.enginePower().thrust > 0, 'No propellant');
         if (rocket && v.verticalSpeed > -5) add('ascent', 'Ascent to orbit', 'takes over the climb to a ' + Math.round((atmoH + 10000) / 1000) + ' km orbit');
       }
       if (orbiting) {
@@ -974,6 +983,7 @@ export function createFlightScreen(app) {
         else if (id === 'drive') ctl = autopilot.roverDrive(world, v, { distance: 1000, speed: 8 });
         else if (id === 'node') ctl = autopilot.executeNode(world, v, { useWarp: true });
         else if (id === 'landhere') { if ((v.legParts || []).length && !v.legsDown) v.toggleLegs(); ctl = autopilot.hoverslamLanding(world, v, { useWarp: true }); }
+        else if (id === 'recovery') ctl = autopilot.boosterRecovery(world, v, { target: landingTarget() });
         else if (id === 'deorbit') ctl = autopilot.deorbit(world, v, { periapsis: Math.min(atmoH * 0.45, 35000) });
         if (!ctl) return false;
         assist = ctl; assistKind = id;
@@ -990,7 +1000,7 @@ export function createFlightScreen(app) {
       if (!autopilot || !v || v.type !== 'ship') return;
       if (!(v.situation === 'prelaunch' || v.situation === 'landed' || v.situation === 'flying' || v.situation === 'suborbital')) { toast('Ascent assist only flies from the ground to orbit', 'info'); return; }
       try {
-        assist = autopilot.ascentProgram(world, { targetAlt: ascentAlt(v.body), useWarp: false });
+        assist = autopilot.ascentProgram(world, { targetAlt: ascentAlt(v.body), useWarp: false, recover: v.body === SYSTEM.home ? { target: landingTarget() } : null });
         assistKind = 'ascent';
         // already flying: skip the program's own "ignite and release" step (it would fire the next stage)
         if (v.stageIndex > 0 && !v.landed) { assist.phase = 'ascent'; v.ctrl.throttle = 1; }
@@ -1606,6 +1616,15 @@ export function createFlightScreen(app) {
     }
   }
 
+  /** Where a returning booster is sent: the landing zone by the pad. */
+  function landingTarget() { const s = SYSTEM.sites && SYSTEM.sites.landing; return (s || SYSTEM.launchSite).dir; }
+  /** A booster's return is called out step by step, whichever vessel is being watched. */
+  function callouts(ctl, kind, pv) {
+    if (kind !== 'recovery' || !ctl.log) return;
+    const upTo = ctl.done ? ctl.log.length - 1 : ctl.log.length;      // (the last line of a finished program is its own toast)
+    for (let i = ctl._said || 0; i < upTo; i++) toast((pv ? pv.name + ': ' : 'Booster: ') + ctl.log[i].msg, 'info');
+    ctl._said = Math.max(ctl._said || 0, upTo);
+  }
   /** One tick of the programs flying vessels that are not being watched; a program that ends says so. */
   function tickParked(dt) {
     if (!parked.size) return;
@@ -1613,6 +1632,7 @@ export function createFlightScreen(app) {
       const pv = world.getVessel(id);
       if (!pv || pv.dead) { parked.delete(id); continue; }
       try { pk.ctl.update(dt); } catch (err) { console.warn('[flight] background program stopped:', err && err.message); pk.ctl.done = true; pk.ctl.failed = true; }
+      callouts(pk.ctl, pk.kind, pv);
       if (!pk.ctl.done) continue;
       parked.delete(id); pv.program = null;
       const last = pk.ctl.log && pk.ctl.log.length ? pk.ctl.log[pk.ctl.log.length - 1].msg : '';
@@ -1640,7 +1660,7 @@ export function createFlightScreen(app) {
           toast('Take-off complete: holding ' + fmt.num(v.altitude, 0) + ' m. Press any steering key to take over.', 'good');
         } else {
           releaseControls(v);
-          if (kind === 'node' || kind === 'landhere' || kind === 'deorbit' || kind === 'land' || kind === 'drive') v.ctrl.throttle = 0;
+          if (kind === 'node' || kind === 'landhere' || kind === 'deorbit' || kind === 'land' || kind === 'drive' || kind === 'recovery') v.ctrl.throttle = 0;
           if (kind === 'land' || kind === 'drive') { if (typeof v.setBrakes === 'function') v.setBrakes(true); brakeLock = true; }
           if (kind === 'node' && !failed) toast('Maneuver flown. You have control.', 'good');
           else toast(name + (failed ? ' stopped' : ' complete') + (last ? ': ' + last : ''), failed ? 'warn' : 'good');
@@ -1782,6 +1802,7 @@ export function createFlightScreen(app) {
     if (!paused) {
       if (assist) {
         try { assist.update(dt); } catch (err) { console.warn('[flight] assist stopped:', err && err.message); assist.done = true; assist.failed = true; }
+        callouts(assist, assistKind, v);
         finishAssist(v);
       }
       if ((assist && !assist.done) || parked.size) {

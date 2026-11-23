@@ -120,7 +120,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -138,7 +138,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
     const plan = st.plan && !st.entryDone ? st.plan : null;
     const pr = predictFall(body, v.pos, v.vel, v.mass, world.ut, { area: v.axialDragArea(true), floor: cg(), entry: plan,
       thrust: plan ? pw.thrust : 0, ve: pw.ve, burnBelow: -Infinity, dryMass: st.dry0 });
-    body.surfaceDirToInertial(o.target, world.ut + pr.t, tgt).normalize().multiplyScalar(pr.pos.length());
+    body.surfaceDirToInertial(st.aim || o.target, world.ut + pr.t, tgt).normalize().multiplyScalar(pr.pos.length());
     miss.copy(tgt).sub(pr.pos);
     _s.copy(pr.pos).normalize();
     miss.addScaledVector(_s, -miss.dot(_s));
@@ -207,6 +207,16 @@ export function boosterRecovery(world, vessel, opts = {}) {
         planEntry();
         predict();
         st.dir0 = miss.clone().normalize();
+        // opts.aimShort (m, off by default) holds the aim that far short of the target, on the side the stage comes
+        // in from, until it is opts.aimSwitch metres up; the fins then walk it the rest of the way. (Leaning the
+        // engine during the landing burn does not move the stage here: the swivelled bell and the fins that hold
+        // the lean push the other way about as hard. So the last correction is flown on the air, before the burn.)
+        if (o.aimShort > 0 && c.miss > 2000) {
+          body.inertialToSurfaceDir(_s.copy(st.dir0), world.ut + c.prediction.t, _s);
+          st.aim = o.target.clone().normalize().addScaledVector(_s, -o.aimShort / body.radius).normalize();
+        }
+        // taken over part of the way down (or handed back by the pilot): pick the flight up where it is
+        if (c.miss < 300 || (vs < 0 && v.radarAlt < 15000)) { c.phase = 'coast'; c.note(`taking over at ${(v.altitude / 1000).toFixed(1)} km, ${c.miss.toFixed(0)} m from the aim point`); break; }
         c.phase = 'flip'; c.note(`flip: the stage would come down ${(c.miss / 1000).toFixed(1)} km from the target`);
         break;
       case 'flip': {
@@ -253,6 +263,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
         // In thick air a stage leaning a few degrees off its fall is carried sideways by its own body, away from the
         // lean (measured: about 0.3 m of ground per metre of height left, per radian). Lean it to walk the impact
         // point onto the target.
+        if (st.aim && vs < 0 && v.radarAlt < o.aimSwitch) { st.aim = null; predict(); }
         const qNow = 0.5 * body.density(v.altitude) * speed * speed;
         if (vs < 0 && qNow > 400 && !st.short && c.miss < 20000) {
           const lean = clamp(1.5 * c.miss / (0.3 * v.radarAlt + 100), 0, o.maxLean);
@@ -304,21 +315,11 @@ export function boosterRecovery(world, vessel, opts = {}) {
           if (stopAlt(lo) > o.stopAlt) need = lo;
           else { for (let i = 0; i < 6; i++) { const mid = 0.5 * (lo + hi); const h = stopAlt(mid); if (h > o.stopAlt || h < 0 && false) hi = mid; else lo = mid; } need = 0.5 * (lo + hi); }
         }
-        // steer: against the fall, leaning so that the stop point moves over the target
-        const pb = st.stop;
+        // steer: against the fall
         // (as the speed runs out "against the fall" loses its meaning: blend to straight up)
         dir.copy(srf).negate();
         if (speed < 80) dir.addScaledVector(up, 15).addScaledVector(_t.copy(srf).addScaledVector(up, -vs), -1.5);   // and kill the drift
         dir.normalize();
-        if (pb && pb.stopped) {
-          body.surfaceDirToInertial(o.target, ut + pb.t, _s).normalize().multiplyScalar(pb.pos.length());
-          _s.sub(pb.pos); _s.addScaledVector(up, -_s.dot(up));
-          const off = _s.length();
-          c.miss = off;
-          const tgo = Math.max(1, pb.t);
-          const lean = tgo > 2.5 ? clamp(2.5 * off / (0.5 * acc * tgo * tgo), 0, 0.3) : 0;
-          if (off > 0.5 && lean > 0) dir.addScaledVector(_s.normalize(), lean).normalize();
-        }
         point(dir);
         const err = noseError(dir);
         v.ctrl.throttle = err < 0.5 ? clamp(need, 0.05, 1) : 0.05;
