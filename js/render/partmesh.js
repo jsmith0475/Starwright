@@ -58,7 +58,7 @@ import * as stackShapes from './parts/shapes_stack.js';
 import * as engineShapes from './parts/shapes_engine.js';
 import * as aeroShapes from './parts/shapes_aero.js';
 import * as radialShapes from './parts/shapes_radial.js';
-import { cargobay, hotring, catchpin, flap } from './parts/shapes_shearwater.js';
+import { cargobay, hotring, catchpin, flap, sideport } from './parts/shapes_shearwater.js';
 import { buildPipInto, buildPipMesh, animatePip } from './parts/pip.js';
 
 export { PALETTE, mergeGeometries, buildPipMesh, animatePip };
@@ -80,7 +80,7 @@ const { legGeometry, foldLegGeometry, wheelGeometry, ...aeroRest } = aeroShapes;
 const { DORSAL: _d, ...stackRest } = stackShapes;
 const shapes = {
   ...stackRest, engine: engineShapes.engine, srb: engineShapes.srb, radialengine: engineShapes.radialengine, ...aeroRest, ...radialRest, clamp: clampShape,
-  cargobay, hotring, catchpin, flap,
+  cargobay, hotring, catchpin, flap, sideport,
   pip(def, g) { buildPipInto(g); },
   generic(def, g, pb) {
     if (def.r) pb.cyl(def.rTop ?? def.r, def.rBottom ?? def.r, def.h, 0, P.shade, 'paint');

@@ -33,6 +33,7 @@ const EXPECT = {
   'station-run': { start: 'launch', active: 'Tern', crew: 1, vessels: [['Hollin Station', 'verda', 'orbit', [145, 155, 145, 155]], ['Tern', 'verda', 'pad']] },
   'morning-orbit': { start: 'flight', active: 'Larkspur', crew: 1, vessels: [['Larkspur', 'verda', 'orbit', [90, 100, 90, 100]]] },
   'hollin-approach': { start: 'flight', active: 'Tern', crew: 1, vessels: [['Hollin Station', 'verda', 'orbit', [145, 155, 145, 155]], ['Tern', 'verda', 'orbit', [145, 155, 145, 155]]] },
+  'topping-up': { start: 'flight', active: 'Shearwater', crew: 2, vessels: [['Deepwell', 'verda', 'orbit', [95, 105, 95, 105]], ['Shearwater', 'verda', 'orbit', [95, 105, 95, 105]]] },
   'pell-descent': { start: 'flight', active: 'Pellfarer', crew: 1, vessels: [['Pellfarer', 'pell', 'orbit', [25, 35, 25, 35]]] },
   'pell-homecoming': { start: 'flight', active: 'Pellfarer', crew: 1, vessels: [['Pellfarer', 'pell', 'landed']] },
   'ost-outpost': { start: 'flight', active: 'Ostrider', crew: 2, vessels: [['Ostrider', 'ost', 'landed']] },

@@ -1435,7 +1435,40 @@ function shearwater() {
   for (const a of [Math.PI / 2, Math.PI * 3 / 2]) if (c.attachRadial('pin_catch', top.id, topY - 3.4, a, 1).length !== 1) throw new Error('stock craft: catch pin');
   if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
   if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
+  shearwaterDockingFit(c, ship);
   c.autoStage();                                   // [33 engines] [ship engines + hot-staging ring]
+  return c;
+}
+/** What the ship needs to meet a depot: a Flank Port high on the lee side of its tank (the side with no tiles, +Z,
+ *  angle 3π/2 here) and four thruster pods, all on the steel half. */
+function shearwaterDockingFit(c, tank) {
+  const LEE = Math.PI * 3 / 2, top = tank.pos.y + partDef(tank.type).h / 2;
+  if (c.attachRadial('port_side', tank.id, top - 3, LEE, 1).length !== 1) throw new Error('stock craft: flank port');
+  for (const y of [top - 1.2, top - 13.5]) for (const a of [LEE - 1.0, LEE + 1.0]) if (c.attachRadial('rcs_xxl', tank.id, y, a, 1).length !== 1) throw new Error('stock craft: thruster pod');
+}
+/** The Shearwater ship on its own, as it is once in orbit (scenarios start with it there). */
+export function shearwaterShip() {
+  const c = new Craft('Shearwater');
+  const [pod] = c.setRoot('pod_shearwater');
+  const s = stackDown(c, pod, ['bay_shearwater', 'tank_xxl_ship', 'eng_peregrine6']);
+  const ship = s[1];
+  if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
+  if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
+  shearwaterDockingFit(c, ship);
+  c.autoStage();
+  return c;
+}
+/** Deepwell: a propellant depot. An avionics nose on two long steel tanks, a Flank Port, thruster pods. No engines:
+ *  it is put where it is and stays there. Holds 400 t of the two liquids. */
+export function deepwell() {
+  const c = new Craft('Deepwell');
+  const [core] = c.setRoot('core_deepwell');
+  const s = stackDown(c, core, ['tank_xxl_long', 'tank_xxl_long']);
+  const t = s[0], top = t.pos.y + partDef(t.type).h / 2;
+  if (c.attachRadial('port_side', t.id, top - 3, Math.PI * 3 / 2, 1).length !== 1) throw new Error('depot: flank port');
+  for (const [tank, y] of [[s[0], top - 1.2], [s[1], s[1].pos.y - partDef(s[1].type).h / 2 + 1.2]]) c.attachRadial('rcs_xxl', tank.id, y, Math.PI / 4, 4);
+  c.autoStage();
+  c.desc = 'A propellant depot: two long tanks of liquid oxygen and methane under an avionics nose, with a Flank Port on its side.';
   return c;
 }
 

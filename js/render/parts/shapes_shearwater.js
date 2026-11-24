@@ -94,10 +94,14 @@ export function ogivePod(def, g, pb) {
   const rAt = y => { const t = clamp((y - y0) / L, 0, 1); return rT + (rB - rT) * (og(t) - e1) / (rB - e1); };
   const slope = y => (rAt(y + 0.05) - rAt(y - 0.05)) / 0.1;
   const n = pb.hi ? 22 : pb.med ? 12 : 6, ys = []; for (let i = 1; i < n; i++) ys.push(a + (b - a) * (1 - Math.pow(1 - i / n, 1.25)));
-  steelWall(pb, rAt, a, b, { tiled: true, ys });
-  pb.rev([[rB + END_LIFT, y0, TILE], [rB + END_LIFT, a]], 'hextile', { seg: pb.seg(rB) / 2, a0: Math.PI, a1: TAU, uRep: Math.round(TAU * rB), vTile: 1 });
+  // a crewless nose (the depot's) never comes home: bare steel all round, and no windows or hatch
+  const crewed = (def.crew || 0) > 0;
+  steelWall(pb, rAt, a, b, { tiled: crewed, ys });
+  if (crewed) pb.rev([[rB + END_LIFT, y0, TILE], [rB + END_LIFT, a]], 'hextile', { seg: pb.seg(rB) / 2, a0: Math.PI, a1: TAU, uRep: Math.round(TAU * rB), vTile: 1 });
   // nose ring and cap
   pb.rev([[rT + 0.004, b - 0.02, STEEL_DK], [rT + 0.004, b], [rT * 0.8, y1 - tip * 0.25], [0.002, y1]], 'steel', { crease: 0.9, seg: pb.seg(rT) });
+  const dy = y0 + h * 0.3;
+  if (!crewed) { pb.decal('flag', rAt(dy), dy, LEE - 0.72, 0.9, { slope: slope(dy) }); endCap(pb, rB - 0.02, y0 + 0.004, -1); return; }
   // flight deck windows in a row, a porthole deck below them and the side hatch
   const wy = y0 + h * 0.66, wh = h * 0.05;
   for (let i = 0; i < 4; i++) windowPane(pb, rAt(wy - wh / 2), rAt(wy + wh / 2), wy - wh / 2, wy + wh / 2, LEE + (i - 1.5) * 0.4, clamp(rAt(wy) * 0.3, 0.2, 0.6), { th: 0.02 });
@@ -107,7 +111,6 @@ export function ogivePod(def, g, pb) {
   pb.patch(rAt(hy0 + 0.04) + 0.012, rAt(hy1 - 0.04) + 0.012, hy0 + 0.04, hy1 - 0.04, LEE, 0.84, 0.012, STEEL, 'steel');
   porthole(pb, rAt(hm + 0.2) + 0.028, hm + 0.2, LEE, 0.1, { slope: slope(hm) });
   if (pb.med) for (const s of [-1, 1]) pb.box(0.05, 0.16, 0.08, STEEL_DK, Mrad(LEE + 0.19, rAt(hm + s * 0.4) + 0.03, hm + s * 0.4, -Math.atan(slope(hm))), 'steel');
-  const dy = y0 + h * 0.3;
   pb.decal('flag', rAt(dy), dy, LEE - 0.72, 0.9, { slope: slope(dy) }); pb.decal('rescue', rAt(hy1 + 0.25), hy1 + 0.25, LEE, 0.7, { slope: slope(hy1) });
   endCap(pb, rB - 0.02, y0 + 0.004, -1);
 }
@@ -173,6 +176,22 @@ export function catchpin(def, g, pb) {
   // webs: the load comes up from below when the stage hangs on its pins
   for (const [s, k] of [[-1, 1], [1, 0.8]]) pb.poly([[x0 + bt, s * pr * 0.6], [x0 + bt + rw * 0.42 * k, s * pr * 0.6], [x0 + bt, s * h * 0.47]], 0.035, 0.006, STEEL_DK, null, 'metal');
   if (pb.hi) for (const [sy, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) pb.cyl(0.018, 0.018, 0.016, 0, P.steel, 'metal', 6, false, mul(M(x0 + bt + 0.008, sy * h * 0.38, sz * t * 0.38), RX));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Flank Port: a short collar that looks straight out of the hull (+X here), a latch ring on its rim, a dark
+// recessed face, and the two propellant couplings (oxygen blue, methane amber) inside it
+// ---------------------------------------------------------------------------------------------
+export function sideport(def, g, pb) {
+  const { h, rw, t } = def, x0 = -rw / 2 - 0.25, x1 = rw / 2, R = Math.min(h, t) * 0.42;
+  const along = (x, len, ra, rb, color, bucket = 'metal', open = false) => pb.add(new THREE.CylinderGeometry(rb, ra, len, pb.seg(ra * 2), 1, open), color, mul(M(x + len / 2, 0, 0), RX), bucket);
+  pb.rbox(0.3, h * 1.1, t * 1.1, 0.04, STEEL_DK, M(x0 + 0.15, 0, 0), 'steel');     // doubler, let into the hull
+  along(x0 + 0.25, x1 - x0 - 0.37, R * 1.08, R, STEEL, 'steel');                    // collar
+  along(x1 - 0.12, 0.12, R * 1.16, R * 1.16, P.steel);                              // latch ring
+  pb.add(new THREE.RingGeometry(R * 0.86, R * 1.16, pb.seg(R * 2)), P.silver, M(x1 + 0.002, 0, 0, 0, Math.PI / 2, 0), 'metal');
+  pb.add(new THREE.CircleGeometry(R * 0.86, pb.seg(R * 2)), 0x23262b, M(x1 - 0.05, 0, 0, 0, Math.PI / 2, 0), 'metal');
+  for (const [dy, c] of [[R * 0.36, 0x4f8fd0], [-R * 0.36, 0xd08a3a]]) pb.cyl(R * 0.2, R * 0.2, 0.08, 0, c, 'metal', pb.seg(R * 0.4), false, mul(M(x1 - 0.03, dy, 0), RX));
+  if (pb.med) for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + 0.39; pb.cyl(0.035, 0.035, 0.05, 0, P.gun, 'metal', 6, false, mul(M(x1 + 0.01, Math.cos(a) * R * 1.01, Math.sin(a) * R * 1.01), RX)); }
 }
 
 // ---------------------------------------------------------------------------------------------

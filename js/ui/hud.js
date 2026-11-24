@@ -697,20 +697,50 @@ export function createHud(app, act) {
     }
     if (!pairs.length) rows.push(el('div', { class: 'sw-empty', text: 'Nothing is docked to this vessel.' }));
     rows.push(el('div', { class: 'sw-label', text: 'Free Latch Rings (' + free.length + ')' }));
-    for (const p of free) rows.push(el('div', { class: 'fl-pop-row', data: { port: String(p.id) } }, el('div', { class: 'grow' }, el('b', { text: p.def.name }), el('span', { text: 'Size ' + p.def.dock.size + ' · mates with another size ' + p.def.dock.size + ' ring' }))));
+    for (const p of free) rows.push(el('div', { class: 'fl-pop-row', data: { port: String(p.id) } }, el('div', { class: 'grow' }, el('b', { text: p.def.name }), el('span', { text: p.def.dock.side ? 'On the side of the hull · mates with another ' + p.def.name + ', the two ships side by side' : 'Size ' + p.def.dock.size + ' · mates with another size ' + p.def.dock.size + ' ring' }))));
     if (!free.length) rows.push(el('div', { class: 'sw-empty', text: pairs.length ? 'Every ring is in use.' : 'This vessel has no Latch Ring.' }));
     rows.push(el('div', { class: 'sw-label', text: 'Guidance' }));
     rows.push(el('div', { class: 'fl-pop-row', data: { assist: 'dock' } },
       el('div', { class: 'grow' }, el('b', { text: 'Docking assist' }), el('span', { text: on ? 'Flying the approach on RCS' : can.ok ? 'Ready: flies the last stretch on RCS' : can.why })),
       el('button', { class: 'sw-btn small' + (on ? ' primary' : ''), text: on ? 'Stop' : 'Engage', disabled: !on && !can.ok, attrs: { type: 'button', 'data-action': 'dock-assist' }, on: { click: () => { act.toggleDockAssist(); hud.refreshPanels(); } } })));
-    rows.push(el('div', { class: 'fl-pop-note', html: 'By hand: target the other vessel, turn on <b>RCS</b> (R), point at it and close in with <b>H N I K J L</b>. Rings of the same size latch by themselves when they touch nose to nose under 1.5 m/s.' }));
+    rows.push(el('div', { class: 'fl-pop-note', html: 'By hand: target the other vessel, turn on <b>RCS</b> (R), point at it and close in with <b>H N I K J L</b>. Rings of the same size latch by themselves when they touch nose to nose under 1.5 m/s. Flank Ports latch side to side, with the two hulls parallel.' }));
     return { rows, live: null };
   }
 
   // ---- fuel transfer between two parts of this vessel
   function fuelRows(v) {
+    const line = act.pumpInfo ? lineRows() : null, rest = tankRows(v);
+    if (!line) return rest;
+    return { rows: line.rows.concat(rest.empty ? [] : [el('div', { class: 'sw-label', text: 'Other tanks' })].concat(rest.rows)), live: () => { line.live(); if (rest.live) rest.live(); }, key: 'line|' + line.key + '|' + (rest.key || '') };
+  }
+  // ---- the propellant line between two docked Flank Ports: oxygen and methane, pumped at a rate, only while settled
+  function lineRows() {
+    const info = act.pumpInfo();
+    if (!info) return null;
+    const gauge = (which, name) => { const fill = el('i'), amt = el('span', { class: 'amt' }); return { fill, amt, node: el('div', { class: 'fl-res-row', data: { pumpGauge: which } }, el('span', { class: 'nm', text: name }), el('div', { class: 'sw-bar' }, fill), amt) }; };
+    const gM = gauge('mine', info.mine.name), gO = gauge('other', info.other.name);
+    const status = el('div', { class: 'fl-pop-note', data: { pump: 'status' } });
+    const btn = (key, text, tip, fn, cls = '') => el('button', { class: 'sw-btn small ' + cls, text, tip, attrs: { type: 'button', 'data-action': key }, on: { click: e => { e.currentTarget.blur(); fn(); hud.refreshPanels(); } } });
+    const bIn = btn('pump-in', 'Fill ' + info.mine.name, 'Pump oxygen and methane from ' + info.other.name + ' into this ship', () => act.pumpStart('in'), 'primary');
+    const bOut = btn('pump-out', 'Give to ' + info.other.name, 'Pump oxygen and methane from this ship into ' + info.other.name, () => act.pumpStart('out'));
+    const bStop = btn('pump-stop', 'Stop', 'Stop the pump', () => act.pumpStop());
+    const t = kg => fmt.num(kg / 1000, 1) + ' t';
+    function live() {
+      const i = act.pumpInfo(); if (!i) return;
+      for (const [g, s] of [[gM, i.mine], [gO, i.other]]) { setW(g.fill, s.max > 0 ? s.amount / s.max : 0); setText(g.amt, fmt.num(s.amount / 1000, 0) + ' / ' + fmt.num(s.max / 1000, 0) + ' t'); }
+      const pu = i.pump;
+      setText(status, pu ? (pu.state === 'pumping' ? 'Pumping ' + (pu.toMine ? 'in' : 'out') + ' at ' + fmt.num(i.rate) + ' kg/s: ' + t(pu.moved) + ' of ' + t(pu.total) + '. Settled at ' + (Math.abs(i.settleAccel) * 1000).toFixed(1) + ' mm/s².'
+        : 'Settling the tanks: waiting for a steady push along the stack before the pump can draw.')
+        : i.last ? (i.last.why === 'done' ? 'Finished: ' + t(i.last.moved) + ' across.' : 'Stopped after ' + t(i.last.moved) + ': ' + i.last.why + '.')
+          : 'Liquid in free fall floats about in its tank. The pump fires the thrusters gently along the stack to hold it on the outlet, and that push moves the orbit a little.');
+      bStop.disabled = !pu; bIn.disabled = !!pu; bOut.disabled = !!pu;
+    }
+    live();
+    return { rows: [el('div', { class: 'sw-label', text: 'Propellant line · oxygen and methane' }), el('div', { class: 'fl-xfer-gauges' }, gM.node, gO.node), el('div', { class: 'fl-xfer-btns' }, bIn, bOut, bStop), status], live, key: info.mine.port + '>' + info.other.port };
+  }
+  function tankRows(v) {
     const kinds = act.transferResources();
-    if (!kinds.length) return { rows: [el('div', { class: 'sw-empty', text: 'Pumping needs two tanks that hold the same thing. Dock with another vessel to refuel it.' })], live: null };
+    if (!kinds.length) return { empty: true, rows: [el('div', { class: 'sw-empty', text: 'Pumping needs two tanks that hold the same thing. Dock with another vessel to refuel it.' })], live: null };
     if (!kinds.includes(xfer.res)) { xfer.res = kinds[0]; xfer.from = xfer.to = null; }
     const res = xfer.res, unit = XFER[res][1];
     const parts = act.transferParts(res);
