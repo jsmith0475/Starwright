@@ -89,7 +89,7 @@ export function windTunnel(world, v, aoas = [50 * DEG, 70 * DEG, 88 * DEG]) {
 export function shipReturn(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), periapsis: 0.42 * body.atmo.height, aoa: 70 * DEG, aoaMin: 52 * DEG, aoaMax: 86 * DEG,
-    overAlt: 11000, lightAlt: 4000, settle: 4, closing: 0.08, slide: 150, maxTilt: 0.6, flipTime: 7, burnThrottle: 0.9, floor: 0, sets: null, period: 2, landing: {}, ...opts };
+    overAlt: 11000, lightAlt: 4000, slideGain: 0.35, carry: 4.7, noseRate: 0.12, minTwr: 1.4, maxTilt: 0.6, flipTime: 2.5, burnThrottle: 0.9, floor: 0, sets: null, period: 2, landing: {}, ...opts };
   const c = { name: 'return', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, target: o.target, tunnel: null, landing: null, burnAt: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -119,7 +119,7 @@ export function shipReturn(world, vessel, opts = {}) {
     return { drag: st.mix, ld: r[j].ld + (r[j + 1].ld - r[j].ld) * f };
   };
   /** Where a fall from (pos, vel) at time t ends, flown at `aoa`: fills `miss` (level vector from there to the target). */
-  const fall = (pos, vel, t, aoa, floor = 0, flat = 0) => {
+  const fall = (pos, vel, t, aoa, floor = 0, flat = 0, carry = 0) => {
     const r = row(aoa);
     let pr = predictEntry(body, pos, vel, t, { mass: v.mass, drag: r.drag, ld: r.ld, ldMach: [0.7, 1.5], floor: o.floor + floor, terrain: false, maxT: 6000 });
     if (pr.end !== 'land') return null;
@@ -132,6 +132,7 @@ export function shipReturn(world, vessel, opts = {}) {
     body.surfaceDirToInertial(o.target, t + pr.t, tgt).normalize().multiplyScalar(pr.pos.length());
     miss.copy(tgt).sub(pr.pos);
     up.copy(pr.pos).normalize();
+    if (carry > 0) { miss.x -= (pr.vel.x - wy * pr.pos.z) * carry; miss.y -= pr.vel.y * carry; miss.z -= (pr.vel.z + wy * pr.pos.x) * carry; }
     miss.addScaledVector(up, -miss.dot(up));
     // along the track: the way the ship is going over the ground at the start, carried to the end point
     along.set(vel.x - wy * pos.z, vel.y, vel.z + wy * pos.x);
@@ -184,6 +185,11 @@ export function shipReturn(world, vessel, opts = {}) {
     switch (c.phase) {
       case 'init': {
         if (!bellyFlyer(v)) { c.finish(false, 'this vessel has no flaps to fall on'); break; }
+        {
+          // can the engines set it down? Low in the air they must give half as much again as the ship weighs
+          const F = seaThrust(o.sets && o.sets.burn), g0 = body.gm / (body.radius * body.radius), most = o.burnThrottle * F / (o.minTwr * g0);
+          if (v.mass > most) { c.finish(false, `too heavy to set down: ${((v.mass - most) / 1000).toFixed(0)} t over what its engines can stop`); break; }
+        }
         c.tunnel = windTunnel(world, v);
         c.note(`wind tunnel: ${c.tunnel.rows.map(r => `${(r.aoa / DEG).toFixed(0)} deg ${r.drag[60].toFixed(0)} m2 L/D ${r.ld.toFixed(2)}`).join(', ')}`);
         v.ctrl.throttle = 0;
@@ -270,17 +276,36 @@ export function shipReturn(world, vessel, opts = {}) {
         const vs = -v.surfaceVel.dot(up), sp = Math.max(v.surfaceVel.length(), 1);
         const D = Math.max(0.5 * 9.81, v.gForce * 9.81);
         if (!st.lift) st.lift = new Vector3();
-        st.lift.copy(e).multiplyScalar(Math.min(o.slide, o.closing * dist)).sub(srf).multiplyScalar(1 / o.settle).addScaledVector(srf, D / sp).multiplyScalar(1 / D);
+        if (world.ut - (st.tFlat || -Infinity) >= 0.5) {
+          st.tFlat = world.ut;
+          // where will the flat fall from here be when the engines light, and how fast over the ground? The turn
+          // and the burn carry it on from there for about `carry` seconds at that speed. Lean toward the target
+          // from where that ends, harder the farther off it is for the time left.
+          const hl = Math.max(0, (st.hb > 0 ? st.hb : o.lightAlt) - 50);
+          const f = v.radarAlt - o.floor > hl + 150 ? fall(v.pos, v.vel, world.ut, o.aoaMax, hl, 0, o.carry) : null;
+          if (f) {
+            const tgo = Math.max(3, f.pr.t), reach = 0.25 * D * tgo * tgo * o.slideGain;
+            st.lift.copy(miss).multiplyScalar(1 / Math.max(reach, 1));
+            st.pred = f.dist;
+          }
+        }
+        // (leaning to speed up is kept small: every degree of it has to be swung back through to slow down again)
         { const m = st.lift.length(), cap = Math.tan(o.maxTilt); if (m > cap) st.lift.multiplyScalar(cap / m); }
         c.miss = dist; st.level = srf.length();
         // the hull pushes sideways only along its own length: the nose is laid along the lean, whichever way round
         // is the smaller turn, and left where it is when there is next to no lean to make
         if (st.lift) v.bellyLift = lift.copy(st.lift); else v.bellyLift = null;
         body.surfaceDirToInertial(st.noseFixed, world.ut, nose);
-        if (st.lift && st.lift.lengthSq() > 0.0025) {
+        if (st.lift && st.lift.lengthSq() > 0.02) {
           _a.copy(st.lift).addScaledVector(up, -st.lift.dot(up));
-          if (_a.lengthSq() > 1e-8) { _a.normalize(); if (_a.dot(nose) < 0) _a.negate(); nose.copy(_a); body.inertialToSurfaceDir(nose, world.ut, st.noseFixed); }
+          if (_a.lengthSq() > 1e-8) {
+            _a.normalize(); if (_a.dot(nose) < 0) _a.negate();
+            // (turned toward it at a rate the flaps can follow: a nose that chases a lean that wanders spins the ship)
+            const ang = Math.acos(clamp(_a.dot(nose), -1, 1)), step = o.noseRate * (world.ut - (st.tNose || world.ut));
+            if (ang > 1e-4) { nose.lerp(_a, Math.min(1, step / ang)).addScaledVector(up, -nose.dot(up)).normalize(); body.inertialToSurfaceDir(nose, world.ut, st.noseFixed); }
+          }
         }
+        st.tNose = world.ut;
         v.bellyNose = nose;
         c.miss = st.flat !== undefined ? st.flat : dist;
         // when to light: the height the burn needs to stop the fall, once the ship is tail down, and the time to turn
@@ -309,7 +334,7 @@ export function shipReturn(world, vessel, opts = {}) {
         if (st.hb === Infinity) { c.finish(false, 'the engines cannot stop this ship'); break; }
         if (st.hb > 0 && v.radarAlt - o.floor <= st.hb && vs > 0) {
           c.phase = 'flip';
-                    c.note(`flip at ${(v.radarAlt).toFixed(0)} m, ${vs.toFixed(0)} m/s down, ${dist.toFixed(0)} m from the target, ${st.level.toFixed(1)} m/s over the ground`);
+                    c.note(`flip at ${(v.radarAlt).toFixed(0)} m, ${vs.toFixed(0)} m/s down, ${dist.toFixed(0)} m from the target, ${st.level.toFixed(1)} m/s over the ground, aim off by ${(st.pred || 0).toFixed(0)} m`);
           st.tFlip = world.ut;
         }
         break;
@@ -319,7 +344,7 @@ export function shipReturn(world, vessel, opts = {}) {
         engineSet(o.sets && o.sets.burn);
         v.bellyLift = null; v.bellyNose = null;
         for (const en of v.engines) if (!en.part.ignited && !en.part.flameout) en.part.ignited = true;
-        c.landing = boosterRecovery(world, v, { target: o.target, floor: o.floor, sets: o.sets ? { burn: o.sets.burn, final: o.sets.final } : null, aimBurn: true, terrain: false, heatLimit: Infinity, maxLean: 0.3, thrustScale: (() => { const pw = v.enginePower(); return pw.thrust > 0 ? clamp(seaThrust(o.sets && o.sets.burn) / pw.thrust, 0.3, 1) : 1; })(), ...o.landing });
+        c.landing = boosterRecovery(world, v, { target: o.target, floor: o.floor, sets: o.sets ? { burn: o.sets.burn, final: o.sets.final } : null, aimBurn: true, terrain: false, heatLimit: Infinity, maxLean: 0.05, steerBurn: 0.25, reach: 120, thrustScale: (() => { const pw = v.enginePower(); return pw.thrust > 0 ? clamp(seaThrust(o.sets && o.sets.burn) / pw.thrust, 0.3, 1) : 1; })(), ...o.landing });
         c.phase = 'landing';
         break;
       }

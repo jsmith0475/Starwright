@@ -139,7 +139,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, thrustScale: 1, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, thrustScale: 1, steerBurn: 0, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target, site: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -390,6 +390,15 @@ export function boosterRecovery(world, vessel, opts = {}) {
         dir.copy(srf).negate();
         if (speed < 80) dir.addScaledVector(up, 15).addScaledVector(_t.copy(srf).addScaledVector(up, -vs), -1.5);   // and kill the drift
         dir.normalize();
+        if (o.steerBurn > 0 && speed > 12 && e.lengthSq() > 1) {
+          // opts.steerBurn (rad, off by default): lean the burn to stop over the target. Left alone the level speed
+          // dies away with the rest and carries the stage half of (level speed x time to stop) farther; the push that
+          // makes up the difference in the time left, as a share of the thrust, is the lean.
+          const aT = Math.max(need, 0.3) * acc, tgo = Math.max(3, speed / Math.max(aT - body.gm / (R * R), 2));
+          _t.copy(srf).addScaledVector(up, -vs).multiplyScalar(-0.5 * tgo).add(e).multiplyScalar(2 / (tgo * tgo * aT));
+          const m = _t.length(); if (m > o.steerBurn) _t.multiplyScalar(o.steerBurn / m);
+          dir.add(_t).normalize();
+        }
         point(dir);
         const err = noseError(dir);
         v.ctrl.throttle = err < 0.5 ? clamp(need, 0.05, 1) : 0.05;
