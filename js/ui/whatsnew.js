@@ -37,6 +37,8 @@ export const RECENT_DAYS = 6;
 export const RELEASES = [
   { id: 'splashdown-spray-foam', date: '2026-11-24', title: 'A splashdown that looks like one',
     text: 'A capsule that comes down in the sea now throws up a crown of spray that falls back, and a ring of foam runs out over the water and breaks up. Foam washes round the hull at the waterline for as long as it floats. Once it has settled it rides a slow swell, rising and tilting a little, instead of sitting as still as if it stood on rock.' },
+  { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',
+    text: 'The landing autopilot now gives itself time. A lander with a strong engine over a small world used to start braking six seconds before the hover; the burn now lasts 20 seconds where the engine allows, with more than half the thrust in hand. Every guidance burn also now waits until the ship has turned to face the right way before the engine lights.' },
   { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',
     text: 'Re-entry heating now works part by part. Small parts out in the stream get hottest, wide blunt ones run cooler, and anything in a heat shield\'s shadow is safe. Skins warm and cool by a real heat balance, and the air can no longer heat a part past its own temperature. The Entry box names the hottest part and keeps the record of the entry. Settings can switch heating to its true physical strength.' },
   { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
