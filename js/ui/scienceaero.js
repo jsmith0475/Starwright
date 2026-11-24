@@ -63,6 +63,8 @@ export const AERO_CHAPTERS = [
       // lift over drag of a spherical cap held 20 degrees off, from its Newtonian axial and normal coefficients
       const al = 20 / DEG, capCA = Math.cos(al) ** 2 * capCd + Math.sin(al) ** 2 * Math.sin(phi) ** 2 / 4, capCN = Math.sin(phi) ** 2 / 2 * Math.sin(al) * Math.cos(al);
       const capLD = (capCA * Math.sin(al) - capCN * Math.cos(al)) / (capCA * Math.cos(al) + capCN * Math.sin(al));
+      const trimDeg = Math.round(T.TRIM_ANGLE * DEG), ta = trimDeg / DEG;
+      const trimCA = Math.cos(ta) ** 2 * capCd + Math.sin(ta) ** 2 * Math.sin(phi) ** 2 / 4, trimCN = Math.sin(ta) * Math.cos(ta) * Math.sin(phi) ** 2 / 2, trimLean = Math.atan(trimCN / trimCA) * DEG;
       const pod = A.PARTS.pod_acorn, podLow = pod.drag.bottom + AE.WAKE * pod.drag.top;
       return String.raw`
 ## One model, summed over the parts
@@ -142,6 +144,18 @@ Three things follow, and each can be worked by hand:
 - **A capsule held at an angle lifts**, and away from the side it leans to, the opposite of a wing: the pressure on the heat shield pushes along the shield's own axis. Held 20° off, the ${T.CAP_PHI}° cap gives a lift of $${sig(capLD, 2)}$ times its drag.
 
 > example: The ${pod.name} falling heat shield first. Below Mach 0.7 its drag coefficient on its base area is $${pod.drag.bottom} + ${AE.WAKE} \times ${pod.drag.top} = ${sig(podLow, 3)}$. At Mach 8 it is $${sig(capCd, 3)} \times ${sig(AE.pitotCp(8, 1.4), 4)} = ${sig(capCd * AE.pitotCp(8, 1.4), 3)}$, and the wake adds almost nothing.
+
+## Trim: how a capsule holds its angle
+
+A balanced capsule rests shield first at no angle, and makes no lift. Move its centre of mass a little to one side and that changes. Every bit of pressure on a spherical heat shield points at the shield's centre of curvature, so the whole force passes through that point. The capsule stops turning only when that force also passes through the centre of mass, and with the centre of mass off the axis that happens at an angle to the flow. The capsule settles there, and at that angle the shield lifts.
+
+The force does not point along the flow. It points close to the capsule's own axis, at the small angle $\arctan(C_N / C_A)$ from it, where for a cap of half-angle $\varphi$ at an angle of attack $\alpha$
+
+$$ C_A = \cos^2\alpha\,\frac{1 + \cos^2\varphi}{2} + \sin^2\alpha\,\frac{\sin^2\varphi}{4}, \qquad C_N = \sin\alpha\cos\alpha\,\frac{\sin^2\varphi}{2} $$
+
+> example: The ${T.CAP_PHI}° cap at ${trimDeg}°. $C_A = ${sig(trimCA, 3)}$, $C_N = ${sig(trimCN, 3)}$, so the force leans $${sig(trimLean, 2)}$° from the axis. The lift over drag is $\tan(${trimDeg}^\circ - ${sig(trimLean, 2)}^\circ) = ${sig(Math.tan((trimDeg - trimLean) / DEG), 2)}$. A centre of mass one metre ahead of the centre of curvature must sit $${sig(1000 * Math.tan(trimLean / DEG), 2)}$ mm off the axis to hold that angle: centimetres, as on real capsules.
+
+> game: A capsule's **Entry trim** switch moves its ballast by exactly the amount that holds ${trimDeg}°, worked from the Newtonian force on the whole vessel. **Bank hold** then turns the lift about the velocity with the roll keys. Lift up stretches the entry and lowers the peak g; lift down shortens it and raises the g. The Acorn Capsule coming home from low orbit meets about 3.1 g with no lift, 1.8 g with the lift up and 5.3 g with it down.
 
 ## Shadow
 

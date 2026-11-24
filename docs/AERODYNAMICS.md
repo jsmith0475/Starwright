@@ -117,8 +117,9 @@ Measured with the game's own flights, before (step A) and after.
 It slows higher up, so on the steep 2 km/s test entry the peak heat flux falls from 126.7 to
 119.2 kW/m² (6 %) and comes 660 m higher; peak deceleration goes from 7.2 to 7.1 g. Held
 20 degrees off the flow it now lifts 0.32 times its drag (0.20 before), and the lift points
-away from the side it leans to. It still trims at zero angle by itself: an offset centre of
-mass and steering by roll are step C.
+away from the side it leans to. Left alone it trims at zero angle. Since step C a switch,
+Entry trim, moves its centre of mass so that it holds 18 degrees, and Bank hold steers with
+the lift ([ENTRY.md](ENTRY.md)).
 
 **Rockets going up.** A pointed rocket has less drag above Mach 1.5 than before, and a folded
 solar array no longer counts as a barn door (below). All ten stock rockets that fly to orbit

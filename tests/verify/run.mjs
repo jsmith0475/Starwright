@@ -10,7 +10,7 @@
 import { writeFileSync } from 'node:fs';
 import { Suite, printTable } from './harness.mjs';
 
-export const MODULES = ['./checks_twobody.mjs', './checks_burns.mjs', './checks_multibody.mjs', './checks_planner.mjs', './checks_surface.mjs', './checks_nbody.mjs', './checks_structure.mjs', './checks_breakup.mjs', './checks_booster.mjs', './checks_aero.mjs', './checks_landing.mjs', './checks_parachute.mjs'];
+export const MODULES = ['./checks_twobody.mjs', './checks_burns.mjs', './checks_multibody.mjs', './checks_planner.mjs', './checks_surface.mjs', './checks_nbody.mjs', './checks_structure.mjs', './checks_breakup.mjs', './checks_booster.mjs', './checks_aero.mjs', './checks_entry.mjs', './checks_landing.mjs', './checks_parachute.mjs'];
 
 export async function runAll({ fast = false, only = null, skip = null, log = null } = {}) {
   const S = new Suite();

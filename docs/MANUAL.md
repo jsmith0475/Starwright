@@ -289,6 +289,17 @@ away from it, point along your drift relative to it, and point against that drif
 is the useful one: hold it and burn until the relative speed reads zero and you are parked beside
 the target.
 
+**Flying an entry with lift.** A capsule falls ballistically unless you ask it to do better.
+On the way down an **Entry** box opens under the resources. **TRIM** shifts ballast inside the
+capsule so it rests at 18 degrees to the air and lifts. **BANK** switches on Bank hold: the
+capsule keeps that attitude and `Q` / `E` turn the lift, 20 degrees a second. Bank 0° is lift
+up (a gentler, longer entry), 180° is lift down (shorter and harder), and a bank to one side
+moves the landing point that way. The box shows the bank, the lift over drag, the heat flux
+and the peak g and heating still ahead, and the map draws the path through the air to the
+cross where you come down. Coming back from Pell, do not hold the lift up on a shallow
+entry: the box will warn that the path skips back out to space. Details:
+[ENTRY.md](ENTRY.md).
+
 **Getting close.** In the map, plan a burn that brings the *closest approach* marker down to a
 few hundred metres (lower orbits go round faster, so a lower orbit catches up and a higher one
 falls back). At the closest approach, point against the drift and burn to stop. Flight School has

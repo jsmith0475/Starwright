@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
+    text: 'Capsules have a new switch, Entry trim. It shifts ballast so the capsule rests at 18 degrees to the air and lifts. A new hold, Bank hold, lets the roll keys turn that lift: up for a gentler, longer entry, down for a shorter, harder one. An Entry box on the flight screen shows bank, lift, heating and the peaks ahead, and the map now draws the path through the air to where you come down.' },
   { id: 'true-parachutes', date: '2026-11-24', title: 'Parachutes at their true size, on real lines',
     text: 'A parachute is now as big as its drag says: 22 m across on 33 m lines, and every line ends on the skirt. The canopy is its own body in the air, so the capsule swings under it. It comes out as a narrow sock, fills over six seconds, then opens fully 900 m above the ground. Each parachute has a line strength: it waits while opening would break its lines.' },
   { id: 'orbital-refuelling', date: '2026-11-23', title: 'Refuelling in orbit',

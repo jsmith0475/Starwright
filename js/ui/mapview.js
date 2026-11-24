@@ -35,6 +35,7 @@ import * as THREE from '../lib/three.module.min.js';
 import * as GFX from '../render/planetgfx.js';
 import { SYSTEM } from '../core/bodies.js';
 import { predictPatches, applyManeuver, maneuverBasis } from '../core/trajectory.js';
+import { Orbit } from '../core/orbit.js';
 import * as AUTOPILOT from '../core/autopilot.js';
 import { EXPERIMENTS, SITUATIONS } from '../core/career.js';
 import { el, clear, fmt, uiScale } from './dom.js';
@@ -1671,10 +1672,16 @@ export function createMapView(app, opts = {}) {
     if (hlPr) {
       chainsDrawn = hlPr;
       const live = hl === w.active;
+      // the path through the air, when the vessel is on its way down one: it replaces the airless path's impact point
+      let en = live && opts.getEntry ? opts.getEntry(hl) : null;
+      if (en && !(en.path && en.body === hl.body)) en = null;
       if (hlPr.chains[0]) {
         drawChain(hlPr.chains[0], ut, BASE_COLORS, { width: 2, alpha: 1, glow: 1.25 }, 0, true);
+        noImpact = !!en;
         markChain(hlPr.chains[0], ut, 'b', '', true, BASE_COLORS);
+        noImpact = false;
       }
+      if (en) drawEntry(en, ut);
       for (let j = 1; j < hlPr.chains.length; j++) {
         const ch = hlPr.chains[j], info = hlPr.infos[j - 1];
         if (!ch || !info) continue;
@@ -2014,7 +2021,8 @@ export function createMapView(app, opts = {}) {
         if (p.endType === 'impact' || p.endType === 'atmo') {
           let more = '';
           try { const st = o.stateAt(p.tEnd); more = fmt.speed(st.v.length()) + ' · ' + latLonText(body, st.r, p.tEnd); } catch { more = ''; }
-          if (p.endType === 'impact') {
+          if (p.endType === 'impact' && noImpact) { /* the entry path marks the real end */ }
+          else if (p.endType === 'impact') {
             if (markAt(c, c.A1, key + ':end', 'Impact in ' + dtxt, more, 'pill bad' + clsExtra, 88, 'cross', '#ff6b6b', 'above')) impactRing(c, '#ff6b6b');
           } else markAt(c, c.A1, key + ':end', 'Atmosphere in ' + dtxt, more, 'pill warn' + clsExtra, 88, 'cross', '#ffb347', 'above');
         } else if (p.endType === 'exit') markAt(c, c.A1, key + ':end', 'Leave ' + body.name + ' SOI in ' + dtxt, body.parent ? 'into ' + body.parent.name + ' space' : '', 'pill soi' + clsExtra, 80, 'soi', col, 'above');
@@ -2033,6 +2041,47 @@ export function createMapView(app, opts = {}) {
           }
         }
       }
+    }
+  }
+
+  /**
+   * The path through the air (js/core/entry.js): from the top of the atmosphere to the ground, or back out of the top
+   * and on along the orbit it leaves on. `en` is predictEntry's result with { ut, body } added by the flight screen.
+   */
+  const exitChains = new WeakMap();
+  let noImpact = false;
+  function drawEntry(en, ut) {
+    const body = en.body, path = en.path, n = en.n, col = '#ffb347';
+    relBody(body, rb);
+    const bx = rb[0], by = rb[1], bz = rb[2];
+    for (const [width, style, alpha] of [[4.5, 'rgba(8,11,16,0.8)', 1], [2, col, 1]]) {
+      ctx.beginPath(); ctx.lineWidth = width; ctx.strokeStyle = style; ctx.globalAlpha = alpha; ctx.lineJoin = 'round';
+      let pen = false;
+      for (let i = 0; i < n; i++) {
+        const x = bx + path[i * 4], y = by + path[i * 4 + 1], z = bz + path[i * 4 + 2];
+        if (!proj(x, y, z) || occluded(x, y, z)) { pen = false; continue; }
+        if (pen) ctx.lineTo(S.x, S.y); else { ctx.moveTo(S.x, S.y); pen = true; }
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    const ex = bx + en.pos.x, ey = by + en.pos.y, ez = bz + en.pos.z;
+    const left = fmt.time(Math.max(0, en.t - (ut - en.ut)));
+    const peaks = 'peak ' + (en.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num(en.maxFlux / 1000, 0) + ' kW/m²';
+    if (en.end === 'land') {
+      if (proj(ex, ey, ez)) {
+        const sx = S.x, sy = S.y, hid = occluded(ex, ey, ez);
+        ctx.globalAlpha = hid ? 0.55 : 1; glyphCross(sx, sy, col); ctx.globalAlpha = 1;
+        mark('entry:end', sx, sy, 'Down in ' + left, peaks + ' · ' + latLonText(body, en.pos, en.ut + en.t), 'pill warn', 90, 'below');
+      }
+    } else if (en.end === 'skip') {
+      let ch = exitChains.get(en);
+      if (ch === undefined) {
+        try { ch = predictPatches(Orbit.fromState(en.pos, en.vel, body.gm, en.ut + en.t), body, en.ut + en.t, 2).map(makeCurve); } catch { ch = null; }
+        exitChains.set(en, ch);
+      }
+      if (ch) drawChain(ch, ut, [col], { width: 1.6, alpha: 0.9, dash: [7, 5], glow: 0.9 }, -1, false);
+      if (proj(ex, ey, ez) && !occluded(ex, ey, ez)) mark('entry:end', S.x, S.y, 'Skips out in ' + left, fmt.speed(en.vel.length()) + ' · ' + peaks, 'pill warn', 90, 'above');
     }
   }
 

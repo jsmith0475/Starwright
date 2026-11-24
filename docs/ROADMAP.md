@@ -174,8 +174,11 @@ scale height. Since step A (November 2026) each world has its own gas and temper
 the Mach number is read on the true speed of sound, and the top of the atmosphere fades out
 in place of a step. Since step B bodies have a blunt and a slender drag curve, a wake that
 fades, the Newtonian force above Mach 1.5 and shelter behind wider parts
-([AERODYNAMICS.md](AERODYNAMICS.md)). A capsule held at an angle lifts, but it cannot hold
-the angle yet. Heating follows
+([AERODYNAMICS.md](AERODYNAMICS.md)). Since step C a capsule can shift its centre of mass to
+rest at an angle and lift, a Bank hold turns that lift with the roll keys, the flight screen
+shows the entry's bank, lift, heating and the peaks ahead, and the map draws the path through
+the air to the landing point ([ENTRY.md](ENTRY.md)). Nothing flies the bank toward a chosen
+site for you yet. Heating follows
 the Sutton-Graves law, and heat shields ablate.
 [docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
 

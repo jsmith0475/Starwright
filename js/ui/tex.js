@@ -29,19 +29,20 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 
 function tokenize(src) {
   const out = [];
-  let i = 0;
+  let i = 0, sp = false;   // sp: white space came before this token (kept only inside \text)
+  const push = tok => { if (sp) tok.sp = true; sp = false; out.push(tok); };
   while (i < src.length) {
     const c = src[i];
     if (c === '\\') {
       const m = /^\\([a-zA-Z]+|.)/.exec(src.slice(i));
       if (!m) throw new Error('tex: stray backslash');
-      out.push({ t: 'cmd', v: m[1] }); i += m[0].length;
+      push({ t: 'cmd', v: m[1] }); i += m[0].length;
       if (/[a-zA-Z]/.test(m[1][0])) while (src[i] === ' ') i++;
     } else if (/[0-9]/.test(c)) {
       const m = /^[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?/.exec(src.slice(i));   // 2,337 is one number
-      out.push({ t: 'num', v: m[0] }); i += m[0].length;
-    } else if (/\s/.test(c)) i++;
-    else { out.push({ t: 'chr', v: c }); i++; }
+      push({ t: 'num', v: m[0] }); i += m[0].length;
+    } else if (/\s/.test(c)) { sp = true; i++; }
+    else { push({ t: 'chr', v: c }); i++; }
   }
   return out;
 }
@@ -88,6 +89,7 @@ class Parser {
       if (!t) this.fail('missing }');
       if (t.t === 'chr' && t.v === '{') depth++;
       if (t.t === 'chr' && t.v === '}' && --depth === 0) break;
+      if (t.sp) s += s ? ' ' : '\u00a0';   // a leading space would be dropped by the browser
       s += t.t === 'cmd' ? (t.v === ' ' || t.v === ',' ? ' ' : (GREEK[t.v] || SYMBOLS[t.v] || t.v)) : t.v;
     }
     return s;
