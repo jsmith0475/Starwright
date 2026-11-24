@@ -10,13 +10,18 @@
 //                               the crawler from the assembly building to the pad, then stands there) | 'pad' (it stands
 //                               on the pad at once). The flight scene leaves this at 'none': the pad is the player's.
 //     display,                  the current mode ('none' | 'rollout' | 'pad')
+//     fitPad(plan, {open}),     dress the pad for the rocket on it: the launch mount and hold-down clamps under it and the
+//                               tower's arms out to its hull, from planPadFit(vessel) (js/render/padfit.js). No plan: the
+//                               bare pad, arms at their stock length. `open`: start with clamps and arms let go.
+//     setPadState({arms, clamps}),  0 = on the rocket, 1 = let go (the arms swing back to the tower, the clamps tip away)
 //     setDetail(level),         vegetation detail 'low' | 'medium' | 'high' | 'ultra'; `vegetation` reports what is drawn
 //     dispose(),
 //   }
 //
 // Local frame: origin at the pad centre on the ground, +Y up, +X east, +Z south (north is −Z). Metres.
-// Pad clearances (the flight scene relies on these): the pad deck top is at y = +0.04; nothing but the three
-// swing-arm tips (x ≈ 7.5, at y = 14 / 27 / 40) comes closer than 10 m to the pad axis; the service tower is
+// Pad clearances (the flight scene relies on these): the pad deck top is at y = +0.04; nothing fixed comes closer
+// than 10 m to the pad axis. What does come closer is fitted to the rocket that is there (fitPad): the launch mount
+// and its clamps round the rocket's base and the tower's swing arms, which end on its hull; the service tower is
 // centred at x = +17; the flame channel runs toward −Z; the crawlerway arrives from +Z.
 // The runway centreline is z = +850, from x = −950 (west threshold) to x = +1050; runwayAnchor is at
 // (−850, 0, 850), about 1.2 km south-west of the pad, heading east.
@@ -31,6 +36,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { createTreeSystem, createGrass, vegLevel } from './flora.js';
 import { perf } from '../perf.js';
+import { DEFAULT_ARMS, PAD_TOWER, drawMount, drawJaw, drawArm } from './padfit.js';
 
 // This module deliberately imports nothing but three.js: the hub (and so the whole game shell) must keep working
 // whatever state the other render modules are in.
@@ -587,15 +593,12 @@ function buildPad(k) {
   k.lattice(tx, 0, tw, tw, 0.9, H, 9, C.white, C.amber, 0.38);
   k.box('smooth', tx + 0.6, 0.9, 0, 2.6, H - 1, 2.6, 0x4a525c); k.box('smooth', tx + 0.6, 18, 0.2, 2.2, 3, 2.2, C.teal);
   for (let i = 1; i <= 4; i++) { const y = 0.9 + (i * 2 * (H - 0.9)) / 9; k.box('smooth', tx, y, 0, tw + 2.4, 0.25, tw + 2.4, 0x6b727b); for (const s of [-1, 1]) { k.beam('metal', [tx - tw / 2 - 1.2, y + 1.2, s * (tw / 2 + 1.2)], [tx + tw / 2 + 1.2, y + 1.2, s * (tw / 2 + 1.2)], 0.1, C.amber); k.beam('metal', [tx + s * (tw / 2 + 1.2), y + 1.2, -tw / 2 - 1.2], [tx + s * (tw / 2 + 1.2), y + 1.2, tw / 2 + 1.2], 0.1, C.amber); } }
-  for (const [z, col] of [[-2.2, 0xcfd4d9], [-2.9, C.teal], [2.4, C.orange]]) k.tube('smooth', [tx - tw / 2 - 0.35, 1, z], [tx - tw / 2 - 0.35, H - 3, z], 0.22, col, 8);
-  for (const [y, room] of [[14, 0], [27, 0], [40, 1]]) {          // swing arms toward the rocket: tips at x ≈ 7.5
-    const x0 = tx - tw / 2, x1 = 7.9, len = x0 - x1;
-    for (const s of [-1, 1]) { k.beam('metal', [x0, y, s * 0.8], [x1, y, s * 0.8], 0.2, C.white); k.beam('metal', [x0, y + 1.8, s * 0.8], [x1, y + 1.8, s * 0.8], 0.2, C.white); }
-    for (let i = 0; i <= 3; i++) { const x = x0 - (len * i) / 3; for (const s of [-1, 1]) { k.beam('metal', [x, y, s * 0.8], [x, y + 1.8, s * 0.8], 0.12, C.white); if (i < 3) k.beam('metal', [x, y, s * 0.8], [x - len / 3, y + 1.8, s * 0.8], 0.1, C.white); } k.beam('metal', [x, y, -0.8], [x, y, 0.8], 0.12, C.white); }
-    k.box('smooth', (x0 + x1) / 2, y - 0.05, 0, len, 0.12, 1.5, 0x6b727b);
-    if (room) { k.box('smooth', x1 + 1.5, y - 0.2, 0, 3.4, 3.2, 3.4, C.white); k.box('smooth', x1 + 1.5, y + 2.2, 0, 3.5, 0.5, 3.5, C.teal); }
-    else { k.box('smooth', x1, y - 0.1, 0, 0.6, 2.1, 2, C.amber); k.box('smooth', x1 - 0.02, y + 0.7, 0, 0.62, 0.4, 2.02, C.dark); }
-    k.beam('metal', [x0, y + 1.8, 0], [x0 + 0.2, y + 7, 0], 0.1, 0xd9dee2); k.beam('metal', [x0 + 0.2, y + 7, 0], [x1 + 0.8, y + 1.8, 0], 0.08, 0xd9dee2);
+  // propellant risers up the tower's west face (the pad's pipe runs come up into them; the swing arms are fitted to
+  // the rocket on the pad and are not part of this model: fitPad, js/render/padfit.js)
+  for (const [z, col, y0] of [[2.4, 0xcfd4d9, 0.9], [3.1, C.teal, 0.9], [-2.4, C.orange, 1.6]]) {
+    const x = tx - tw / 2 - 0.35; k.tube('smooth', [x, y0, z], [x, H - 3, z], 0.22, col, 14); k.sphere('smooth', x, H - 3, z, 0.24, col, 1, 10);
+    if (y0 < 1) k.cyl('smooth', x, 0.9, z, 0.36, 0.36, 0.12, C.steelDark, 14);
+    for (let y = 8; y < H - 4; y += 9) { k.cyl('smooth', x, y, z, 0.3, 0.3, 0.1, C.steel, 14); k.box('metal', x + 0.2, y - 0.3, z, 0.5, 0.12, 0.12, C.steelDark); }
   }
   k.box('smooth', tx, H, 0, tw + 3, 0.4, tw + 3, 0x6b727b); k.box('smooth', tx + 1, H + 0.4, 0, 4.2, 3.4, 4.2, C.teal); k.box('smooth', tx + 1, H + 3.8, 0, 4.6, 0.4, 4.6, C.white);
   k.win(tx - 1.15, H + 1.4, 0, 3.4, 1.6, 'w', 1.7);
@@ -633,15 +636,41 @@ function buildPad(k) {
     k.tube('smooth', [x, 5.6, z], [x, 5.6, z + 0.01], 4.46, C.orange, 20);
   }
   k.flat('slab', 84, -31, 40, 44, 0.06, C.conc);
-  // pipe racks from the farms to the pad
-  for (const [a, b, col] of [[[-73, 1.6, -30], [-30, 1.6, -18], 0xcfd4d9], [[-73, 1.6, 2], [-30, 1.6, -16], C.teal], [[71, 1.6, -31], [30, 1.6, -18], C.orange], [[-30, 1.6, -17], [-9, 1.6, -9], 0xcfd4d9], [[30, 1.6, -18], [9, 1.6, -9], C.orange]]) {
-    k.tube('smooth', a, b, 0.42, col, 8);
-    const A = V3(...a), B = V3(...b), nSup = Math.max(2, Math.round(A.distanceTo(B) / 9));
-    for (let i = 0; i <= nSup; i++) { const p = A.clone().lerp(B, i / nSup); k.box('metal', p.x, 0, p.z, 0.3, 1.5, 1.4, C.steelDark); }
+  // pipe runs from the farms to the pad: round pipe with flanged joints and elbows, on saddles; every run starts in a
+  // tank and ends in something (the valve skid, a riser on the tower, or a collar where it goes under the deck)
+  const pipe = (pts, r, col, collar = false) => {
+    const P = pts.map(p => V3(...p));
+    for (let i = 0; i < P.length - 1; i++) {
+      const A = P[i], B = P[i + 1], d = B.clone().sub(A), len = d.length(), u = d.clone().normalize(), flat = Math.abs(u.y) < 0.2;
+      k.tube('smooth', A.toArray(), B.toArray(), r, col, 16);
+      // flanges: one pair a little way from each end, and one every 12 m of a long run
+      const at = [Math.min(0.7, len * 0.3), len - Math.min(0.7, len * 0.3)]; for (let t = 12; t < len - 6; t += 12) at.push(t);
+      for (const t of at) { const c = A.clone().addScaledVector(u, t); k.tube('smooth', c.clone().addScaledVector(u, -0.07).toArray(), c.clone().addScaledVector(u, 0.07).toArray(), r * 1.38, C.steel, 16); }
+      if (flat && len > 5 && A.y > 0.8) {
+        const n = Math.max(1, Math.round(len / 9)), ry = Math.atan2(-u.z, u.x);
+        for (let j = 0; j <= n; j++) { const c = A.clone().addScaledVector(u, len * (j + 0.5) / (n + 1)); k.box('metal', c.x, 0, c.z, 0.3, c.y - r * 0.55, r * 2.9, C.steelDark, ry); k.box('concrete', c.x, 0, c.z, 0.7, 0.18, r * 4.2, C.concDark, ry); k.box('metal', c.x, c.y - r * 0.9, c.z, 0.34, r * 0.5, r * 2.3, C.steel, ry); }
+      }
+    }
+    for (let i = 1; i < P.length - 1; i++) k.sphere('smooth', P[i].x, P[i].y, P[i].z, r * 1.12, col, 1, 14);       // elbows
+    if (collar) { const e = P[P.length - 1]; k.cyl('smooth', e.x, 0.02, e.z, r * 1.75, r * 1.75, 0.16, C.steelDark, 16); k.box('concrete', e.x, 0, e.z, r * 5, 0.1, r * 5, C.concDark); }
+  };
+  pipe([[-84, 2.8, -34], [-84, 1.6, -34], [-33.2, 1.6, -18.4]], 0.42, 0xcfd4d9);
+  pipe([[-84, 2.8, 4], [-84, 1.6, 4], [-33.2, 1.6, -15.6]], 0.42, C.teal);
+  // the valve skid where the two farm lines are metered out to the pad
+  k.box('concrete', -31.5, 0, -17, 5.4, 0.3, 6.4, C.concDark); k.box('smooth', -31.5, 0.3, -17, 3.6, 2.5, 4.6, C.white); k.box('smooth', -31.5, 2.8, -17, 3.8, 0.16, 4.8, C.teal);
+  for (const z of [-18.4, -15.6]) { k.tube('metal', [-31.5, 2.96, z], [-31.5, 3.5, z], 0.05, C.steel, 8); k.cyl('metal', -31.5, 3.5, z, 0.36, 0.36, 0.06, C.red, 14); }
+  pipe([[-29.7, 1.6, -17.75], [-12.75, 1.6, -11.75], [-12.75, 0.05, -11.75]], 0.36, 0xcfd4d9, true);
+  pipe([[-29.7, 1.6, -16.25], [-13.25, 1.6, -10.25], [-13.25, 0.05, -10.25]], 0.36, C.teal, true);
+  // … and the covered trench that carries them under the deck, round the flame opening, to the risers on the tower
+  for (const [x, z, w, d] of [[-13, 0.6, 2, 24.6], [-2.4, 12, 23.2, 2], [8.2, 7.4, 2, 11.2], [9.9, 2.75, 3.4, 2]]) {
+    k.flat('mark', x, z, w, d, 0.092, 0x4d5258); const long = Math.max(w, d), n = Math.round(long / 1.6);
+    for (let i = 1; i < n; i++) { const t = (i / n - 0.5) * long; if (w > d) k.flat('mark', x + t, z, 0.05, d, 0.096, 0x2a2d31); else k.flat('mark', x, z + t, w, 0.05, 0.096, 0x2a2d31); }
   }
+  pipe([[67.8, 5.6, -31], [66.3, 5.6, -31], [66.3, 1.6, -31], [30, 1.6, -18], [15.2, 1.6, -8.4], [13.15, 1.6, -2.4]], 0.42, C.orange);
+  k.sphere('smooth', 13.15, 1.6, -2.4, 0.46, C.orange, 1, 14);
   { const x = 66, z = 52; k.cyl('smooth', x, 30, z, 7.5, 5.2, 8, C.white, 20); k.dome('smooth', x, 38, z, 7.5, C.shell, 0.5); k.cyl('smooth', x, 33, z, 7.56, 7.56, 1.6, C.amber, 20, true);
     for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; k.beam('metal', [x + Math.cos(a) * 7.5, 0, z + Math.sin(a) * 7.5], [x + Math.cos(a) * 4.6, 30.5, z + Math.sin(a) * 4.6], 0.5, C.steel); }
-    k.tube('smooth', [x, 0, z], [x, 30, z], 0.9, C.steel, 10); k.tube('smooth', [x, 1.2, z], [12, 1.2, 12], 0.5, 0x5b88b0, 8); k.glow(x, 42.4, z, 0xff3524, 2, 1, 2.2, 0.7); }
+    k.tube('smooth', [x, 0, z], [x, 30, z], 0.9, C.steel, 10); pipe([[x, 4, z], [x, 1.2, z + 1.4], [17.5, 1.2, 16.6], [17.5, 0.05, 16.6]], 0.5, 0x5b88b0, true); k.glow(x, 42.4, z, 0xff3524, 2, 1, 2.2, 0.7); }
   k.box('concrete', -62, 0, 62, 26, 5.5, 14, C.cream); k.box('paint', -62, 5.5, 62, 26.6, 0.8, 14.6, C.tealDeep); k.win(-62, 2.4, 54.85, 20, 1.6, 'n', 2.5);
   k.dome('smooth', -56, 6.3, 64, 3, C.white); k.beam('metal', [-70, 6.3, 66], [-70, 15, 66], 0.16, 0xd9dee2);
   // perimeter lamps
@@ -1327,6 +1356,30 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
   group.add(rocket);
   const show = { mode: 'none', riding: false };
 
+  // ---- the pad fitted to the rocket on it (js/render/padfit.js): the mount (fixed), its clamps and the tower's arms (they move)
+  const padFit = new THREE.Group(); padFit.name = 'padFit'; padFit.position.set(0, 0.085, 0); group.add(padFit);     // the deck the rocket rests on, as drawn under it
+  const fit = { jaws: [], arms: [], arm: 0, armGoal: 0, jaw: 0, jawGoal: 0 };
+  const poseFit = () => {
+    const ka = fit.arm * fit.arm * (3 - 2 * fit.arm), slide = Math.min(1, fit.jaw * 3) * 0.3, tip = Math.max(0, (fit.jaw - 0.25) / 0.75) * 1.3;
+    for (const g of fit.arms) g.rotation.y = ka * PAD_TOWER.swing;
+    for (const g of fit.jaws) { const u = g.userData; g.position.set(u.x + Math.cos(u.a) * slide, u.y, u.z + Math.sin(u.a) * slide); g.rotation.set(0, Math.PI - u.a, tip); }
+  };
+  function fitPad(plan, { open = false } = {}) {
+    for (const o of [...padFit.children]) { o.traverse(m => { if (m.geometry) m.geometry.dispose(); }); padFit.remove(o); }
+    fit.jaws.length = 0; fit.arms.length = 0;
+    plan = plan || { columns: [], arms: DEFAULT_ARMS };
+    const piece = (name, draw) => { const g = new THREE.Group(); g.name = name; const kp = new Kit(71); draw(kp); kp.build(g, M, {}); padFit.add(g); return g; };
+    piece('padMount', kp => drawMount(kp, plan));
+    for (const c of plan.columns || []) for (const a of c.legs) { const g = piece('padClamp', kp => drawJaw(kp, c)); g.userData = { x: c.x + Math.cos(a) * c.Rp, y: c.hingeY, z: c.z + Math.sin(a) * c.Rp, a }; fit.jaws.push(g); }
+    for (const arm of plan.arms || []) { const g = piece('padArm', kp => drawArm(kp, arm)); g.position.set(PAD_TOWER.hinge, arm.y, 0); fit.arms.push(g); }
+    fit.arm = fit.armGoal = fit.jaw = fit.jawGoal = open ? 1 : 0;
+    poseFit();
+  }
+  function setPadState({ arms, clamps } = {}) { if (arms !== undefined) fit.armGoal = arms ? 1 : 0; if (clamps !== undefined) fit.jawGoal = clamps ? 1 : 0; }
+  // the show rocket (buildShowRocket) stands on a mount of its own; the arms go to its core, its upper stage and its fairing
+  const SHOW_FIT = { columns: [], arms: [{ y: 14.6, tip: 2.27, hull: 2.23 }, { y: 29.2, tip: 1.74, hull: 1.7 }, { y: 39.2, tip: 2.14, hull: 2.1, crew: true }] };
+  fitPad(null);
+
   let walkers = null;
   if (!low) {
     const pg = pipGeometry(); owned.push(pg);
@@ -1388,8 +1441,15 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
     // the crawler: carries the show rocket to the pad, then goes home
     { const want = show.riding ? CRAWL.pad : CRAWL.park, z = crawler.position.z;
       if (z !== want) { const step = CRAWL.speed * d, nz = Math.abs(want - z) <= step ? want : z + Math.sign(want - z) * step; crawler.position.set(0, drop(0, nz), nz); }
-      if (show.riding && crawler.position.z === CRAWL.pad && d > 0) show.riding = false;              // arrived: the rocket is handed to the pad
+      if (show.riding && crawler.position.z === CRAWL.pad && d > 0) { show.riding = false; setPadState({ arms: 0 }); }              // arrived: the rocket is handed to the pad, and the arms come in to it
       if (rocket.visible) { if (show.riding) rocket.position.set(0, crawler.position.y + 8.2, crawler.position.z); else rocket.position.set(0, 0.05, 0); } }
+    // the pad's arms swing clear in a second and a half and come back slowly; the clamps let go in a third of a second
+    if (fit.arm !== fit.armGoal || fit.jaw !== fit.jawGoal) {
+      const sa = d / (fit.armGoal > fit.arm ? 1.5 : 5), sj = d / 0.35;
+      fit.arm = Math.abs(fit.armGoal - fit.arm) <= sa ? fit.armGoal : fit.arm + Math.sign(fit.armGoal - fit.arm) * sa;
+      fit.jaw = Math.abs(fit.jawGoal - fit.jaw) <= sj ? fit.jawGoal : fit.jaw + Math.sign(fit.jawGoal - fit.jaw) * sj;
+      poseFit();
+    }
     if (perf.on && flora) { const fs = flora.stats; perf.count('treesFull', fs.full); perf.count('treesReduced', fs.reduced); perf.count('treeImpostors', fs.impostors); perf.count('vegTriangles', fs.triangles + (grass ? grass.stats.triangles : 0)); }     // per frame, for ?perf=1
     if (flora) { flora.update(d, env); if (grass) grass.update(d, flora.cameraKnown ? flora.cameraLocal.y - drop(flora.cameraLocal.x, flora.cameraLocal.z) : undefined); }
     if (walkers) {
@@ -1412,9 +1472,10 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
     if (mode !== 'rollout' && mode !== 'pad') mode = 'none';
     if (mode === show.mode) return;
     show.mode = mode;
-    if (mode === 'none') { rocket.visible = false; show.riding = false; return; }
+    if (mode === 'none') { rocket.visible = false; show.riding = false; fitPad(null); return; }
     buildRocket(); rocket.visible = true;
     show.riding = mode === 'rollout';
+    fitPad(SHOW_FIT, { open: show.riding });
     if (show.riding) crawler.position.set(0, drop(0, CRAWL.door), CRAWL.door);
     update(0, {});
   }
@@ -1430,7 +1491,7 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
   function setDetail(level) { if (level === vegNow) return; vegNow = level; if (flora) flora.setDetail(level); if (grass) grass.setDetail(level); }
   /** The same from the three things that decide it: the player's setting ('auto' or a level), the quality level's name and how many levels the automatic governor takes away. */
   function setVegetation(setting, qualityName = quality, drop = 0) { setDetail(vegLevel(setting, qualityName, drop)); }
-  return { group, buildings, padAnchor, runwayAnchor, update, dispose, setDoor, setDisplay, setDetail, setVegetation, get display() { return show.mode; }, get night() { return night; },
+  return { group, buildings, padAnchor, runwayAnchor, update, dispose, setDoor, setDisplay, fitPad, setPadState, setDetail, setVegetation, get display() { return show.mode; }, get night() { return night; },
     /** vegetation: { trees: { trees, full, reduced, impostors, triangles, level }, grass: { tufts, triangles } } for overlays and tests; prepare(renderer) bakes the impostors ahead of the first frame */
     get vegetation() { return { level: vegNow, trees: flora ? flora.stats : null, grass: grass ? grass.stats : null }; },
     prepare(renderer) { if (flora) flora.prepare(renderer); },

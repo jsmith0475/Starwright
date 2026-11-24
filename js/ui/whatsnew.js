@@ -39,6 +39,8 @@ export const RELEASES = [
     text: 'Under the booster and the ship the many small flames now merge into one long flame sized by the thrust being made. The tower service arm rests on the hull until the engines light, and two docked Flank Ports are joined by a collar with latches that frosts over while propellant flows.' },
   { id: 'ship-belly-return', date: '2026-11-24', title: 'Shearwater comes home on its belly',
     text: 'The ship now returns from orbit: it falls flat on its belly with four flaps steering, flips upright near 3 km and is caught by the tower arms. Try the new scenario Belly First, pick Return to the tower in the Autopilot panel, or hold it yourself with the new BELLY button in the SAS row.' },
+  { id: 'pad-mount-and-arms', date: '2026-11-24', title: 'A launch mount, hold-downs and arms that reach',
+    text: 'A rocket on the pad no longer rests on its engine bell. It stands on a launch mount fitted to it, held by clamps on the rim above the engine, with the bell hanging free over the flame opening. The tower\'s arms now end on the hull, with a white room at the capsule. The arms swing clear when the engines light and the clamps let go at lift-off. The pad\'s pipes are round, flanged and connected at both ends.' },
   { id: 'parts-joined-up', date: '2026-11-24', title: 'Struts, hoses and solar wings that fit',
     text: 'Brace Struts and Sip Fuel Lines are made to length to the booster they face, up to 4 m away, and a strut braces exactly what it is drawn touching. Folding solar wings and fans now turn on their booms to face the sun, and the rover and close-up rocks are sharper.' },
   { id: 'solid-boulders', date: '2026-11-24', title: 'Boulders are solid',
