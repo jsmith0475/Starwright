@@ -60,6 +60,10 @@ the seventeen heights by least squares, and its tilt is the slope.
 8 % of the footprint radius (32 cm for a 4 m footprint) is not fit: a boulder or the lip of a small
 crater under one foot.
 
+**Boulders.** The scattered boulders are solid ([BOULDERS.md](BOULDERS.md)) and are not part of the
+terrain heights, so they are asked for separately: `boulder` is the height of the tallest one that
+reaches into the footprint. More than 10 cm (`BOULDER_OK`) is not fit.
+
 **The limit.** A lander tips over when the slope passes the angle between its outermost foot and
 its centre of mass, `atan(footprint radius / height of the centre of mass)`. It does not arrive
 perfectly still, and the downhill leg takes the load first, so the autopilot uses 40 % of that
