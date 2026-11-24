@@ -50,7 +50,9 @@ test('C3: a stage brought back from a typical separation lands inside the touchd
 });
 
 test('the entry burn: planned from the prediction, flown, and it keeps the skin cooler', () => {
-  const start = { alt: 80000, speed: 1900, pitch: 5, east: 200000, fuel: 0.4 }, target = home.dirFromLatLon(0, 500000 / home.radius);
+  // (2,000 m/s: below about 1,450 m/s the air's own total temperature is under what any part here can take, so a
+  // slower fall needs no burn at all)
+  const start = { alt: 80000, speed: 2000, pitch: -5, east: 200000, fuel: 0.4 }, target = home.dirFromLatLon(0, 500000 / home.radius);
   const r = flyReturn(start, { target });
   assert.ok(r.log.some(l => /entry burn needed/.test(l)) && r.log.some(l => /entry burn complete/.test(l)), r.log.join('\n'));
   // (the aim point is open sea 500 km out: it comes down on it as gently as on a pad, and says that it is in the water)

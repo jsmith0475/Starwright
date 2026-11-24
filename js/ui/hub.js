@@ -124,7 +124,8 @@ export function settingsRows(app, h = settingsControls(app)) {
     el('h4', { text: 'Game' }),
     h.toggle('invertPitch', 'Invert pitch', 'Swap W and S, for those who fly "pull back to climb" the other way'),
     h.toggle('showHints', 'Show hints', 'Friendly tips from the ground crew'),
-    h.toggle('structFail', 'Structural failures', 'Overloaded joints break and the rocket comes apart. Off: loads are still shown, nothing breaks'));
+    h.toggle('structFail', 'Structural failures', 'Overloaded joints break and the rocket comes apart. Off: loads are still shown, nothing breaks'),
+    h.toggle('realHeat', 'Heating at physical strength', 'Off: re-entry heating is 20 times what physics gives on worlds this small, so that coming home needs a heat shield. On: the physical figure, under which little ever burns'));
 }
 function settingsControls(app) {
   const s = app.settings;

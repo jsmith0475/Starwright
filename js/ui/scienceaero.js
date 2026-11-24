@@ -4,7 +4,8 @@
 // reference cannot drift from js/core/vessel.js, js/core/structure.js and js/core/parts.js. The same mathematics is
 // set out for developers in README.md (Aerodynamics), docs/STRUCTURE.md and docs/AERO_BREAKUP.md.
 // Pure data and string work: imported by the unit tests in Node.
-import { TUNING, wingCoefficients } from '../core/vessel.js';
+import { TUNING, HEAT_SCALE_GAME, wingCoefficients } from '../core/vessel.js';
+import { GASES } from '../core/bodies.js';
 import { STRUCT, rootSection } from '../core/structure.js';
 import { AIR_RATING, PARTS } from '../core/parts.js';
 import { MAX_DEBRIS } from '../core/world.js';
@@ -43,7 +44,7 @@ export function aeroModel() {
     const cd90 = wingCoefficients(Math.PI / 2)[1];
     return { name: d.name, h: d.h, t: d.t, width: d.rw, area: w.area, sec, factor, capM: STRUCT.LINE_T * factor * sec.zFlap, cd90, arm: d.rw / 2 };
   };
-  return { TUNING, STRUCT, PARTS, MAX_DEBRIS, AERO, rated, machRise, wingCoefficients, rootSection, tearTime, ring, fin, DEG };
+  return { TUNING, HEAT_SCALE_GAME, GASES, STRUCT, PARTS, MAX_DEBRIS, AERO, rated, machRise, wingCoefficients, rootSection, tearTime, ring, fin, DEG };
 }
 
 export const AERO_CHAPTERS = [
@@ -65,6 +66,12 @@ export const AERO_CHAPTERS = [
       const capLD = (capCA * Math.sin(al) - capCN * Math.cos(al)) / (capCA * Math.cos(al) + capCN * Math.sin(al));
       const trimDeg = Math.round(T.TRIM_ANGLE * DEG), ta = trimDeg / DEG;
       const trimCA = Math.cos(ta) ** 2 * capCd + Math.sin(ta) ** 2 * Math.sin(phi) ** 2 / 4, trimCN = Math.sin(ta) * Math.cos(ta) * Math.sin(phi) ** 2 / 2, trimLean = Math.atan(trimCN / trimCA) * DEG;
+      // heating: the worked example of the capsule's base, and the same sum at S = 1
+      const GAS = A.GASES, HS = A.HEAT_SCALE_GAME, podDef = A.PARTS.pod_acorn, ES = T.HEAT_EMIS * 5.670374419e-8;
+      const hRho = home.density(45000), hRef = at.heatK * Math.sqrt(hRho) * 2300 ** 3, hRcap = podDef.rBottom / Math.sin(phi), hQ = HS * hRef / Math.sqrt(hRcap);
+      const hT0 = home.temperature(45000) + 2300 ** 2 / (2 * at.cp), hT0up = home.temperature(30000) + 1000 ** 2 / (2 * at.cp);
+      const balance = q => { let lo = T.AMBIENT_T, hi = hT0; for (let k = 0; k < 60; k++) { const m = 0.5 * (lo + hi); if (ES * (m ** 4 - T.AMBIENT_T ** 4) < q * (1 - m / hT0)) lo = m; else hi = m; } return lo; };
+      const hTeq = balance(hQ), hTeq1 = balance(hQ / HS), vOrb = Math.sqrt(home.gm / (home.radius + 80000));
       const pod = A.PARTS.pod_acorn, podLow = pod.drag.bottom + AE.WAKE * pod.drag.top;
       return String.raw`
 ## One model, summed over the parts
@@ -230,11 +237,40 @@ $$ \omega_n = \sqrt{\frac{q\,\sum_i k_i\,\ell_i}{I}} $$
 - **Breakup.** The flow across each thin part is compared with what it is rated for (the chapter after).
 - **Debris flies.** A torn-off booster keeps the drag of its own parts and tumbles on under this same model.
 
-Heating uses the flux law of chapter 9 on the vessel's speed, and each part's skin moves toward an equilibrium temperature set by how squarely it faces the flow (its exposure $x$, from 0 to 1):
+## Heating: each part by its own shape
 
-$$ \dot{q} = ${sig(T.HEAT_FLUX_K, 3)}\,\sqrt{\rho}\;v^3, \qquad T_{eq} = ${T.AMBIENT_T} + ${T.HEAT_K.toFixed(2)}\,(\dot{q}\,x)^{${T.HEAT_EXP}} $$
+The air ahead of a fast body is squeezed and heated by its shock wave, and part of that heat soaks into the skin. At the foremost point of a rounded nose of radius $R_n$ the flux is given by the law of Sutton and Graves (chapter 9):
 
-with $\dot{q}$ in W/m² and $T$ in kelvin. A leading face has an exposure up to 1, a flank at most ${T.SIDE_EXPOSURE}, and nothing heats below ${int(T.HEAT_MIN_FLUX)} W/m².
+$$ \dot{q}_{ref} = k\,\sqrt{\frac{\rho}{R_n}}\;v^3 $$
+
+The constant $k$ belongs to the gas: $${sig(GAS.air.heatK * 1e4, 5)}\times10^{-4}$ for air, $${sig(GAS.co2.heatK * 1e4, 5)}\times10^{-4}$ for carbon dioxide and $${sig(GAS.h2he.heatK * 1e5, 3)}\times10^{-5}$ for the hydrogen and helium of the gas giants. The game works this out once each step for a nose of one metre, and every part then takes its own share:
+
+$$ \dot{q}_j = S\;\dot{q}_{ref}\;\frac{f_j\,e_j}{\sqrt{R_j}} $$
+
+- **Nose radius**, $R_j$, in metres, the part's own. A heat shield or a capsule's base uses the radius of curvature of its cap, $r / \sin ${T.CAP_PHI}^\circ$. A flat end counts as a nose of ${T.HEAT_FLAT_R} face radii. A flank uses the part's own radius. A small part on the side of a hull uses half its thickness, and never less than ${int(T.HEAT_EDGE_MIN * 100)} cm. Small radii mean high flux, so an antenna in the open is heated harder than the capsule it stands on.
+- **Attitude**, $f_j$. A leading face takes $\cos^{${T.HEAT_FACE_EXP}}$ of the angle between its normal and the wind. A flank at an angle $\alpha$ to the wind takes $\tfrac{1}{\sqrt 2}\sin^{${T.HEAT_SIDE_EXP}}\alpha$, the figure for a swept cylinder. A part on the side of a hull takes all of the stream when its side is to the wind and ${T.HEAT_RADIAL_AX} of it when the air runs along the hull. Anything in the lee keeps ${T.HEAT_LEE}.
+- **Shadow**, $e_j$, from the section above, with a floor of ${T.HEAT_LEE}. A part wholly behind a heat shield meets ${int(T.HEAT_LEE * 100)} % of what it would in the open.
+- **Scale**, $S = ${int(HS)}$. This is the one place where the model departs from physics on purpose, and it is explained below.
+
+The skin does not jump to a temperature. It has a heat capacity, it takes heat from the air and it radiates heat away:
+
+$$ c_j\,\frac{dT}{dt} = \dot{q}_j\left(1 - \frac{T}{T_0}\right) - \varepsilon\sigma\left(T^4 - T_{env}^4\right), \qquad T_0 = T_{air} + \frac{v^2}{2 c_p} $$
+
+Here $c_j$ is the heat capacity of the skin per square metre (${int(T.HEAT_SKIN * 100)} % of the part's dry mass at ${int(T.HEAT_CP)} J/(kg K), spread over its surface), $\varepsilon = ${T.HEAT_EMIS}$ and $\sigma$ is the Stefan-Boltzmann constant. $T_0$ is the total temperature of the air: what the air reaches when it is brought to rest against the wall. The air cannot heat a wall past its own temperature, so the flux falls to nothing as the skin nears $T_0$.
+
+> example: The Acorn Capsule's base at 45 km and 2,300 m/s above ${home.name}. The density is $${sig(hRho, 3)}$ kg/m³, so $\dot{q}_{ref} = ${sig(hRef / 1000, 3)}$ kW/m². The base is a cap of radius of curvature $${sig(hRcap, 3)}$ m, flying face on in the open: $\dot{q} = ${int(HS)} \times ${sig(hRef / 1000, 3)} / \sqrt{${sig(hRcap, 3)}} = ${sig(hQ / 1000, 3)}$ kW/m². The air there has $T_0 = ${int(hT0)}$ K. The skin stops warming where what it takes equals what it radiates, at $${int(hTeq)}$ K. The capsule's limit is ${int(pod.maxTemp)} K.
+
+> example: The same sum on a climb. At 30 km and 1,000 m/s, $T_0 = ${int(hT0up)}$ K. Nothing on the rocket can get hotter than that however long it stays there, which is why a rocket does not burn on the way up.
+
+A heat shield with ablator left does not have to take the heat. Its surface chars and leaves, carrying the heat away. In the game its face is held at ${int(T.ABLATE_TEMP)} K and it loses mass at
+
+$$ \dot{m} = \frac{\dot{q}_j\,A}{Q^*}, \qquad Q^* = ${sig(T.ABLATE_Q / 1e6, 3)}\ \text{MJ/kg} $$
+
+with $A$ the area of its face. Loss goes with area, so a large shield and a small one lose about the same share of their ablator on the same entry.
+
+> game: **The scale.** ${home.name} is small. Its orbital speed is ${sig(vOrb / 1000, 2)} km/s where Earth's is 7.8, and heating goes with the cube of speed. At $S = 1$ the capsule's bare base would reach about $${int(hTeq1)}$ K coming home from orbit and nothing in the game would ever burn. With $S = ${int(HS)}$ a bare capsule survives a return from low orbit and burns up on a return from ${c.moon.name}, as it did before this model. You can set $S = 1$ in Settings, under "Heating at physical strength".
+
+> game: On the way down the Entry box names the hottest part and how close it is to its limit, and keeps the record of the entry: the peak, the heat taken per square metre, and the ablator lost.
 
 ## What the model leaves out
 

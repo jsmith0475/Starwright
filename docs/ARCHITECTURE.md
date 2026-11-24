@@ -239,9 +239,11 @@ Physics model (per sub-step, active and nearby vessels ≤ 2.5 km; others ride o
   `strength`, and on touchdown, when the picture topples and deflates the canopy (`chuteDown`, `js/render/partmesh.js`). The drawn canopy (`js/render/canopy.js`) is built from the same `chuteShape` the physics flies.
 - Attitude: rigid body with diagonal inertia. Torque sources: reaction wheels (`torque`, uses elec 0.02 EC/s per kN·m at full),
   engine gimbal, control fins (∝ dynamic pressure), RCS (mono). SAS is a PD controller that feeds the same actuators.
-- Heating: Sutton-Graves-like flux `1.83e-4·sqrt(ρ)·v³` drives part skin temps on exposed windward parts; heat shields
-  absorb while ablator lasts; a part above `maxTemp` explodes. Tuned so a bare Acorn capsule survives a shallow
-  re-entry from low Verda orbit (≈2300 m/s) but a 3000+ m/s return needs a shield.
+- Heating (docs/HEATING.md): Sutton-Graves flux `k·sqrt(ρ)·v³` for a 1 m nose, `k` from the world's gas; each part meets
+  `HEAT_SCALE · flux / sqrt(R)` times an attitude factor and its shadow exposure, `R` its own nose radius, and its skin
+  follows a heat balance with radiation and the air's total temperature as a ceiling. Heat shields hold 2,000 K and lose
+  ablator by heat times area; a part above `maxTemp` explodes. `HEAT_SCALE` (20) is set so a bare Acorn capsule survives
+  a shallow re-entry from low Verda orbit (≈2300 m/s) but a 3000+ m/s return needs a shield.
 - Ground: bodies are perfect spheres (flat terrain). Touching down slower than the lowest part's `tolerance`
   lands; faster destroys the contacting parts (and everything if > 2.2× tolerance). Water (ocean biome) is ×1.5 tolerance → 'splashed'.
   Landed vessels are pinned to the rotating surface until thrust exceeds weight.

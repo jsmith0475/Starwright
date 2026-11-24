@@ -14,7 +14,7 @@ import { predictEntry } from '../../js/core/entry.js';
 const sys = R.readSystem();
 const DEG = Math.PI / 180;
 const TRIM = 18;                                              // degrees: typed here a second time, on purpose
-const HEAT_K = 1.83e-4;                                       // the heating law's constant, likewise
+const HEAT_K = 1.7415e-4;                                       // the heating law's constant, likewise
 const CAP = 25 * DEG;
 
 const stackOn = (top, bottom) => { const c = new Craft(top + ' on ' + bottom); const r = c.setRoot(bottom)[0]; c.attachStack(top, r.id, 'top'); c.autoStage(); return c; };

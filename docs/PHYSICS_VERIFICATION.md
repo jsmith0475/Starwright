@@ -28,7 +28,7 @@ Last full run: **861 checks passed, 0 failed, 129 informational rows.** Unit sui
 - **SOI radius** is the Laplace value a (m/M)^(2/5). On crossing it the state is re-expressed relative to the new
   body (position and velocity of the body subtracted or added) and the vessel continues on a new conic.
 - **Atmosphere**: exponential density rho0 exp(-h/H) cut off at a fixed top, co-rotating with the body; quadratic
-  drag per part with a transonic rise; heating flux K sqrt(rho) v^3 (Sutton-Graves form).
+  drag per part with a transonic rise; heating flux K sqrt(rho / R) v^3 (Sutton and Graves) part by part, and a heat balance for each skin.
 
 Consequences, all measured in section 4: no Lagrange points, no tidal perturbation of orbits, no orbital decay or
 precession, and transfers that differ from real n-body gravity by an amount a small correction burn covers.
@@ -182,6 +182,38 @@ pass, 0 fail.
 One thing the specification had wrong was found here: its formula for the offset (C2) was too
 large by a factor of about ten. The game solves the offset from the Newtonian force, and the
 check above is what shows the result is right.
+
+### Heating by shape (chapter 14 of the checks)
+
+`tests/verify/checks_heat.mjs`, step E of the re-entry work ([HEATING.md](HEATING.md)). 67 checks
+pass, 0 fail. Every constant of the model is typed there a second time, and the air is the
+reference's own.
+
+- **Constants and geometry.** The hydrogen and helium heating constant is worked from Sutton and
+  Graves' constants for the two gases by their mixing rule, and the same conversion gives back
+  the published constant for air. Nose radii, flank radii and skin heat capacities of a
+  four-part stack are worked by hand against the game's.
+- **The flux law.** A capsule and a tank are held at 11 attitudes from nose first to tail
+  first; the flux on a flat end goes as one over the square root of its radius (2.000 between
+  a narrow and a wide tank); a capsule in its shield's wake keeps 3 %; an antenna that reaches
+  out of the wake does not; an antenna on a hull flying side on meets the whole stream to
+  windward and the floor to leeward.
+- **The heat balance.** Entries are flown in the game and the state recorded each step. The
+  reference then works the flux from its own air and integrates the skin's balance with
+  fourth-order Runge-Kutta in steps an eighth as long. The bare capsule from low orbit agrees
+  within 0.024 % all the way down; the same capsule from Pell is destroyed, and the reference
+  passes the limit on the same flight; three shielded entries lose the ablator the reference
+  says within 0.01 kg, with the face never past 2,000 K and the capsule behind it under 400 K.
+- **Limits.** A fall at 1,200 m/s heats nothing past the air's total temperature. A skin at
+  1,500 K in vacuum cools as the reference says for a minute (within 0.003 %). The steady
+  estimate the booster's entry burn is planned from equals the balance solved by bisection.
+  A tiled side holds at 250 K over the steel's limit with its belly to the wind, and fails
+  with its back to it.
+
+The specification's law, built as written, burned antennas and solar panels off eight stock
+rockets on the climb. The wall factor $(1 - T/T_0)$ of Sutton and Graves' full law removes
+that: air at 1,000 m/s cannot heat anything past about 700 K. With it the declared scale came
+out at 20, not the 8 the specification expected.
 
 ## 4. Model honesty: patched conics against n-body gravity
 
@@ -385,7 +417,7 @@ For someone who knows Kerbal Space Program or similar games:
   ejection in the home planet's plane and expects a correction about 40 % of the way; it does not search
   porkchop plots or wait for the line of nodes. Expect 200 to 350 m/s of correction for Rusk and Murk.
 - **Atmospheres are simple.** Exponential density with one scale height, a tapered top, a speed of sound from each world's gas and temperature,
-  body forces by shape above Mach 1.5 (a tilted capsule lifts but does not yet hold its tilt), no winds. Heating follows the Sutton-Graves law; peak heating comes before peak g, where
+  body forces by shape above Mach 1.5 (a tilted capsule lifts but does not yet hold its tilt), no winds. Heating follows the Sutton-Graves law on each part's own nose radius, scaled 20 times (declared, and switchable to 1 in Settings); peak heating comes before peak g, where
   it should. Aerobraking works and is predictable.
 - **Rotation is right.** The pad gives 203 m/s eastward for free, tidally locked moons keep one face to their
   planet, and a ship let go on the surface is on the orbit its surface velocity implies.
