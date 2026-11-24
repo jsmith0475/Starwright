@@ -40,6 +40,7 @@ press Start, and you are there with a short brief and a list of objectives.
 | `pell-overland` | Pell Overland | Pell | Landed, Pebble rover at the start of a clear run | Easy | Drive 1 km in one sixth of home gravity |
 | `rusk-arrival` | Rusk Arrival | Rusk | Inbound on an open path, closest approach 90 km | Hard | Plan and fly the capture burn |
 | `tiv-survey` | Under the Giant | Tiv (moon of Thal) | 60 km orbit, Wayfarer lander | Hard | Land and plant a flag |
+| `topping-up` | Topping Up | Verda | 100 km orbit, Shearwater 42 % full, 150 m from the depot Deepwell | Medium | Dock side by side, fill the tanks to 95 %, undock |
 | `belly-first` | Belly First | Verda | 100 km orbit, Shearwater unloaded, 16 % propellant | Hard | Fall belly first below 30 km, be caught by the tower arms |
 | `fire-and-silk` | Fire and Silk | Verda | Sub-orbital, falling from 120 km, capsule only | Easy | Survive re-entry, land under the parachute |
 

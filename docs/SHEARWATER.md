@@ -5,11 +5,13 @@ A two-stage rocket on methane and liquid oxygen, modelled on SpaceX's Starship (
 its size to suit Starwright's small worlds. The names are our own: the ship is the
 **Shearwater**, the booster is the **Stalwart**, the engine is the **Peregrine**.
 
-It is being built in steps. **Three are in the game: the rocket, the tower that launches and
-catches it, and refuelling in orbit.** The stack stands on the tower's mount, flies to orbit on
-its own two liquids and hot-stages, and the booster flies back and is caught by its two pins. In
-orbit the ship docks side by side with a propellant depot and is filled up through a propellant
-line. The ship's belly-first return comes next (see "What is not built yet").
+It is being built in steps. **Four are in the game: the rocket, the tower that launches and
+catches it, refuelling in orbit, and the ship's return.** The stack stands on the tower's mount,
+flies to orbit on its own two liquids and hot-stages, and the booster flies back and is caught by
+its two pins. In orbit the ship docks side by side with a propellant depot and is filled up
+through a propellant line. The ship comes home flat on its belly, steered by four flaps, flips
+upright near 3 km and is caught by the same arms. The whole mission as one scenario comes next
+(see "What is not built yet").
 
 ## What is new in the game because of it
 
