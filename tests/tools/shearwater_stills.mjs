@@ -20,6 +20,7 @@ page.on('pageerror', e => console.log('page error: ' + e.message));
 const E = (fn, arg) => page.evaluate(fn, arg);
 const waitScreen = async name => { await page.waitForFunction(n => window.__sw && window.__sw.app.currentName === n && window.__sw.app.current, name, { timeout: 600000 }); await page.waitForTimeout(500); };
 const hq = () => E(() => { const a = window.__sw.app, s = a.settings; s.gfxForce = true; s.gfxQuality = 'high'; s.gfxAuto = false; s.showHints = false; if (a.applySettings) a.applySettings(); });
+const lq = () => E(() => { const a = window.__sw.app, s = a.settings; s.gfxForce = false; s.gfxQuality = 'low'; if (a.applySettings) a.applySettings(); });
 async function ff(sim, until = 'false') {
   let left = sim, hit = false;
   while (left > 0 && !hit) {
@@ -51,7 +52,7 @@ await page.goto(server.url);
 await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 600000 });
 await hq();
 
-if (ONLY !== 'tower') {
+if (ONLY !== 'tower' && ONLY !== 'catch' && ONLY !== 'caught') {
 // ---- refuelling: the Topping Up scenario
 await page.click('.sw-menu [data-action="scenarios"]');
 await page.waitForSelector('.sw-scn-modal .sw-scn-grid');
@@ -90,19 +91,21 @@ await E(async () => {
   window.__sw.app.goto('flight', { craft: c.toJSON(), crew: ['Ada', 'Bo'] });
 });
 await waitScreen('flight');
-await hq();
+const CATCH = ONLY === 'catch' || ONLY === 'caught';   // only the catch pictures: fly in low graphics, switch to high for each picture
+if (!CATCH) { await hq();
 await ff(0.5);
 await cam(0.9, 0.12, 230); await shot('tower-1-on-the-mount');
-await cam(2.4, 0.5, 150); await shot('tower-2-from-above');
+await cam(2.4, 0.5, 150); await shot('tower-2-from-above'); }
 await page.keyboard.down('Space'); await E(() => { const a = window.__sw.app; a.current.update(0.02); a.input.endFrame(); }); await page.keyboard.up('Space');
 await E(() => { const w = window.__sw.world; window.__b = { sep: false, caught: false }; w.on('decouple', () => { window.__b.sep = true; }); w.on('caught', () => { window.__b.caught = true; }); window.__sw.app.flight.actions.toggleAssist(); });
-await ff(5); await cam(0.9, 0.05, 260); await shot('tower-3-liftoff');
+await ff(5); if (!CATCH) { await cam(0.9, 0.05, 260); await shot('tower-3-liftoff'); }
+await lq();
 await ff(240, 'window.__b.sep'); await ff(3);
 await page.keyboard.down('Backslash'); await E(() => { const a = window.__sw.app; a.current.update(0.02); a.input.endFrame(); }); await page.keyboard.up('Backslash');
 await ff(400, 'v.radarAlt < 150 && v.vel.dot(v.pos) < 0 && w.ut > 200 && v.partList.some(p => p.type === "eng_peregrine33") && v.altitude < 400');
-await cam(0.9, 0.1, 240); await shot('tower-4-coming-down');
+if (ONLY !== 'caught') { await hq(); await cam(0.9, 0.1, 240); await shot('tower-4-coming-down'); await lq(); }
 await ff(120, 'window.__b.caught'); await ff(4);
-await cam(0.9, 0.1, 200); await shot('tower-5-caught');
+await hq(); await cam(0.9, 0.1, 200); await shot('tower-5-caught');
 await cam(2.2, 0.45, 110); await shot('tower-6-caught-above');
 }
 
