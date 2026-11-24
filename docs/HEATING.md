@@ -168,9 +168,9 @@ target, hottest part at 0.60 of its limit.
 
 ## On the flight screen
 
-The Entry box gains two rows. **Hottest part** names the part closest to its limit and how
-close. **So far** keeps the record of this heating: the peak against the limit, the heat
-taken by the hottest part in MJ/m², and the ablator lost. The record is saved with the
+The Entry box gains three rows. **Hottest part** names the part closest to its limit and how
+close. **So far** keeps the record of this heating: the peak against the limit and the heat
+taken by the hottest part in MJ/m². **Ablator lost** is the shield's loss in kilograms. The record is saved with the
 vessel and starts again when heating next begins.
 
 The entry prediction (peaks ahead, the path on the map) now lets the shield lose ablator as

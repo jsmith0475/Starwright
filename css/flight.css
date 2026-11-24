@@ -152,6 +152,9 @@ body[data-screen="flight"] .sw-toasts { top: 132px; }
 .fl-struct-why:empty { display: none !important; }
 /* entry: trim and bank switches, and the read-outs of a path through the air */
 .fl-entry { margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+/* a long part name is cut with an ellipsis: an unbroken value used to push every row of the box out past its edge */
+.fl-entry .fl-kv { grid-template-columns: auto minmax(0, 1fr); }
+.fl-entry .fl-kv .v { overflow: hidden; text-overflow: ellipsis; }
 .fl-entry-head { display: flex; align-items: center; gap: 5px; height: 18px; font-size: 11px; }
 .fl-entry-head .nm { flex: 1; color: var(--sw-dim); font-weight: 650; }
 .fl-entry-btn { padding: 1px 6px; border: 1px solid #3a4757; border-radius: 3px; background: transparent; color: var(--sw-dim); font: inherit; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; cursor: pointer; }
