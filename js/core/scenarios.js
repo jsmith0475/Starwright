@@ -810,7 +810,7 @@ const DEFS = [
     id: 'fire-and-silk', name: 'Fire and Silk', world: 'verda', situation: 'Falling back into the air', difficulty: 'Easy', start: 'flight',
     goal: 'Bring the Larkspur capsule through re-entry and down under its parachute.',
     brief: 'The engine is gone and the capsule is falling toward the air at well over two kilometres a second. Juno has a heat shield, a parachute, and about four minutes.',
-    tips: ['Point the heat shield into the wind: SAS is set to hold retrograde for you.', 'Do nothing while it glows. The air does the braking.', 'Below about 5 km and 250 m/s press Space to open the parachute.'],
+    tips: ['Point the heat shield into the wind: SAS is set to hold retrograde for you.', 'Do nothing while it glows. The air does the braking.', 'Once the glow fades press Space to arm the parachute. Its drogue comes out first, then the main below Mach 0.4.'],
     objectives: [
       { id: 'air', text: 'Survive the heat down to 20 km', test: w => ships(w).some(v => v.body.id === 'verda' && v.crew.length && !v.landed && altOf(v) < 20000) },
       { id: 'home', text: 'Land or splash down on Verda', test: T.home() },
