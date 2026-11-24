@@ -224,13 +224,23 @@ async function mainFlight() {
   ok((await tel(page)).v.sasMode === 'maneuver', 'SAS maneuver mode engages');
   await page.evaluate(() => window.__sw.world.warpTo(window.__sw.world.active.nodes[0].t - 12));
   await ff(page, 1200, 'v && w.warpTarget === null && w.warpIndex === 0 && v.nodes[0] && v.nodes[0].t - w.ut < 30');
+  // let SAS bring the nose onto the node before lighting the engine, as a pilot would: the warp leaves the ship pointing
+  // where it was, and this engine gives 2.8 g, so a burn started far off the marker spends the tank chasing its own error
+  const NOSE_ON_NODE = '(g => g && 2 * (v.q.x * v.q.y - v.q.w * v.q.z) * g.x + (1 - 2 * (v.q.x * v.q.x + v.q.z * v.q.z)) * g.y + 2 * (v.q.y * v.q.z + v.q.w * v.q.x) * g.z > 0.9994)(v && v._guideDir)';
+  await ff(page, 25, NOSE_ON_NODE);
+  ok(await page.evaluate(expr => { const v = window.__sw.world.active; return new Function('v', 'return ' + expr)(v); }, NOSE_ON_NODE), 'SAS maneuver hold brings the nose within 2° of the node before the burn');
+  // burn across the node time: full throttle for the bulk, then a trickle for the last few m/s (2.8 g is 1.4 m/s a step)
+  await ff(page, 40, 'v && v.nodes[0] && v.nodes[0].t - w.ut < 0.8');
   await key(page, 'KeyZ');
-  await ff(page, 120, '!v || !v.nodes.length || v.nodeDv < 0.6');
+  await ff(page, 30, '!v || !v.nodes.length || v.nodeDv < 8');
+  await page.evaluate(() => { window.__sw.world.active.ctrl.throttle = 0.1; });
+  await ff(page, 60, '!v || !v.nodes.length || v.nodeDv < 0.4');
   await key(page, 'KeyX');
-  await ff(page, 3);
+  await ff(page, 10, '!v || !v.nodes.length');
   t = await tel(page);
   ok(t.v.nodes === 0, 'the finished maneuver node is removed');
   ok(t.v.thr === 0, 'X cuts the throttle');
+  ok(t.v.sit === 'orbit' && t.v.ap > 120000 && t.v.pe > 79000, `the 40 m/s prograde burn raised the far side of the orbit and left the near side alone: ${(t.v.ap / 1000).toFixed(1)} × ${(t.v.pe / 1000).toFixed(1)} km`);
 
   // ---- time warp on rails
   for (let i = 0; i < 6; i++) await key(page, 'Period');
