@@ -390,7 +390,7 @@ export function createHud(app, act) {
   const bTrim = eBtn('trim', 'TRIM', 'Entry trim: shift the capsule\'s ballast so it rests at an angle to the air and lifts', () => act.toggleEntryTrim());
   const bBank = eBtn('bank', 'BANK', 'Bank hold: keep the trim attitude, and turn the lift with the roll keys (Q / E)', () => act.toggleBankHold());
   const kvEntry = el('div', { class: 'fl-kv entry' });
-  const nBank = kvRow(kvEntry, 'Bank'), nLd = kvRow(kvEntry, 'Lift / drag'), nFlux = kvRow(kvEntry, 'Heat flux'), nPeak = kvRow(kvEntry, 'Peaks ahead'), nEnd = kvRow(kvEntry, 'This path'), nHot = kvRow(kvEntry, 'Hottest part'), nSoFar = kvRow(kvEntry, 'So far');
+  const nBank = kvRow(kvEntry, 'Bank'), nLd = kvRow(kvEntry, 'Lift / drag'), nFlux = kvRow(kvEntry, 'Heat flux'), nPeak = kvRow(kvEntry, 'Peaks ahead'), nEnd = kvRow(kvEntry, 'This path'), nHot = kvRow(kvEntry, 'Hottest part'), nSoFar = kvRow(kvEntry, 'So far'), nAbl = kvRow(kvEntry, 'Ablator lost');
   const entryBox = el('div', { class: 'fl-entry', data: { hud: 'entry' } },
     el('div', { class: 'fl-entry-head' }, el('span', { class: 'nm', text: 'Entry' }), bTrim, bBank), kvEntry);
   setCls(entryBox, 'sw-hidden', true);
@@ -1124,9 +1124,10 @@ export function createHud(app, act) {
         setText(nFlux, flux >= 500 ? fmt.num(flux / 1000, flux < 99500 ? 1 : 0) + ' kW/m²' : '--');
         // the hottest part now, and the record of this heating: peak against the limit, heat taken, ablator lost
         const hp = v.isHot ? v.hotPart : null;
-        setText(nHot, hp ? hp.def.name + ' · ' + Math.round(v.maxTempRatio * 100) + ' %' : '--');
+        setText(nHot, hp ? Math.round(v.maxTempRatio * 100) + ' % · ' + hp.def.name : '--');
         setCls(nHot, 'warn', !!hp && v.maxTempRatio > 0.6 && v.maxTempRatio <= 0.85); setCls(nHot, 'bad', !!hp && v.maxTempRatio > 0.85);
-        setText(nSoFar, v.peakTempRatio > 0.05 ? 'peak ' + Math.round(v.peakTempRatio * 100) + ' % · ' + fmt.num(v.heatLoad / 1e6, 1) + ' MJ/m²' + (v.ablated >= 0.5 ? ' · ablator −' + Math.round(v.ablated) + ' kg' : '') : '--');
+        setText(nSoFar, v.peakTempRatio > 0.05 ? Math.round(v.peakTempRatio * 100) + ' % · ' + fmt.num(v.heatLoad / 1e6, 1) + ' MJ/m²' : '--');
+        setText(nAbl, v.ablated >= 0.5 ? Math.round(v.ablated) + ' kg' : '--');
         if (pred) {
           setText(nPeak, (pred.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num(pred.maxFlux / 1000, 0) + ' kW/m²');
           const left = Math.max(0, pred.t - (world.ut - pred.ut));

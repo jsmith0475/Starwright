@@ -425,21 +425,33 @@ export function createExplosion(size = 2, { smoke: smokeAmt = 1, dust = null } =
 // ---------------------------------------------------------------------------------------------
 // Re-entry plasma sheath
 // ---------------------------------------------------------------------------------------------
+// One surface in two parts, joined without a seam. Ahead of the vessel a shallow cap: the shock layer, brightest at
+// the stagnation point and thinning to the shoulder. Behind it the sheath: gas streaming back off the shoulder,
+// narrowing, breaking into streaks and tearing away raggedly. Nothing is drawn where the surface turns edge-on to
+// the eye, so it has no outline: the old one showed its widest ring as a hard-rimmed disc.
+const GLOW_RIM = '0.74';      // radius of the shoulder, as a share of uRadius
+const GLOW_CAP = '0.55';      // depth of the cap ahead of the vessel, as a share of its radius
 const GLOW_VS = `${LV0}
 uniform float uRadius, uTail, uTime;
 varying vec3 vNv; varying vec3 vPv; varying float vT; varying float vAng;
 void main(){
-  vec3 p = position; float t = 0.0;
+  vec3 p = position; float t = position.y;      // -1 at the nose of the cap, 0 at the shoulder, 1 at the end of the tail
   vAng = atan(p.z, p.x);
-  if (p.y > 0.0) {            // downstream: stretch into a streaky tail and pinch it
-    t = p.y;
-    float wob = 1.0 + 0.07 * sin(vAng * 5.0 + uTime * 23.0) * t;
-    p.xz *= (1.0 - 0.82 * t * t) * wob; p.y *= uTail;
-  } else { p.y *= 0.5; }      // upstream: flattened bow shock cap
+  vec3 n;
+  if (t > 0.0) {
+    float wob = 1.0 + 0.10 * sin(vAng * 4.0 + uTime * 19.0 + t * 7.0) * t + 0.06 * sin(vAng * 9.0 - uTime * 31.0) * t * t;
+    float rad = ${GLOW_RIM} * (1.0 - 0.78 * pow(t, 1.25)) * wob;
+    vec2 d = normalize(position.xz + vec2(1e-5, 0.0));
+    p = vec3(d.x * rad, t * uTail, d.y * rad);
+    n = normalize(vec3(d.x, 0.78 * ${GLOW_RIM} / uTail, d.y));
+  } else {
+    p = vec3(position.x * ${GLOW_RIM}, t * ${GLOW_RIM} * ${GLOW_CAP}, position.z * ${GLOW_RIM});
+    n = normalize(vec3(position.x * ${GLOW_CAP}, t, position.z * ${GLOW_CAP}));
+  }
   vT = t;
   p *= uRadius;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  vNv = normalize(normalMatrix * normalize(vec3(position.x, position.y / max(mix(0.5, uTail, step(0.0, position.y)), 0.01), position.z)));
+  vNv = normalize(normalMatrix * n);
   vPv = mv.xyz;
   gl_Position = projectionMatrix * mv;
   ${LV1}
@@ -450,23 +462,32 @@ varying vec3 vNv; varying vec3 vPv; varying float vT; varying float vAng;
 void main(){
   ${LF1}
   float facing = abs(dot(normalize(vNv), normalize(-vPv)));
-  float rim = pow(1.0 - facing, 1.2);
+  // a shell of glowing gas is brightest where the eye looks along it, and this one fades out before its own edge
+  float shell = smoothstep(0.0, 0.5, facing) * (0.4 + 1.1 * pow(1.0 - facing, 1.4));
   float n1 = fxNoise(vec2(vAng * 5.0, vT * 5.0 - uTime * 9.0));
   float n2 = fxNoise(vec2(vAng * 14.0 + 3.0, vT * 12.0 - uTime * 17.0));
+  float n3 = fxNoise(vec2(vAng * 3.0 + 7.0, uTime * 6.0));
   float streak = smoothstep(0.25, 0.85, n1 * 0.65 + n2 * 0.35);
-  float tail = pow(max(1.0 - vT, 0.0), 1.8);
-  float isBow = 1.0 - step(0.001, vT);
-  // the sheath: streaks of glowing gas tearing back along the hull, brightest where we look through its edge
-  float sheath = (0.22 + 0.78 * rim) * (0.3 + 0.95 * streak) * tail * (1.0 - isBow);
-  // the bow shock: a hot ring, not a plate
-  float bow = isBow * (0.28 + 0.9 * rim);
   float I = uI * (0.4 + 0.6 * min(uI, 1.0));
-  float a = (sheath * 0.8 + bow * 0.7) * I;
-  float heat = clamp(I * (1.0 - vT * 1.4) * (0.45 + 0.55 * streak) + bow * I * 0.6, 0.0, 1.0);
-  vec3 hot = mix(vec3(2.4, 0.5, 0.07), vec3(5.0, 2.2, 0.6), smoothstep(0.0, 0.6, heat));
+  float a, heat;
+  if (vT < 0.0) {
+    // the shock layer ahead of the vessel
+    float c = -vT;
+    a = (0.2 + 0.8 * pow(c, 1.3)) * (0.82 + 0.18 * n3);
+    heat = I * (0.5 + 0.5 * c);
+  } else {
+    // the sheath: it starts as the shock layer ends, then streaks, thins and tears off
+    float along = pow(max(1.0 - vT, 0.0), 1.5);
+    float torn = smoothstep(0.0, 0.3, 1.0 - vT - 0.5 * n1 * vT);
+    a = (0.2 + 0.75 * streak * smoothstep(0.0, 0.18, vT)) * along * torn;
+    heat = I * (0.5 - 0.65 * vT) * (0.6 + 0.4 * streak);
+  }
+  a *= shell * I * 0.85;
+  heat = clamp(heat, 0.0, 1.0);
+  vec3 hot = mix(vec3(2.2, 0.42, 0.06), vec3(5.0, 2.0, 0.55), smoothstep(0.0, 0.6, heat));
   hot = mix(hot, vec3(7.0, 5.2, 3.2), smoothstep(0.6, 1.0, heat));
-  hot = mix(hot, vec3(3.4, 1.6, 2.6), clamp(uI - 1.0, 0.0, 0.5) * rim);
-  a *= 0.9 + 0.1 * sin(uTime * 41.0);
+  hot = mix(hot, vec3(3.4, 1.6, 2.6), clamp(uI - 1.0, 0.0, 0.5) * (1.0 - facing));
+  a *= 0.92 + 0.08 * sin(uTime * 41.0);
   a = min(a, 1.0);
   gl_FragColor = vec4(hot * a, a * 0.1);
   ${OUT}
@@ -478,7 +499,7 @@ void main(){
  */
 export function createReentryGlow({ radius = 2, tail = 9 } = {}) {
   const u = { uRadius: { value: radius }, uTail: { value: tail / radius }, uTime: { value: 0 }, uI: { value: 0 } };
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 24), new THREE.ShaderMaterial({
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 40), new THREE.ShaderMaterial({
     uniforms: u, vertexShader: GLOW_VS, fragmentShader: GLOW_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   }));
