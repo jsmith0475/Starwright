@@ -35,7 +35,7 @@ import { SYSTEM } from '../core/bodies.js';
 import { World } from '../core/world.js';
 import * as PM from '../render/partmesh.js';
 import * as GFX from '../render/planetgfx.js';
-import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
+import { createPlume, createClusterPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
 import { createSeaFoam } from '../render/splash.js';
 import { swellAt } from '../render/swell.js';
 import { createPostChain } from '../render/post.js';
@@ -272,7 +272,7 @@ export function createFlightScene(app) {
   // the catch tower (js/render/tower.js): drawn in the space centre's frame at its own site; `towerArm` is the pose of
   // its arms as drawn, gliding after what the physics says (closed fraction, pin level, the stage's axis from the mount's)
   let tower = null, towerSite = SYSTEM.sites && SYSTEM.sites.tower ? SYSTEM.sites.tower : null;
-  const towerQ = towerSite ? World.padFrame(towerSite.dir) : null, towerArm = { k: 0, h: 45, x: 0, z: 0 };
+  const towerQ = towerSite ? World.padFrame(towerSite.dir) : null, towerArm = { k: 0, h: 45, x: 0, z: 0, s: 0 };
   // The pad dressed for the rocket standing on it: mount, hold-down clamps and the tower's arms (js/render/padfit.js).
   // The vessel and the space centre share the pad's frame, so the plan needs no turning. The arms swing away when the
   // engines light, the clamps let go when the rocket leaves, and the steel stays where it is until another rocket comes.
@@ -395,7 +395,7 @@ export function createFlightScene(app) {
   const sky = new THREE.Color(), col2 = new THREE.Color(), col3 = new THREE.Color(), dustCol = new THREE.Color();
   const t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), t3 = new THREE.Vector3();
   const shift = new THREE.Vector3(), elAcc = new THREE.Vector3(), lampAcc = new THREE.Vector3(), lampDir = new THREE.Vector3();
-  const pstate = { deployed: false, throttle: 0, ignited: false, flameout: false, temp: 0, gimbal: undefined, control: undefined, steer: undefined, spin: undefined, compress: undefined, light: undefined };
+  const pstate = { deployed: false, throttle: 0, ignited: false, flameout: false, temp: 0, gimbal: undefined, control: undefined, steer: undefined, spin: undefined, compress: undefined, light: undefined, fold: undefined };
   let clock = 0, lastDt = 1 / 60, sunElevNow = 1, canopyZoom = null;
   const hv = new THREE.Vector3(), hOut = { spacing: Infinity, level: -1 };
 
@@ -445,10 +445,16 @@ export function createFlightScene(app) {
   }
   function freeEntry(e) {
     if (e.plumes) for (const pl of e.plumes) { pl.object.removeFromParent(); try { pl.dispose(); } catch { /* shared */ } }
+    if (e.merged) { e.merged.object.removeFromParent(); try { e.merged.dispose(); } catch { /* shared */ } e.merged = null; }
     e.mesh.removeFromParent();
     disposePartMesh(e.mesh);
   }
+  function freeLinks(view) {
+    if (view.links) for (const l of view.links) { l.link.object.removeFromParent(); l.link.dispose(); }
+    view.links = null;
+  }
   function freeView(view) {
+    freeLinks(view);
     for (const e of view.parts.values()) freeEntry(e);
     view.parts.clear();
     view.group.removeFromParent();
@@ -494,6 +500,13 @@ export function createFlightScene(app) {
           return pl;
         });
         e.ringN = rings ? rings.map(r => r.length) : null;
+        if (rings) {
+          // and one merged flame under the whole cluster, sized by the thrust its burning rings make (fx.js)
+          e.ringR = rings.map(r => r.reduce((m, ex) => Math.max(m, Math.hypot(ex.x || 0, ex.z || 0) + (ex.r || 0)), 0));
+          e.ringF = p.def.engine.rings.map(r => [r.n * r.thrust, r.ispVac > 0 ? r.ispAtm / r.ispVac : 1]);
+          e.merged = createClusterPlume(p.def, exits.reduce((m, ex) => Math.min(m, Number.isFinite(ex.y) ? ex.y : -p.def.h / 2), Infinity));
+          mesh.add(e.merged.object);
+        }
         e.plume = e.plumes[0];
         e.rE = PM.nozzleExitRadius ? PM.nozzleExitRadius(p.def) : e.plume.info.radius;
       }
@@ -509,6 +522,13 @@ export function createFlightScene(app) {
       let sp = null;
       try { sp = vesselSpan(v, e.part); } catch { sp = null; }
       setPartState(e.mesh, { span: PM.spanState(sp, e.part.pos, e.q0) });
+    }
+    // a collar over every docked pair of ports that carry a propellant line (Flank Ports, side by side)
+    freeLinks(view);
+    if (PM.buildFlankLink && v.propellantLines) for (const [a, b] of v.propellantLines) {
+      if (!a.def.dock || !a.def.dock.side || !b.def.dock || !b.def.dock.side) continue;
+      const link = PM.buildFlankLink(a.def); shadowFlags(link.object, true, true);
+      view.group.add(link.object); (view.links || (view.links = [])).push({ a, b, link });
     }
     view.stamp = v.structureStamp;
     view.dirty = false;
@@ -578,6 +598,15 @@ export function createFlightScene(app) {
     const struct = v.structure || null;
     const flex = !!struct && struct.updateFlex();
     view.flexed = flex;
+    // the collars between docked Flank Ports: laid between the two ports where they are now, frosted while a pump runs
+    if (view.links) for (const l of view.links) {
+      const on = l.a.dockedTo === l.b.id && v.parts.get(l.a.id) === l.a && v.parts.get(l.b.id) === l.b;
+      l.link.object.visible = on;
+      if (!on) continue;
+      l.link.set(t2.copy(l.a.pos).sub(com), t3.copy(l.b.pos).sub(com));
+      const pm = v.pump && (v.pump.fromPort === l.a.id || v.pump.fromPort === l.b.id) ? v.pump : null;
+      l.link.flow(!!pm, !!pm && pm.state === 'pumping', dt);
+    }
     for (const e of view.parts.values()) {
       const p = e.part, def = p.def, mesh = e.mesh;
       if (def.wheel) {
@@ -597,7 +626,7 @@ export function createFlightScene(app) {
       const level = loaded && p.ignited && !p.flameout ? (Number.isFinite(p.level) ? p.level : 0) : 0;
       const st = pstate;
       st.deployed = p.deployed; st.throttle = level; st.ignited = p.ignited && level > 0; st.flameout = p.flameout; st.temp = p.temp;
-      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.sun = undefined;
+      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.sun = st.fold = undefined;
       if (def.engine && def.engine.gimbal > 0 && act) {
         // the bell swings so the exhaust pushes the tail the way the torque command asks (pitch, roll, −yaw)
         const g = def.engine.gimbal * Math.PI / 180 * (live && level > 0.01 ? 1 : 0) * (p.pos.y < com.y ? 1 : -1);
@@ -627,6 +656,8 @@ export function createFlightScene(app) {
         if (e.comp < 1e-4) e.comp = 0;
         st.compress = e.comp;
       }
+      // a body flap stands where the core has folded it (part.fold); one with no lee side to fold to stays flat
+      if (def.flap && p.fold !== undefined) st.fold = p._flap === false ? 0 : p.fold;
       if (def.solar && !def.solar.fixed) {
         // folding arrays turn to the sun, as the power they are paid assumes (core/vessel.js). In moving air they
         // stand edge-on along the craft instead, which is the plate the drag model flies (vessel.js _pA).
@@ -658,6 +689,12 @@ export function createFlightScene(app) {
           let on = 0, all = 0;
           for (const pl of e.plumes) { const is = lit.includes(pl.ring); pl.update(is ? level : 0, pAtm, dt); all += e.ringN[pl.ring]; if (is) on += e.ringN[pl.ring]; }
           burning = Math.sqrt(on / Math.max(1, all));
+          if (e.merged) {
+            // thrust made now: the lit rings' share, at this throttle and in this air
+            let kN = 0, rr = 0; const pa = clamp(pAtm, 0, 1);
+            for (const k of lit) if (e.ringF[k]) { kN += e.ringF[k][0] * (1 + (e.ringF[k][1] - 1) * pa); rr = Math.max(rr, e.ringR[k]); }
+            e.merged.update(kN * level, rr, pAtm, dt);
+          }
           if (PM.setEngineRings) PM.setEngineRings(mesh, lit);
         } else for (const pl of e.plumes) pl.update(level, pAtm, dt);
         const kind = e.plume.info.kind, rE = (e.rE || e.plume.info.radius) * burning;   // smoke, wash and light follow the lit share
@@ -1050,6 +1087,20 @@ export function createFlightScene(app) {
           towerArm.k += (k - towerArm.k) * f; towerArm.h += clamp((h - towerArm.h) * f2, -4 * Math.min(dt, 0.1), 4 * Math.min(dt, 0.1));     // (the carriage rides at 4 m/s at most)
           towerArm.x += ((c ? c.east : 0) - towerArm.x) * f2; towerArm.z += ((c ? c.south : 0) - towerArm.z) * f2;
           tower.userData.setArms(towerArm.k, towerArm.h, towerArm.x, towerArm.z);
+          // the service arm rests on the hull of a stack that stands on the mount, and draws back as its engines light
+          let sv = 0; const sp = tower.userData.plan.service;
+          if (sp) for (const sVes of world.vessels) {
+            if (sVes.dead || !sVes.landed || sVes.body !== body || sVes.thrust > 0 || (sVes.surface && sVes.surface.held)) continue;
+            t2.copy(sVes.pos).sub(anchor.pos).sub(v2).applyQuaternion(q2.copy(tower.quaternion).invert());   // its centre of mass in the tower's frame
+            if (Math.abs(t2.x) > 30 || Math.abs(t2.z) > 30 || t3.set(0, 1, 0).applyQuaternion(sVes.q).applyQuaternion(q2).y < 0.9995) continue;
+            for (const p of sVes.partList) {
+              const d = p.def, px = t2.x + p.pos.x - sVes.com.x, py = t2.y + p.pos.y - sVes.com.y, pz = t2.z + p.pos.z - sVes.com.z;
+              if (Math.abs((d.r || 0) - sp.r) < 0.01 && Math.hypot(px, pz) < 0.03 && py - d.h / 2 < sp.y0 && py + d.h / 2 > sp.y1) { sv = 1; break; }
+            }
+            if (sv) break;
+          }
+          towerArm.s += (sv - towerArm.s) * (1 - Math.exp(-Math.min(dt, 0.1) * (sv ? 1.2 : 6)));
+          tower.userData.setService(towerArm.s);
         }
       }
     } else if (tower) tower.visible = false;

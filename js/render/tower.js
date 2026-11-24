@@ -6,6 +6,8 @@
 //     .userData.setArms(k, height, dx, dz)   k: 0 open … 1 closed; height: the level the pins rest at, metres above
 //                                            the ground (the top of the rails is one pin radius below it); dx, dz: how
 //                                            far east and south of the mount's axis the arms close (a stage's own axis)
+//     .userData.setService(k)                k: 0 the service arm's head drawn back … 1 resting on the hull of a
+//                                            stack that stands on the mount (hull radius .userData.plan.service.r)
 //     .userData.dispose()
 //
 // Local frame, the space centre's: +X east, +Y up, +Z south; the origin is the launch mount's axis at ground level.
@@ -14,7 +16,7 @@
 // Each arm swings about its own hinge on the carriage: open, they stand 50° apart from the mount's line, 11 m clear of
 // its axis on each side where they pass it; closed, the inner side of each passes 3.1 m north or south of the axis of
 // the stage it holds, which is where the rail has to be for a pin that points north or south.
-// Five meshes: structure (with the Tall Bay), lamps, carriage and the two arms. No textures; 5,800 triangles (3,300 at
+// Six meshes: structure (with the Tall Bay), lamps, carriage, the two arms and the service arm's head. No textures; 5,800 triangles (3,300 at
 // low quality).
 import * as THREE from '../lib/three.module.min.js';
 import { mergeGeometries } from './partmesh.js';
@@ -51,12 +53,17 @@ function kit(at = null) {
 
 // what the arms are: shared by the builder and by setArms
 const ARM = { length: 22, half: 0.8, gap: 3.1, open: 50 * Math.PI / 180, park: 45, pin: 0.135 };
-/** Where things stand, for whoever places something beside the tower (metres east and south of the mount). */
-export const TOWER_PLAN = { bay: { x: -125, z: -80, w: 30, d: 40, h: 55 }, armGap: ARM.gap * 2, armPark: ARM.park };
+// the service arm: its level, where its fixed truss ends, the hull it reaches (the XXL stack's radius), how far off
+// that hull its pads stand, and how far the head draws back
+const SERVICE = { y: 55.5, x1: -4.6, hull: 2.8125, stand: 0.04, back: 1.0 };
+/** Where things stand, for whoever places something beside the tower (metres east and south of the mount).
+ *  `service`: the hull radius the service arm reaches and the levels its head covers. */
+export const TOWER_PLAN = { bay: { x: -125, z: -80, w: 30, d: 40, h: 55 }, armGap: ARM.gap * 2, armPark: ARM.park,
+  service: { r: SERVICE.hull, y0: SERVICE.y - 1.5, y1: SERVICE.y + 0.9 } };
 
 export function createTower({ quality = 'high' } = {}) {
   const low = quality === 'low';
-  const S = kit(), L = kit(), K = kit(), bay = [];
+  const S = kit(), L = kit(), K = kit(), V = kit(), bay = [];
   const H = TOWER.height, tx = -TOWER.offset, W = 7.5, hw = W / 2, face = tx + hw;      // `face`: the tower's east face
   const top = H - 5;                                                                      // the lattice ends here; the winch house stands on it
 
@@ -88,13 +95,30 @@ export function createTower({ quality = 'high' } = {}) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) L.add(new THREE.SphereGeometry(0.3, 6, 4), 0xff3524, Mx(tx + sx * (hw + 1.1), top + 0.9, sz * (hw + 1.1)));
   L.add(new THREE.SphereGeometry(0.22, 6, 4), 0xff3524, Mx(tx - hw - 0.5, H * 0.5, 0));
 
-  // ---- the quick-disconnect arm: fixed, at the ship's lower tank, stopping 1 m short of the hull
-  { const y = 55.5, x1 = -3.8, len = x1 - face;
+  // ---- the service arm (the quick-disconnect arm), at the ship's lower tank: a fixed truss and, sliding in it, a
+  //      head whose two padded cheeks rest on the hull of a stack standing on the mount (setService). East of
+  //      x = −5.9 nothing of the arm or its head comes within 0.27 m of the plane z = 0: the ship's aft flap and the
+  //      booster's grid fin on the tower's side go up through that gap, so the arm is never in their way.
+  { const y = SERVICE.y, x1 = SERVICE.x1, len = x1 - face;
     for (const s of [-1, 1]) { S.beam([face, y, s * 0.9], [x1, y, s * 0.9], 0.3, C.white); S.beam([face, y - 1.5, s * 0.9], [x1, y - 1.0, s * 0.9], 0.26, C.white); S.beam([face + len * 0.5, y, s * 0.9], [face + len * 0.5, y - 1.25, s * 0.9], 0.2, C.white); S.beam([face, y - 1.5, s * 0.9], [face + len * 0.5, y, s * 0.9], 0.18, C.shell); }
-    S.box(face + len / 2, y + 0.1, 0, len, 0.14, 1.9, C.deck);
-    S.box(x1 - 0.35, y - 1.5, 0, 0.7, 2.2, 2.3, C.tealDeep); S.box(x1 - 0.02, y - 1.1, 0, 0.1, 1.4, 1.5, C.dark);       // the plate that meets the ship
+    S.box((face - 6) / 2, y + 0.1, 0, -6 - face, 0.14, 1.9, C.deck);
+    for (const s of [-1, 1]) S.box((x1 - 6) / 2, y + 0.1, s * 0.65, x1 + 6, 0.14, 0.6, C.deck);                       // the deck, split where the flap passes
     for (const s of [-1, 1]) S.beam([face, y - 5.5, s * 0.9], [x1 - 0.8, y - 1.3, s * 0.9], 0.26, C.white);          // (the ship's aft flap passes between these two)
     if (!low) for (const [z, col] of [[-0.45, C.teal], [0.45, C.orange]]) S.beam([face, y - 0.5, z], [x1 - 0.5, y - 0.5, z], 0.22, col);
+    // the head, drawn where it stands when it rests on the hull: for each side of the gap a prong that slides in
+    // the truss, a cheek, and two pads set round the hull and standing SERVICE.stand off it
+    const R = SERVICE.hull, rp = R + SERVICE.stand, xc = -R - 0.2, xr = xc - 0.55;
+    for (const s of [-1, 1]) {
+      V.add(new THREE.BoxGeometry(xr + 6.1, 0.55, 0.42), C.steelDark, Mx((xr - 6.1) / 2, y - 0.975, s * 0.51));
+      V.add(new THREE.BoxGeometry(0.55, 2.2, 0.87), C.tealDeep, Mx((xc + xr) / 2, y - 0.4, s * 0.715));
+      V.add(new THREE.BoxGeometry(0.61, 0.12, 0.93), C.white, Mx((xc + xr) / 2, y + 0.76, s * 0.715));
+      for (const [a, th] of [[10, 0.2], [19, 0.37]]) {
+        const an = a * Math.PI / 180, c = rp + th / 2;
+        V.add(new THREE.BoxGeometry(th, 1.7, 2 * rp * Math.tan(4.5 * Math.PI / 180)), C.dark, Mx(-c * Math.cos(an), y - 0.4, s * c * Math.sin(an), 0, Math.PI + s * an));
+        if (!low) for (const dy of [-0.95, 0.55]) V.add(new THREE.BoxGeometry(th + 0.04, 0.1, 2 * rp * Math.tan(4.5 * Math.PI / 180) + 0.04), C.amber, Mx(-(c + 0.03) * Math.cos(an), y - 0.4 + dy, s * (c + 0.03) * Math.sin(an), 0, Math.PI + s * an));
+      }
+    }
+    V.add(new THREE.BoxGeometry(0.2, 0.55, 1.44), C.steelDark, Mx(-6, y - 0.975, 0));                                  // the prongs' cross-piece, behind where the flap reaches
   }
 
   // ---- the launch mount: a ring table round the flame hole. The stack stands on the ground inside it.
@@ -171,7 +195,8 @@ export function createTower({ quality = 'high' } = {}) {
   const carriage = new THREE.Group(); carriage.name = 'towerCarriage'; carriage.position.set(face, ARM.park, 0);
   carriage.add(mesh('towerCarriageFrame', mergeGeometries(K.items)));
   const arms = [1, -1].map(s => { const a = mesh(s > 0 ? 'towerArmSouth' : 'towerArmNorth', armGeo(s)); a.position.set(xh - face, 0, s * zh); a.userData.side = s; carriage.add(a); return a; });
-  g.add(structure, lamps, carriage);
+  const service = mesh('towerService', mergeGeometries(V.items));
+  g.add(structure, lamps, carriage, service);
 
   /** Pose the arms: see the head of this file. Nothing is smoothed here: the caller glides the numbers. */
   function setArms(k = 0, height = ARM.park, dx = 0, dz = 0) {
@@ -188,8 +213,14 @@ export function createTower({ quality = 'high' } = {}) {
       a.rotation.y = -s * (ARM.open + (closed - ARM.open) * e);
     }
   }
-  setArms(0, ARM.park, 0, 0);
+  /** Pose the service arm's head: k = 1 resting on the hull, 0 drawn back SERVICE.back clear of it. */
+  function setService(k = 0) {
+    k = Math.min(1, Math.max(0, +k || 0));
+    service.position.x = -SERVICE.back * (1 - k * k * (3 - 2 * k));
+  }
+  setArms(0, ARM.park, 0, 0); setService(0);
   g.userData.setArms = setArms;
+  g.userData.setService = setService;
   g.userData.plan = TOWER_PLAN;
   g.userData.dispose = () => { g.traverse(o => { if (o.isMesh) o.geometry.dispose(); }); lit.dispose(); glow.dispose(); };
   return g;

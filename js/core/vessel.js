@@ -5,7 +5,7 @@
 // non-rotating frame; `q` rotates local (craft axes, +Y = nose) to that frame; `w` is the angular velocity
 // in LOCAL axes. A part's world position is  pos + q·(part.pos − com).
 // Torque command axes (local): x = pitch, y = roll, z = −yaw.
-import { Vector3, Quaternion } from '../lib/three.module.min.js';
+import { Vector3, Quaternion, Matrix4 } from '../lib/three.module.min.js';
 import { partDef, currentPartId, engineThrust, engineIsp, engineNow, PROP_MIX, G0, airRating } from './parts.js';
 import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
@@ -110,6 +110,16 @@ export const TUNING = {
   WING_K: 0.07,              // induced drag factor: CD = CD0 + K·CL²
   WING_PLATE: 0.9,           // post-stall flat-plate lift factor: CL = PLATE·sin 2α
   WING_PLATE_CD: 1.8,        // post-stall drag: CD = PLATE_CD·sin²α
+  FLAP_MAX: 1.4,             // rad (80°): how far a body flap folds up toward the lee side from flat
+  FLAP_REST: 0.7,            // rad: where the flaps sit when nothing is asked of them
+  FLAP_RATE: 0.9,            // rad/s: how fast a body flap moves
+  FLAP_CN: 1.2,              // flat-plate force coefficient below the speed of sound...
+  FLAP_CN_HYPER: 1.8,        // ...and where Newtonian flow has taken over
+  FLAP_THROW: 0.8,           // rad of fold a full command adds or takes away
+  FLAP_ROLL: 1, FLAP_YAW: 1,   // share of the throw given to roll and to yaw
+  FLAP_TRIM_RATE: 0.25,      // rad/s: how fast the resting fold of the fore and aft pairs is walked toward balance
+  FLAP_Q_MIN: 40,            // Pa: below this the flaps are left where they are
+  BELLY_AOA: 1.22,           // rad (70°): the angle to the air the belly hold flies
   CTRL_DEFLECT: 0.35,        // rad (20°): full throw of a wing control surface
   CTRL_TAU: 0.55,            // effectiveness of a hinged surface (an all-moving fin is 1)
   // --- ground contact
@@ -172,10 +182,11 @@ export const TUNING = {
 
 export const SAS_MODES = ['hold', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut',
   'maneuver', 'target', 'srfPrograde', 'srfRetrograde', 'up', 'direction',
-  'antiTarget', 'relPrograde', 'relRetrograde', 'bankHold'];
+  'antiTarget', 'relPrograde', 'relRetrograde', 'bankHold', 'belly'];
 
 const _a = new Vector3(), _b = new Vector3(), _c = new Vector3(), _d = new Vector3(), _e = new Vector3();
 const _up = new Vector3(), _ul = new Vector3(), _dir = new Vector3();
+const _m4 = new Matrix4();
 const _qa = new Quaternion(), _qb = new Quaternion(), _qi = new Quaternion(), _qt = new Quaternion();
 const _tw = [0, 0, 0];
 const Y_AXIS = new Vector3(0, 1, 0);
@@ -459,6 +470,8 @@ export class Vessel {
     this.ctrl = defaultCtrl();
     this.sasTarget = null;        // Quaternion held by SAS 'hold'
     this.sasDir = new Vector3(0, 1, 0);   // inertial direction for sasMode 'direction'
+    this.bellyAoa = TUNING.BELLY_AOA;      // commanded angle to the air (rad) for sasMode 'belly'
+    this.bellyLift = null; this.bellyNose = null;     // guidance's own lift vector and nose direction for it (bellyAttitude)
     this.bank = 0;                        // commanded bank (rad) for sasMode 'bankHold': 0 = lift up, positive = lift to the right
     this._trim = null;                    // set by _updateMass while a capsule's Entry trim is on
     this.aeroLocal = new Vector3();       // the air force of the last step (N), parachutes apart, in the vessel's own axes
@@ -513,8 +526,8 @@ export class Vessel {
     this.hotDue = null;           // {id, t}: a hot-staging ring that has been told to let go, and the seconds until it does
     this.ringDue = null;          // {id, t}: a separator ring this dropped stage still carries, and the seconds until its second plane fires
     this.program = null;          // name of the guidance program flying this vessel, if one is (World.isTrackable keeps such a vessel loaded)
-    this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = [];
-    this._antennas = []; this._ladders = []; this._pts = []; this._ctlAuth = new Vector3();
+    this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = []; this._flaps = [];
+    this._antennas = []; this._ladders = []; this._pts = []; this._ctlAuth = new Vector3(); this._flaps = []; this._flapTrim = 0;
     this._groundT = 0; this._airT = 99; this._sleepT = 0; this._touched = false; this._gnd = null; this._onWheels = false; this._rollUt = -1e9;
     this._driven = 0; this._impact = 0; this._wake = false;
     this.structure = null;        // joint loads, flex and failure (js/core/structure.js); null for a one-part vessel
@@ -642,7 +655,7 @@ export class Vessel {
     const list = this._list = [...parts.values()];
     this._engines = []; this._chutes = []; this._fins = []; this._rcs = []; this._solar = []; this._legs = [];
     this._commands = []; this._res = {}; this._ports = [];
-    this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = [];
+    this._wings = []; this._wheels = []; this._lights = []; this._brakes = []; this._gens = []; this._labs = []; this._flaps = [];
     this._antennas = []; this._ladders = [];
     this._struct = (this._struct || 0) + 1;
     let driven = 0, commRange = 0;
@@ -668,6 +681,7 @@ export class Vessel {
       if (d.wheel) { this._wheels.push(p); if (d.wheel.drive > 0) driven++; }
       if (d.light) this._lights.push(p);
       if (d.airbrake) this._brakes.push(p);
+      if (d.flap) this._flaps.push(p);
       if (d.generator || d.rtg) this._gens.push(p);
       if (d.lab || d.shape === 'lab') this._labs.push(p);
       if (d.antenna) { this._antennas.push(p); commRange = Math.max(commRange, antennaRange(d)); }
@@ -685,6 +699,16 @@ export class Vessel {
       }
       p._stack = !!d.attach.stack;
       p._ox = Math.cos(p.rot); p._oz = -Math.sin(p.rot);
+      if (d.flap) {
+        // a body flap: a plate hinged along the hull. Flat (fold 0) it lies in the plane of the stack axis and its
+        // mount direction; folding swings it up toward the lee side (+Z of the vessel; the belly is −Z).
+        const lz = 1 - p._oz * p._oz, lx = -p._oz * p._ox, ll = Math.hypot(lx, lz);
+        p._flap = ll > 0.2;                      // one mounted on the belly or the back has no lee side to fold to
+        p._lx = p._flap ? lx / ll : 0; p._lz = p._flap ? lz / ll : 0;
+        p._fA = d.flap.area; p._fSpan = d.rw || Math.sqrt(d.flap.area);
+        if (!(p.fold >= 0)) p.fold = TUNING.FLAP_REST;
+        p._foldCmd = p.fold; p._fN = 0;
+      }
       // air rating (parts.js airRating): the dynamic pressure this part stands, across it or, opened out, from anywhere
       const ar = airRating(d);
       p._rq = ar ? ar.q : 0; p._rqOpen = !!(ar && ar.flow === 'open');
@@ -752,7 +776,7 @@ export class Vessel {
         p._hA = d.r > 0 ? Math.PI * d.r * d.r : d.h * thick;
         p._hc = skinCapacity(d, d.r > 0 ? 2 * Math.PI * d.r * (d.h + d.r) : 2 * d.h * Math.max(d.t || 0.1, 0.1), d.r > 0 ? TUNING.HEAT_SKIN : 1);   // a small fitting is solid: all of it takes the heat
         // (a part that lies flat against the hull, the folding leg, states its own area: its box is long, what it shows the air is not)
-        p._aRad = (d.wing || d.fin) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
+        p._aRad = (d.wing || d.fin || d.flap) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
         // a solar array is a flat package against the hull: h tall, t wide, rw thick. It shows the air its big face
         // (h x t, the area above) only from the side it is mounted on; end on along the stack it shows t x rw, and
         // from along the hull's curve h x rw.
@@ -1028,6 +1052,35 @@ export class Vessel {
    * present end first at no angle without), turned about the velocity so that the lift points `bank` from straight
    * up. Null when there is no airflow direction to hold to.
    */
+  /** The attitude that puts the belly (vessel −Z) to the air. With nothing else said the nose is `bellyAoa` from the
+   *  direction of travel, lifted toward straight up as seen across the flow. Guidance may instead give `bellyLift`,
+   *  an inertial vector whose part across the flow is the sideways force wanted as a fraction of the drag, and
+   *  `bellyNose`, the way the nose should lie (default: along that lift). Null with no airflow. */
+  bellyAttitude(out) {
+    const u = this.airDirection(_c);
+    if (!u) return null;
+    _up.copy(this.pos).normalize();
+    const h = _a.copy(_up).addScaledVector(u, -_up.dot(u));
+    if (h.lengthSq() < 1e-6) { _e.set(0, 1, 0).applyQuaternion(this.q); h.copy(_e).addScaledVector(u, -_e.dot(u)); if (h.lengthSq() < 1e-8) return null; }
+    h.normalize();
+    const z = _d;
+    if (this.bellyLift) {
+      z.copy(this.bellyLift).addScaledVector(u, -this.bellyLift.dot(u));
+      const m = z.length(); if (m > 1) z.multiplyScalar(1 / m);
+      z.sub(u).normalize();
+    } else z.copy(u).multiplyScalar(-Math.sin(this.bellyAoa)).addScaledVector(h, Math.cos(this.bellyAoa));
+    // (a round hull makes its sideways force along its own length and nowhere else: the lift goes where the nose
+    // leans, so with a lift asked for and no nose direction given, the nose is laid along the lift)
+    const y = _b;
+    if (this.bellyNose) y.copy(this.bellyNose);
+    else if (this.bellyLift) { y.copy(this.bellyLift).addScaledVector(u, -this.bellyLift.dot(u)); if (y.lengthSq() < 1e-6) y.copy(h); }
+    else y.copy(h);
+    y.addScaledVector(z, -y.dot(z));
+    if (y.lengthSq() < 1e-4) { y.set(0, 1, 0).applyQuaternion(this.q).addScaledVector(z, -y.dot(z)); if (y.lengthSq() < 1e-6) return null; }
+    y.normalize();
+    const x = _e.crossVectors(y, z);
+    return out.setFromRotationMatrix(_m4.makeBasis(x, y, z));
+  }
   bankAttitude(out) {
     const u = this.airDirection(_c);
     if (!u) return null;
@@ -2377,10 +2430,10 @@ export class Vessel {
         const T = Math.max(TUNING.SAS_T, 2.5 * dt);
         const alx = ax / I.x, aly = ay / I.y, alz = az / I.z;
         let ex = 0, ey = 0, ez = 0, track = true;
-        const bankQ = c.sasMode === 'bankHold' ? this.bankAttitude(_qb) : null;
+        const bankQ = c.sasMode === 'bankHold' ? this.bankAttitude(_qb) : c.sasMode === 'belly' ? this.bellyAttitude(_qb) : null;
         if (bankQ) {
           // roll keys turn the commanded bank; the hold does the flying on all three axes
-          if (Math.abs(my) > 0.01) { this.bank += my * TUNING.BANK_RATE * dt; if (this.bank > Math.PI) this.bank -= TAU; else if (this.bank < -Math.PI) this.bank += TAU; cy = 0; }
+          if (c.sasMode === 'bankHold' && Math.abs(my) > 0.01) { this.bank += my * TUNING.BANK_RATE * dt; if (this.bank > Math.PI) this.bank -= TAU; else if (this.bank < -Math.PI) this.bank += TAU; cy = 0; }
         }
         const dir = bankQ ? null : this._sasDirection(c.sasMode, _dir);
         if (bankQ) {
@@ -2412,6 +2465,23 @@ export class Vessel {
         if (Math.abs(my) <= 0.01 || bankQ) cy = sasAxis(ey, w.y, aly, T);
         if (Math.abs(mz) <= 0.01) cz = sasAxis(ez, w.z, alz, T);
       } else this.sasTarget = null;
+    }
+    // body flaps: the fore and aft pairs share out pitch, the left and right pairs roll, and the diagonals yaw
+    // (a folded flap is pushed away from the hull as well as downwind). The resting fold of each pair walks toward
+    // the balance that leaves the pitch command at nothing, so the wheels and thrusters are not left holding it.
+    if (this._flaps.length) {
+      const live = qdyn > TUNING.FLAP_Q_MIN && this.controllable;
+      if (live) this._flapTrim = clamp(this._flapTrim - cx * TUNING.FLAP_TRIM_RATE * dt, -TUNING.FLAP_REST, TUNING.FLAP_MAX - TUNING.FLAP_REST);
+      const com = this.com, th = TUNING.FLAP_THROW, step = TUNING.FLAP_RATE * dt;
+      for (const p of this._flaps) {
+        if (!p._flap) continue;
+        if (live) {
+          const sy = p.pos.y > com.y ? 1 : -1, so = p._ox * 1 > 0 ? 1 : -1;
+          p._foldCmd = clamp(TUNING.FLAP_REST + sy * this._flapTrim - th * cx * sy + TUNING.FLAP_ROLL * th * cy * so - TUNING.FLAP_YAW * th * cz * sy * so, 0, TUNING.FLAP_MAX);
+        }
+        const d = p._foldCmd - p.fold;
+        p.fold += d > step ? step : d < -step ? -step : d;
+      }
     }
     // consumables
     const use = (Math.abs(cx) + Math.abs(cy) + Math.abs(cz)) / 3;
@@ -2650,6 +2720,20 @@ export class Vessel {
             Ax += fx; Ay += fy; Az += fz;
             ATx += ry * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - ry * fx;
           }
+        } else if (p._flap) {
+          // body flap: the flat-plate force of the flow through its face, at the middle of the folded plate, and
+          // its edge-on drag along the stack. The hinge is where the flat plate meets the hull.
+          const cf = Math.cos(p.fold), sf = Math.sin(p.fold), ox = p._ox, oz = p._oz;
+          const nx = -sf * ox + cf * p._lx, nz = -sf * oz + cf * p._lz;
+          const hs = 0.5 * p._fSpan, ax = (cf - 1) * hs * ox + sf * hs * p._lx, az = (cf - 1) * hs * oz + sf * hs * p._lz;
+          const qx = rx + ax, qz = rz + az;
+          const pvx = ux + (w.y * qz - w.z * ry), pvz = uz + (w.x * ry - w.y * qx);
+          const vn = pvx * nx + pvz * nz;
+          const fn = -0.5 * rho * vn * Math.abs(vn) * p._fA * (TUNING.FLAP_CN + (TUNING.FLAP_CN_HYPER - TUNING.FLAP_CN) * wN) * keep;
+          fx = fn * nx; fz = fn * nz; fy = -qdm * (d.aRad || 0) / sp * vy * keep;
+          p._fN = fn;
+          Ax += fx; Ay += fy; Az += fz;
+          ATx += ry * fz - qz * fy; ATy += qz * fx - qx * fz; ATz += qx * fy - ry * fx;
         } else {
           let aR = p._aRad;
           if (d.wheel && !p.deployed) aR = 0;

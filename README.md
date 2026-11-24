@@ -108,7 +108,7 @@ And around the flying:
   contract board, and a crew of Pips who gain experience.
 - **A flight program of 71 missions** from a first hop to the far edge of the system, so there
   is always a next goal.
-- **15 ready-made scenarios.** Skip to the good part: already in orbit, 120 metres from a
+- **16 ready-made scenarios.** Skip to the good part: already in orbit, 120 metres from a
   station, on final descent to a moon, or falling from 120 km in a bare capsule.
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
@@ -133,7 +133,8 @@ And around the flying:
   from a **Catch Tower**, and its booster flies back and is caught by the tower's arms on two
   pins, with no legs. In orbit the ship docks side by side with a propellant depot and is
   filled through a propellant line that only draws while thrusters hold the liquid settled
-  in its tanks. These are the first three steps of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
+  in its tanks. The ship comes home from orbit flat on its belly, steered by four flaps, flips
+  upright near 3 km and is caught by the same arms. These are four of the five steps of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
   where it differs from the real one, and what is not built yet.
 - **Three pieces at separation.** A stack separator fires at both ends: the upper stage goes
   on, the stage below falls back clean, and half a second later the ring between them is thrown clear as a piece of its own, with

@@ -8,6 +8,7 @@
 //
 //   createPlume(def, exit?)          → { object, update(throttle, pressureAtm, dt), dispose(), info, level }   exit: one nozzle of partmesh.nozzleExits(def),
 //                                      or an array of them (same radius and exit plane): one instanced plume for all, three draw calls
+//   createClusterPlume(def, y?)      → { object, update(thrustKN, radius, pressureAtm, dt), dispose(), thrust, length }   the merged flame of a ring cluster
 //   new SmokeTrail({max, additive})  → instanced billboard pool (alias: ParticleField); emit(), update(dt, shift, up)
 //   createExplosion(size, opts)      → { object, update(dt, gravity?) → alive, dispose() }
 //   createReentryGlow({radius,tail}) → { object, update(intensity, flowDirLocal, dt), setSize(r, tail), dispose() }
@@ -68,7 +69,7 @@ void main(){
   ${LV1}
 }`;
 const PLUME_FS = `${LF0}${NOISE}
-uniform vec3 uCore, uEdge; uniform float uAlpha, uFall, uEdgePow, uDiamond, uDiaN, uTime, uStreak, uSpeed;
+uniform vec3 uCore, uEdge; uniform float uAlpha, uFall, uEdgePow, uDiamond, uDiaN, uTime, uStreak, uSpeed, uHead;
 varying float vV; varying float vAng; varying vec3 vNv; varying vec3 vPv; varying float vSeed;
 void main(){
   ${LF1}
@@ -85,6 +86,8 @@ void main(){
   float t = clamp(pow(facing, 2.0) * (1.0 - vV * 0.85) * 1.25, 0.0, 1.0);
   vec3 col = mix(uEdge, uCore, t) * streak + uCore * dia * uDiamond * 2.2;
   float a = body * along * uAlpha * (1.0 + dia * uDiamond);
+  // a cluster's merged flame (uHead > 0) fades in over its first stretch, where the bells' own flames still show
+  a *= mix(1.0, smoothstep(0.0, 1.0, vV / max(uHead, 0.0001)), step(0.0001, uHead));
   gl_FragColor = vec4(col * a, a);
   ${OUT}
 }`;
@@ -146,7 +149,7 @@ export function createPlume(def, exit = null) {
   const mk = () => ({
     uLen: { value: 1 }, uR0: { value: rE }, uTail: { value: 1 }, uShape: { value: 0.75 }, uTime: { value: 0 }, uSeed: { value: seed },
     uCore: { value: new THREE.Vector3() }, uEdge: { value: new THREE.Vector3() }, uAlpha: { value: 0 }, uFall: { value: 1.5 }, uEdgePow: { value: 1.5 },
-    uDiamond: { value: 0 }, uDiaN: { value: 5 }, uPinch: { value: 0 }, uStreak: { value: K.streak }, uSpeed: { value: K.speed },
+    uDiamond: { value: 0 }, uDiaN: { value: 5 }, uPinch: { value: 0 }, uStreak: { value: K.streak }, uSpeed: { value: K.speed }, uHead: { value: 0 },
   });
   const uo = mk(), ui = mk();
   const object = new THREE.Group(); object.name = 'plume'; if (exit) object.position.set(exit.x || 0, Number.isFinite(exit.y) ? exit.y : -def.h / 2, exit.z || 0); else object.position.set(0, -def.h / 2, 0); object.visible = false;
@@ -190,6 +193,58 @@ export function createPlume(def, exit = null) {
       flare.material.opacity = (0.35 + 0.65 * level) * lerp(1, 0.55, vac) * fA;
     },
     dispose() { outer.material.dispose(); inner.material.dispose(); flare.material.dispose(); },
+  };
+  return api;
+}
+
+/** Metres of merged flame per square root of a kilonewton of thrust: 33 Peregrines at sea level (10,600 kN) give 39 m. */
+export const CLUSTER_FLAME = 0.38;
+/**
+ * The one flame a ring cluster's many small ones merge into (engines with `engine.rings` only: every other engine
+ * keeps createPlume alone). `object` is a Group at the cluster's exit plane (0, y, 0) pointing along −Y; add it to the
+ * part's mesh beside the per-bell plumes. update(thrustKN, radius, pressureAtm, dt): the thrust being made now, and
+ * the radius round the bells that are burning. The flame is CLUSTER_FLAME · √thrust long (half as long again in
+ * vacuum), starts as wide as the burning bells and opens with altitude as a single engine's does. It fades in over
+ * its first fifth, so the bells' own flames show inside its top.
+ */
+export function createClusterPlume(def, y = -def.h / 2) {
+  const kind = engineKind(def), look = kind === 'liquid' && def.engine && def.engine.prop === 'methalox' ? 'methalox' : kind, K = KINDS[look];
+  const seed = Math.random() * 100;
+  const mk = () => ({
+    uLen: { value: 1 }, uR0: { value: 1 }, uTail: { value: 1 }, uShape: { value: 0.9 }, uTime: { value: 0 }, uSeed: { value: seed },
+    uCore: { value: new THREE.Vector3() }, uEdge: { value: new THREE.Vector3() }, uAlpha: { value: 0 }, uFall: { value: 1.5 }, uEdgePow: { value: 1.5 },
+    uDiamond: { value: 0 }, uDiaN: { value: 3 }, uPinch: { value: 0 }, uStreak: { value: K.streak * 1.3 }, uSpeed: { value: K.speed * 0.5 }, uHead: { value: 0.2 },
+  });
+  const uo = mk(), ui = mk();
+  const object = new THREE.Group(); object.name = 'clusterPlume'; object.position.set(0, y, 0); object.visible = false;
+  const outer = plumeLayer(uo), inner = plumeLayer(ui); object.add(outer, inner);
+  const cs = new THREE.Vector3().fromArray(K.coreSl), es = new THREE.Vector3().fromArray(K.edgeSl), cv = new THREE.Vector3().fromArray(K.coreVac), ev = new THREE.Vector3().fromArray(K.edgeVac);
+  let time = 0, radius = 0;
+  const api = {
+    object, thrust: 0, length: 0, radius: 0,
+    update(thrustKN, r, pressureAtm = 0, dt = 1 / 60) {
+      time += dt;
+      const k = Math.min(1, dt * 14), target = Math.max(0, +thrustKN || 0);
+      api.thrust += (target - api.thrust) * k;
+      if (r > 0) radius = radius > 0 ? radius + (r - radius) * k : r;
+      if (api.thrust < 1 || !(radius > 0)) { object.visible = false; api.length = 0; return; }
+      object.visible = true;
+      const p = Math.sqrt(clamp01(pressureAtm)), vac = 1 - p;
+      const L = api.length = CLUSTER_FLAME * Math.sqrt(api.thrust) * lerp(1, 1.5, vac);
+      api.radius = radius;
+      const tail = lerp(K.tailSl * 1.35, K.tailVac * 0.55, Math.pow(vac, 1.5));
+      const alpha = lerp(K.aSl, K.aVac, vac) * 0.8;
+      uo.uLen.value = L; uo.uR0.value = radius; uo.uTail.value = tail;
+      uo.uAlpha.value = alpha; uo.uFall.value = 0.7 + 1.3 * vac; uo.uEdgePow.value = 1.25 + 1.1 * vac;
+      uo.uDiamond.value = K.dia * 0.3 * p; uo.uPinch.value = K.dia > 0 ? p * 0.5 : 0;
+      uo.uCore.value.copy(cs).lerp(cv, vac); uo.uEdge.value.copy(es).lerp(ev, vac);
+      ui.uLen.value = L * (0.62 + 0.1 * vac); ui.uR0.value = radius * 0.6; ui.uTail.value = 0.12 + (tail - 0.4) * 0.38;
+      ui.uAlpha.value = alpha * 0.9; ui.uFall.value = 1.1; ui.uEdgePow.value = 0.9;
+      ui.uDiamond.value = K.dia * 0.3 * p; ui.uPinch.value = K.dia > 0 ? p * 0.3 : 0;
+      ui.uCore.value.copy(uo.uCore.value).multiplyScalar(1.35); ui.uEdge.value.copy(uo.uCore.value).lerp(uo.uEdge.value, 0.4);
+      uo.uTime.value = ui.uTime.value = time;
+    },
+    dispose() { outer.material.dispose(); inner.material.dispose(); },
   };
   return api;
 }

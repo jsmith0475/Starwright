@@ -31,6 +31,8 @@
 //     compress   suspension compression in units of wheelGeometry().travel (0..1 nominal, up to 3 under load)
 //                for a landing leg: metres the strut has closed (the foot comes up the craft's axis by that much)
 //     light      true/false (or 0..1) switches spotlight lenses on
+//     fold       radians, body flap: 0 = flat as built, up to about 1.4 = folded up toward the lee side (the side
+//                its steel face looks at, the craft's +Z); the hinge is the root edge, along the stack axis
 //     throttle   also lights ion grids, jet afterburners and aerospikes
 //   nozzleExits(def)                         → [{ x, y, z, r }] every nozzle of a (multi-bell) engine; a ring cluster
 //                                            (engine.rings) adds `ring` and `fixed` to each, ring 0's bells first
@@ -60,12 +62,14 @@ import * as stackShapes from './parts/shapes_stack.js';
 import * as engineShapes from './parts/shapes_engine.js';
 import * as aeroShapes from './parts/shapes_aero.js';
 import * as radialShapes from './parts/shapes_radial.js';
-import { cargobay, hotring, catchpin, flap, sideport } from './parts/shapes_shearwater.js';
+import { cargobay, hotring, catchpin, flap, sideport, flankLink } from './parts/shapes_shearwater.js';
 import { buildPipInto, buildPipMesh, animatePip } from './parts/pip.js';
 
 export { PALETTE, mergeGeometries, buildPipMesh, animatePip };
 export const nozzleExitRadius = engineShapes.nozzleExitRadius;
 export const nozzleExits = engineShapes.nozzleExits;
+/** The collar that joins two docked Flank Ports (shapes_shearwater.js). */
+export const buildFlankLink = flankLink;
 export const PLANE_DORSAL_ANGLE = stackShapes.DORSAL;
 export const setPartEnvironment = setEnv;
 
@@ -413,6 +417,9 @@ function applyAnim(g, def, initial = false) {
   }
   if (r.gimbal && u.gimbal) { r.gimbal.rotation.x = u.gimbal.x; r.gimbal.rotation.z = u.gimbal.z; }
   if (r.ctrl && u.control !== undefined) r.ctrl.rotation.x = u.control * 0.44;
+  // a body flap's blade turns about its hinge line toward the lee side: the side its steel face looks at, which is
+  // −Y rotation for the hand with tiles on −Z and +Y for the other. No fold given (the builder): flat, as built.
+  if (r.bladeA) { const f = u.fold || 0; r.bladeA.rotation.y = -f; r.bladeB.rotation.y = f; }
 }
 
 const HEAT = new THREE.Color();
@@ -483,6 +490,7 @@ function setSpan(group, end) {
  *   throttle: 0..1, ignited: bool, flameout: bool → engine inner glow
  *   temp: skin temperature in K; above 800 K the part ramps to a red-hot emissive tint
  *   gimbal: {x, z} radians | number; control: -1..1; steer: radians; spin: radians; compress: 0..1; light: bool | 0..1
+ *   fold: radians, body flap fold from flat toward the lee side
  *   sun: for folding solar arrays, the direction to the sun in the part's own axes ({x, y, z}), or null to stand still
  *   span: far end of a strut or fuel line { x, y, z, nx, ny, nz } in the part's own axes, or null (reaches nothing)
  *   instant: true to skip the easing
@@ -540,6 +548,7 @@ export function setPartState(group, state = {}) {
   if (state.steer !== undefined && state.steer !== u.steer) { u.steer = state.steer; dirty = true; }
   if (state.spin !== undefined && state.spin !== u.spin) { u.spin = state.spin; dirty = true; }
   if (state.compress !== undefined && state.compress !== u.compress) { u.compress = clamp(state.compress, 0, 3); dirty = true; }     // in units of the nominal travel (0.3 R); a loaded strut goes past 1
+  if (state.fold !== undefined && state.fold !== u.fold) { u.fold = clamp(state.fold, 0, Math.PI / 2); dirty = true; }
   if (state.span !== undefined && u.refs && u.refs.span && !u.ghost) setSpan(group, state.span);
   if (dirty) applyAnim(group, def);
 

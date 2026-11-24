@@ -58,7 +58,7 @@ test('every part has a valid base schema', () => {
     assert.ok(typeof d.desc === 'string' && d.desc.length >= 10, id + ' desc');
     assert.ok(d.hidden ? d.cat === 'internal' : CAT_IDS.has(d.cat), id + ' cat ' + d.cat);
     assert.ok(typeof d.tech === 'string' && /^[a-z][a-z0-9_]*$/.test(d.tech), id + ' tech');
-    assert.ok(num(d.cost), id + ' cost'); assert.ok(pos(d.mass) && d.mass < 50, id + ' mass');
+    assert.ok(num(d.cost), id + ' cost'); assert.ok(pos(d.mass) && d.mass < 100, id + ' mass');      // (the heaviest is a loaded Shearwater cargo bay, 77 t)
     assert.ok(SHAPES.has(d.shape), id + ' shape ' + d.shape);
     assert.ok(pos(d.tolerance), id + ' tolerance'); assert.ok(d.maxTemp >= 800 && d.maxTemp <= 4000, id + ' maxTemp');
     assert.ok(d.variant === undefined || typeof d.variant === 'string', id + ' variant');
