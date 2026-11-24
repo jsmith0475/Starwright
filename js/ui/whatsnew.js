@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'autopilot-time-in-hand', date: '2026-11-23', title: 'Braking burns with time in hand',
+    text: 'The landing autopilot now gives itself time. A lander with a strong engine over a small world used to start braking six seconds before the hover; the burn now lasts 20 seconds where the engine allows, with more than half the thrust in hand. Every guidance burn also now waits until the ship has turned to face the right way before the engine lights.' },
   { id: 'autopilot-reads-terrain', date: '2026-11-23', title: 'The landing autopilot looks at the ground',
     text: 'Land here now reads the terrain. From orbit it waits for ground the lander can stand on, the braking burn keeps clear of hills, and at the hover it flies across to the nearest level spot before it sets down. It warns you when nothing in reach is fit. In 288 test landings on the twelve airless worlds the old autopilot left 212 landers standing; this one left all 288.' },
   { id: 'catch-tower', date: '2026-11-23', title: 'A tower that catches the booster',
