@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'shearwater-close-up', date: '2026-11-24', title: 'Shearwater up close',
+    text: 'Under the booster and the ship the many small flames now merge into one long flame sized by the thrust being made. The tower service arm rests on the hull until the engines light, and two docked Flank Ports are joined by a collar with latches that frosts over while propellant flows.' },
   { id: 'ship-belly-return', date: '2026-11-24', title: 'Shearwater comes home on its belly',
     text: 'The ship now returns from orbit: it falls flat on its belly with four flaps steering, flips upright near 3 km and is caught by the tower arms. Try the new scenario Belly First, pick Return to the tower in the Autopilot panel, or hold it yourself with the new BELLY button in the SAS row.' },
   { id: 'parts-joined-up', date: '2026-11-24', title: 'Struts, hoses and solar wings that fit',
