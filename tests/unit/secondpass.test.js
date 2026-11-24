@@ -560,7 +560,7 @@ test('air brakes add drag; a drogue opens at speeds that would tear a main parac
   const drogue = Object.values(PARTS).find(d => d.chute && /drogue/i.test(d.id + ' ' + d.name));
   assert.ok(drogue, 'a drogue exists');
   const main = PARTS.chute;
-  assert.ok((drogue.chute.maxSpeed || Infinity) > (main.chute.maxSpeed || 0) * 1.3, 'the drogue stands more speed');
+  assert.ok(drogue.chute.maxMach > main.chute.maxMach * 1.3, 'the drogue stands more speed');
   assert.ok(drogue.chute.area < main.chute.area, 'and is smaller');
 });
 

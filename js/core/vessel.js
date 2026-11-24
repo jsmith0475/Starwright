@@ -11,11 +11,32 @@ import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
 import { maneuverBasis } from './trajectory.js';
 import { Structure, STRUCT } from './structure.js';
+import { CHUTE, chuteSpec, chuteDragArea, chuteShape, chuteAddedMass, chuteFillDistance, chuteGate, chuteReach, chuteReefProgress, chuteDisreefLoad } from './parachute.js';
 import { dragRise, bluntness, wakeFraction, newtonWeight, shadowWeight, pitotCp, newtonTable, newtonAt, SHADOW_KEEP, SHADOW_NEAR, SHADOW_FAR, NEWTON_ROWS } from './aero.js';
 
 const TAU = Math.PI * 2;
 
 /** Tuning constants of the flight model (exported so the UI / tests can read them). */
+const _pcf = new Float64Array(6), _pcl = [];
+let _pcw = new Float64Array(0), _pcA = new Float64Array(0), _pcT = new Float64Array(0), _pcb = new Float64Array(0);
+const _pc1 = new Vector3(), _pc2 = new Vector3(), _pcq = new Quaternion();
+/** Solve the n x n system A x = b in place (b becomes x): Gaussian elimination with partial pivoting, for a handful of unknowns. */
+function solveDense(A, b, n) {
+  for (let c = 0; c < n; c++) {
+    let piv = c, best = Math.abs(A[c * n + c]);
+    for (let r = c + 1; r < n; r++) { const v = Math.abs(A[r * n + c]); if (v > best) { best = v; piv = r; } }
+    if (piv !== c) { for (let k = 0; k < n; k++) { const t = A[c * n + k]; A[c * n + k] = A[piv * n + k]; A[piv * n + k] = t; } const t = b[c]; b[c] = b[piv]; b[piv] = t; }
+    const d = A[c * n + c];
+    for (let r = c + 1; r < n; r++) {
+      const f = A[r * n + c] / d;
+      if (f === 0) continue;
+      for (let k = c; k < n; k++) A[r * n + k] -= f * A[c * n + k];
+      b[r] -= f * b[c];
+    }
+  }
+  for (let r = n - 1; r >= 0; r--) { let v = b[r]; for (let k = r + 1; k < n; k++) v -= A[r * n + k] * b[k]; b[r] = v / A[r * n + r]; }
+}
+
 export const TUNING = {
   DT_MAX: 0.02,              // physics sub-step under thrust / in atmosphere (s)
   DT_COAST: 0.1,             // sub-step while coasting in vacuum under physics warp (s)
@@ -42,11 +63,9 @@ export const TUNING = {
   MACH_PEAK: 2.0, MACH_HIGH: 1.5,   // drag multiplier at Mach 1.1 and above Mach 2.5 (1 below Mach 0.7)
   FACE_CP: 0.25,             // restoring moment arm of a blunt leading face, in radii per sin(angle of attack)
   FACE_DAMP: 4,              // aerodynamic pitch damping of end faces
-  CHUTE_CD: 1.6,
+  CHUTE_CD: 1.6,             // drag area of a parachute per unit of its part's `area` (the rest of the model: parachute.js)
   CHUTE_MIN_PRESSURE: 0.02,  // atm: canopies stay packed above this altitude
-  CHUTE_SEMI_TIME: 3.0,      // s to inflate the reefed canopy
-  CHUTE_FULL_TIME: 2.5,      // s to open fully
-  CHUTE_RIP: 1.5,            // × maxSpeed
+  CHUTE_FAIL: true,          // lines loaded past their rating tear the canopy away
   FIN_LIFT: 1.6,
   FIN_DEFLECT: 0.26,         // rad, control-fin throw
   WHEEL_EC: 0.02,            // EC/s per kN·m of reaction-wheel torque at full command
@@ -2265,7 +2284,9 @@ export class Vessel {
     if (st) st.begin();
 
     // --- parachute state machine
-    if (this._chutes.length) this._updateChutes(dt, rho, pAtm, speed, alt - this._baseH, ev);
+    // (height above the ground under it, as of the last step, not above the sea: a capsule coming down on high ground
+    // must still be told to open fully before it gets there)
+    if (this._chutes.length) this._updateChutes(rho, pAtm, qdyn, sx, sy, sz, speed, Number.isFinite(this.radarAlt) ? Math.min(this.radarAlt, alt - this._baseH) : alt - this._baseH, ev);
 
     // --- aerodynamics and heating
     let Ax = 0, Ay = 0, Az = 0, ATx = 0, ATy = 0, ATz = 0;
@@ -2420,14 +2441,6 @@ export class Vessel {
           if (ru > 1) { p._ad += (ru - 1) * dt / STRUCT.AIR_FAIL_TIME; if (p._ad >= 1) { p._ad = 1; (torn || (torn = [])).push(p); } }
           else if (p._ad > 0) p._ad = Math.max(0, p._ad - dt / STRUCT.HEAL_TIME);
         }
-        if (d.chute && (p.deployed === 'semi' || p.deployed === 'full')) {
-          const area = p.deployed === 'semi' ? d.chute.semiArea * p.deployT : d.chute.semiArea + (d.chute.area - d.chute.semiArea) * p.deployT;
-          const k = qd * area * TUNING.CHUTE_CD / sp;
-          fx = -k * vx; fy = -k * vy; fz = -k * vz;
-          const py = ry + d.h / 2;
-          Ax += fx; Ay += fy; Az += fz;
-          ATx += py * fz - rz * fy; ATy += rz * fx - rx * fz; ATz += rx * fy - py * fx;
-        }
         if (SW) { const k = i * 6; SW[k] = Ax - Ax0; SW[k + 1] = Ay - Ay0; SW[k + 2] = Az - Az0; SW[k + 3] = ATx - ATx0; SW[k + 4] = ATy - ATy0; SW[k + 5] = ATz - ATz0; }
         if (heating) {
           let ex;
@@ -2453,6 +2466,12 @@ export class Vessel {
       const fm = Math.sqrt(Ax * Ax + Ay * Ay + Az * Az);
       if (fm * dt > 0.5 * m * speed) { const s = 0.5 * m * speed / (fm * dt); Ax *= s; Ay *= s; Az *= s; ATx *= s; ATy *= s; ATz *= s; if (SW) for (let k = 0; k < SW.length; k++) SW[k] *= s; }
       Fx += Ax; Fy += Ay; Fz += Az; Tx += ATx; Ty += ATy; Tz += ATz;
+    }
+    // --- open parachutes: each canopy is a second body on the end of its lines (after the clamp above: this is implicit)
+    if (this._chuteOpen) {
+      if (rho > 1e-10 && this._chuteForces(dt, rho, ux, uy, uz, Fx, Fy, Fz, Tx, Ty, Tz, SW, ev)) {
+        Fx += _pcf[0]; Fy += _pcf[1]; Fz += _pcf[2]; Tx += _pcf[3]; Ty += _pcf[4]; Tz += _pcf[5];
+      } else { this.chuteTension = 0; this.chuteLoad = 0; }
     }
     if (heating) { this._hot = true; this.maxTempRatio = maxRatio; }
     else if (this._hot) {
@@ -2602,27 +2621,217 @@ export class Vessel {
     }
   }
 
-  _updateChutes(dt, rho, pAtm, speed, radar, ev) {
+  /**
+   * Parachute stages. An armed parachute opens (reefed) once the air is thick enough to fill it, it is under the Mach
+   * number it is built for, and the load of opening here on the mass it carries is inside what its lines hold; until
+   * then `part.chuteWait` says what it waits for ('thin' | 'mach' | 'load'). A reefed one opens fully below its
+   * `fullAlt` once the reefed stage has filled.
+   */
+  _updateChutes(rho, pAtm, qdyn, sx, sy, sz, speed, radar, ev) {
+    let open = false, share = 0;
+    const g = this.body.gm / this.pos.lengthSq();
     for (const p of this._chutes) {
-      const ch = p.def.chute, st = p.deployed;
+      const st = p.deployed;
       if (st === 'armed') {
-        if (pAtm >= TUNING.CHUTE_MIN_PRESSURE && speed < ch.maxSpeed) {
-          p.deployed = 'semi'; p.deployT = 0;
+        if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'semi' || o.deployed === 'full') share++;
+        const spec = chuteSpec(p.def, TUNING.CHUTE_CD), gate = chuteGate(spec, pAtm, TUNING.CHUTE_MIN_PRESSURE, this._envMach, qdyn, rho, this.mass / share, g);
+        p.chuteWait = gate === 'ok' ? null : gate;
+        if (gate === 'ok') {
+          p.deployed = 'semi'; p.deployT = 0; p._c = null; open = true;
           ev.push({ type: 'chute', vessel: this, part: p, state: 'semi' });
         }
       } else if (st === 'semi' || st === 'full') {
-        if (speed > ch.maxSpeed * TUNING.CHUTE_RIP && rho > 0) {
-          p.deployed = 'cut'; p.deployT = 0;
-          ev.push({ type: 'chute', vessel: this, part: p, state: 'cut' });
-          continue;
-        }
-        p.deployT = Math.min(1, p.deployT + dt / (st === 'semi' ? TUNING.CHUTE_SEMI_TIME : TUNING.CHUTE_FULL_TIME));
-        if (st === 'semi' && radar < ch.fullAlt && p.deployT >= 1) {
-          p.deployed = 'full'; p.deployT = 0;
+        open = true;
+        if (st === 'semi' && radar < p.def.chute.fullAlt && p._c) {
+          // the last reefing line: cut when the reefed stage is all the way out, or sooner if the mouth has filled
+          // and opening fully from here stays inside what the lines hold (a parachute opened low and slow)
+          const spec = chuteSpec(p.def, TUNING.CHUTE_CD), c = p._c;
+          if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'semi' || o.deployed === 'full') share++;
+          if (!(p.deployT >= 1 || (c.s >= chuteFillDistance(spec, 'semi') && chuteDisreefLoad(spec, qdyn, rho, this.mass / share, c.cds, g) <= CHUTE.OPEN_MARGIN * spec.rated))) continue;
+          c.from = c.cds;
+          p.deployed = 'full'; p.deployT = 0; c.s = 0; c.t = 0;
           ev.push({ type: 'chute', vessel: this, part: p, state: 'full' });
         }
+      } else if (p.chuteWait) p.chuteWait = null;
+    }
+    this._chuteOpen = open;
+    if (!open && this.chuteTension) { this.chuteTension = 0; this.chuteLoad = 0; }
+  }
+
+  /**
+   * Open canopies (docs/PARACHUTES.md). A canopy is a second body: a point on the end of a line of length L from the
+   * pack, with the inertia of the air it carries (no weight) and drag on its own velocity through the air. The line
+   * pulls on the craft along itself with whatever tension keeps the two that far apart, so the canopy trails where the
+   * air puts it, the craft hangs and swings under it, and the load when it opens is whatever stopping the craft and
+   * setting that air moving takes. A canopy fills by the distance it travels. Lines loaded past their rating tear.
+   * The tension is solved for all canopies together, implicit in the speed along each line (a canopy can stop a light
+   * craft in less than a step). → true, with the summed force and torque about the centre of mass in `_cf` (body frame).
+   */
+  _chuteForces(dt, rho, ux, uy, uz, Fx, Fy, Fz, Tx, Ty, Tz, SW, ev) {
+    const list = _pcl; list.length = 0;
+    for (const p of this._chutes) if (p.deployed === 'semi' || p.deployed === 'full') list.push(p);
+    const n = list.length;
+    _pcf[0] = _pcf[1] = _pcf[2] = _pcf[3] = _pcf[4] = _pcf[5] = 0;
+    if (!n) return false;
+    const m = this.mass, I = this.inertia, w = this.w, com = this.com, q = this.q;
+    const iM = 1 / m, iIx = 1 / I.x, iIy = 1 / I.y, iIz = 1 / I.z;
+    _pcq.copy(q).invert();
+    const R = this.pos.length();
+    _pc1.copy(this.pos).multiplyScalar(-this.body.gm / (R * R * R)).applyQuaternion(_pcq);
+    // what the craft does without its parachutes: linear and angular acceleration (body frame)
+    const a0x = _pc1.x + Fx * iM, a0y = _pc1.y + Fy * iM, a0z = _pc1.z + Fz * iM;
+    const al0x = Tx * iIx, al0y = Ty * iIy, al0z = Tz * iIz;
+    // The air a canopy carries has inertia only against the air around it, and that air goes round with the planet
+    // (held on its circle by the pressure around it, as it is held up). So the carried air resists acceleration
+    // RELATIVE to the turning atmosphere: without this a canopy on a fast-spinning world would have to pull its
+    // air round the planet's axis, which is several per cent of the line load of a light capsule on Verda.
+    const wyB = TAU / this.body.rotPeriod;
+    _pc2.set(-wyB * wyB * this.pos.x, 0, -wyB * wyB * this.pos.z).applyQuaternion(_pcq);
+    const aax = _pc2.x, aay = _pc2.y, aaz = _pc2.z;
+    const N = n * 16;
+    if (_pcw.length < N) { _pcw = new Float64Array(N * 2); _pcA = new Float64Array(n * n * 4); _pcT = new Float64Array(n * 2); _pcb = new Float64Array(n * 2); }
+    for (let i = 0; i < n; i++) {
+      const p = list[i], d = p.def, spec = chuteSpec(d, TUNING.CHUTE_CD), o = i * 16;
+      const rx = p.pos.x - com.x, ry = p.pos.y - com.y + d.h / 2, rz = p.pos.z - com.z;
+      const vax = ux + (w.y * rz - w.z * ry), vay = uy + (w.z * rx - w.x * rz), vaz = uz + (w.x * ry - w.y * rx);
+      let c = p._c;
+      if (!c) {
+        // just out of the pack (or just loaded): it trails straight back along the air going past
+        c = p._c = { ux: 0, uy: 0, uz: 0, wx: 0, wy: 0, wz: 0, s: 0, t: 0, from: undefined, ma: -1, cds: -1, T: 0, load: 0, peak: 0, dmg: 0, L: 1, shape: {} };
+        // (a loaded game knows only how far the stage had come: put the distance and the clock where that is)
+        if (p.deployed === 'full') c.s = p.deployT * chuteFillDistance(spec, 'full');
+        else if (p.deployT > 0) {
+          const f0 = CHUTE.REEF_FIRST;
+          c.s = Math.min(1, p.deployT / f0) * chuteFillDistance(spec, 'semi'); c.t = p.deployT > f0 ? CHUTE.REEF_TIME * (p.deployT - f0) / (1 - f0) : 0;
+        }
+        const sp = Math.sqrt(vax * vax + vay * vay + vaz * vaz);
+        if (sp > 0.5) _pc2.set(-vax / sp, -vay / sp, -vaz / sp); else _pc2.set(0, 1, 0);
+        _pc2.applyQuaternion(q); c.ux = _pc2.x; c.uy = _pc2.y; c.uz = _pc2.z;
+      }
+      _pc2.set(c.ux, c.uy, c.uz).applyQuaternion(_pcq);
+      const ex = _pc2.x, ey = _pc2.y, ez = _pc2.z;
+      _pc2.set(c.wx, c.wy, c.wz).applyQuaternion(_pcq);
+      const wlx = _pc2.x, wly = _pc2.y, wlz = _pc2.z;
+      const vcx = vax + wlx, vcy = vay + wly, vcz = vaz + wlz, sp = Math.sqrt(vcx * vcx + vcy * vcy + vcz * vcz);
+      // filling: by the distance the canopy has come through the air
+      c.s += sp * dt; c.t += dt;
+      const fill = p.deployed === 'semi' ? chuteReefProgress(spec, c.s, c.t) : Math.min(1, c.s / chuteFillDistance(spec, 'full'));
+      p.deployT = fill;
+      const cds = chuteDragArea(spec, p.deployed, fill, c.from);
+      if (cds !== c.cds) { c.cds = cds; chuteShape(spec, cds, c.shape); c.L = c.shape.L; }
+      const ma = chuteAddedMass(spec, c.shape, rho), mdot = c.ma >= 0 && ma > c.ma ? (ma - c.ma) / dt : 0;
+      c.ma = ma;
+      const mi = ma > CHUTE.MIN_MASS ? ma : CHUTE.MIN_MASS;
+      const kap = 0.5 * rho * sp * cds + mdot;             // drag, and the air newly taken along, per m/s of canopy speed
+      // acceleration of the pack along the line without the parachutes: a0 + alpha0 x r + w x (w x r)
+      const wr = w.x * rx + w.y * ry + w.z * rz, w2 = w.x * w.x + w.y * w.y + w.z * w.z;
+      const px = a0x + (al0y * rz - al0z * ry) + w.x * wr - rx * w2, py = a0y + (al0z * rx - al0x * rz) + w.y * wr - ry * w2, pz = a0z + (al0x * ry - al0y * rx) + w.z * wr - rz * w2;
+      const an = px * ex + py * ey + pz * ez, ar = an - (aax * ex + aay * ey + aaz * ez);
+      const wl2 = wlx * wlx + wly * wly + wlz * wlz;
+      _pcb[i] = -kap * (vcx * ex + vcy * ey + vcz * ez + dt * an) - mi * ar + mi * wl2 / c.L;
+      const W = _pcw;
+      W[o] = ex; W[o + 1] = ey; W[o + 2] = ez;
+      W[o + 3] = ry * ez - rz * ey; W[o + 4] = rz * ex - rx * ez; W[o + 5] = rx * ey - ry * ex;      // r x e
+      W[o + 6] = rx; W[o + 7] = ry; W[o + 8] = rz; W[o + 9] = kap; W[o + 10] = mi; W[o + 11] = c.L; W[o + 12] = W[o + 13] = W[o + 14] = 0;
+    }
+    // canopies side by side press on one another instead of passing through: each is a ball about its widest circle.
+    // What that push does along a canopy's own line goes into its line (two canopies leaning apart each pull
+    // drag / cos(lean), and together they hold up exactly their drag); the rest swings it, further down.
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const oi = i * 16, oj = j * 16, ci = list[i]._c, cj = list[j]._c, W = _pcw;
+      const dx = W[oi + 6] + W[oi + 11] * W[oi] - W[oj + 6] - W[oj + 11] * W[oj], dy = W[oi + 7] + W[oi + 11] * W[oi + 1] - W[oj + 7] - W[oj + 11] * W[oj + 1], dz = W[oi + 8] + W[oi + 11] * W[oi + 2] - W[oj + 8] - W[oj + 11] * W[oj + 2];
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz), min = chuteReach(ci.shape) + chuteReach(cj.shape);
+      if (dist >= min || dist < 1e-6) continue;
+      const k = Math.min(W[oi + 10], W[oj + 10]) * CHUTE.CONTACT_W * CHUTE.CONTACT_W * (min - dist) / dist;
+      W[oi + 12] += k * dx; W[oi + 13] += k * dy; W[oi + 14] += k * dz; W[oj + 12] -= k * dx; W[oj + 13] -= k * dy; W[oj + 14] -= k * dz;
+    }
+    if (n > 1) for (let i = 0; i < n; i++) { const o = i * 16; _pcb[i] += _pcw[o + 12] * _pcw[o] + _pcw[o + 13] * _pcw[o + 1] + _pcw[o + 14] * _pcw[o + 2]; }
+    // tensions: (1 + (m_i + kap_i dt) C) T = b, C_ij = e_i.e_j / M + (r_i x e_i) . I^-1 (r_j x e_j). A line cannot push.
+    const W = _pcw, A = _pcA, T = _pcT;
+    let live = (1 << n) - 1;
+    for (let pass = 0; pass <= n; pass++) {
+      for (let i = 0; i < n; i++) {
+        const oi = i * 16, gi = W[oi + 10] + W[oi + 9] * dt, on = (live >> i) & 1;
+        for (let j = 0; j < n; j++) {
+          const oj = j * 16;
+          const cij = (W[oi] * W[oj] + W[oi + 1] * W[oj + 1] + W[oi + 2] * W[oj + 2]) * iM + W[oi + 3] * W[oj + 3] * iIx + W[oi + 4] * W[oj + 4] * iIy + W[oi + 5] * W[oj + 5] * iIz;
+          A[i * n + j] = (i === j ? 1 : 0) + (on && ((live >> j) & 1) ? gi * cij : 0);
+        }
+        T[i] = on ? _pcb[i] : 0;
+      }
+      solveDense(A, T, n);
+      let slack = 0;
+      for (let i = 0; i < n; i++) if (T[i] < 0) { T[i] = 0; if ((live >> i) & 1) { live &= ~(1 << i); slack++; } }
+      if (!slack) break;
+    }
+    let cfx = 0, cfy = 0, cfz = 0, ctx = 0, cty = 0, ctz = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 16, t = T[i];
+      cfx += t * W[o]; cfy += t * W[o + 1]; cfz += t * W[o + 2];
+      ctx += t * W[o + 3]; cty += t * W[o + 4]; ctz += t * W[o + 5];
+    }
+    // the pack's acceleration with the parachutes pulling, and each canopy's swing across its line
+    const ax = a0x + cfx * iM, ay = a0y + cfy * iM, az = a0z + cfz * iM;
+    const alx = al0x + ctx * iIx, aly = al0y + cty * iIy, alz = al0z + ctz * iIz;
+    let worst = 0, sum = 0, torn = null;
+    for (let i = 0; i < n; i++) {
+      const p = list[i], c = p._c, o = i * 16, spec = chuteSpec(p.def, TUNING.CHUTE_CD);
+      const rx = W[o + 6], ry = W[o + 7], rz = W[o + 8], kap = W[o + 9], mi = W[o + 10], t = T[i], L = c.L;
+      let ex = W[o], ey = W[o + 1], ez = W[o + 2];
+      const vax = ux + (w.y * rz - w.z * ry), vay = uy + (w.z * rx - w.x * rz), vaz = uz + (w.x * ry - w.y * rx);
+      const wr = w.x * rx + w.y * ry + w.z * rz, w2 = w.x * w.x + w.y * w.y + w.z * w.z;
+      const px = ax + (aly * rz - alz * ry) + w.x * wr - rx * w2, py = ay + (alz * rx - alx * rz) + w.y * wr - ry * w2, pz = az + (alx * ry - aly * rx) + w.z * wr - rz * w2;
+      // across the line: m_i w' = [ -kap (v_pack + w) - m_i a_pack ] perpendicular; implicit in w, in steps short
+      // enough that a canopy streaming at Mach 3 on a short line turns into the wind without stepping past it
+      _pc2.set(c.wx, c.wy, c.wz).applyQuaternion(_pcq);
+      let wlx = _pc2.x, wly = _pc2.y, wlz = _pc2.z;
+      const va = Math.sqrt(vax * vax + vay * vay + vaz * vaz);
+      const sub = Math.min(16, Math.max(1, Math.ceil(va * dt / (0.25 * L)))), h = dt / sub;
+      const dx0 = -kap * vax - mi * (px - aax) + W[o + 12], dy0 = -kap * vay - mi * (py - aay) + W[o + 13], dz0 = -kap * vaz - mi * (pz - aaz) + W[o + 14], den = 1 / (mi + h * kap);
+      for (let k = 0; k < sub; k++) {
+        const dn = dx0 * ex + dy0 * ey + dz0 * ez;
+        wlx = (mi * wlx + h * (dx0 - dn * ex)) * den; wly = (mi * wly + h * (dy0 - dn * ey)) * den; wlz = (mi * wlz + h * (dz0 - dn * ez)) * den;
+        ex += wlx * h / L; ey += wly * h / L; ez += wlz * h / L;
+        const il = 1 / Math.sqrt(ex * ex + ey * ey + ez * ez); ex *= il; ey *= il; ez *= il;
+        const wn = wlx * ex + wly * ey + wlz * ez; wlx -= wn * ex; wly -= wn * ey; wlz -= wn * ez;
+      }
+      _pc2.set(ex, ey, ez).applyQuaternion(q); c.ux = _pc2.x; c.uy = _pc2.y; c.uz = _pc2.z;
+      _pc2.set(wlx, wly, wlz).applyQuaternion(q); c.wx = _pc2.x; c.wy = _pc2.y; c.wz = _pc2.z;
+      c.T = t; c.load = t / spec.rated; if (t > c.peak) c.peak = t;
+      sum += t; if (c.load > worst) worst = c.load;
+      if (c.load > 1) { c.dmg += (c.load - 1) * dt / CHUTE.FAIL_TIME; if (c.dmg >= 1 && TUNING.CHUTE_FAIL) (torn || (torn = [])).push(p); }
+      else if (c.dmg > 0) c.dmg = Math.max(0, c.dmg - dt / STRUCT.HEAL_TIME);
+      if (SW) {
+        const k = this._list.indexOf(p) * 6;
+        if (k >= 0) { SW[k] += t * W[o]; SW[k + 1] += t * W[o + 1]; SW[k + 2] += t * W[o + 2]; SW[k + 3] += t * W[o + 3]; SW[k + 4] += t * W[o + 4]; SW[k + 5] += t * W[o + 5]; }
       }
     }
+    this.chuteTension = sum; this.chuteLoad = worst;
+    if (torn) for (const p of torn) {
+      const t = p._c.T, i = list.indexOf(p), o = i * 16;
+      cfx -= t * W[o]; cfy -= t * W[o + 1]; cfz -= t * W[o + 2]; ctx -= t * W[o + 3]; cty -= t * W[o + 4]; ctz -= t * W[o + 5];
+      if (SW) { const k = this._list.indexOf(p) * 6; if (k >= 0) { SW[k] -= t * W[o]; SW[k + 1] -= t * W[o + 1]; SW[k + 2] -= t * W[o + 2]; SW[k + 3] -= t * W[o + 3]; SW[k + 4] -= t * W[o + 4]; SW[k + 5] -= t * W[o + 5]; } }
+      p.deployed = 'cut'; p.deployT = 0; p._c = null; this.chuteTension -= t;
+      ev.push({ type: 'chute', vessel: this, part: p, state: 'cut', load: t, rated: chuteSpec(p.def, TUNING.CHUTE_CD).rated });
+    }
+    _pcf[0] = cfx; _pcf[1] = cfy; _pcf[2] = cfz; _pcf[3] = ctx; _pcf[4] = cty; _pcf[5] = ctz;
+    return true;
+  }
+
+  /**
+   * An open parachute as the flight scene draws it: → out { stage, fill, cds (m² of drag area), shape (chuteShape),
+   * x, y, z (unit vector from the pack to the canopy, in the vessel's own frame), load (0..1 of the line rating) },
+   * or null while it is packed.
+   */
+  chuteView(p, out = {}) {
+    if (!p || !p.def.chute || !(p.deployed === 'semi' || p.deployed === 'full')) return null;
+    const spec = chuteSpec(p.def, TUNING.CHUTE_CD), c = p._c;
+    out.stage = p.deployed; out.fill = p.deployT;
+    out.cds = chuteDragArea(spec, p.deployed, p.deployT, c ? c.from : undefined);
+    out.shape = c && c.cds === out.cds ? c.shape : chuteShape(spec, out.cds, out.shape || {});
+    if (c) { _pc2.set(c.ux, c.uy, c.uz).applyQuaternion(_pcq.copy(this.q).invert()); out.x = _pc2.x; out.y = _pc2.y; out.z = _pc2.z; out.load = c.load; }
+    else { out.x = 0; out.y = 1; out.z = 0; out.load = 0; }
+    return out;
   }
 
   /**

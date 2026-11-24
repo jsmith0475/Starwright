@@ -231,8 +231,11 @@ Physics model (per sub-step, active and nearby vessels ≤ 2.5 km; others ride o
   exposed top faces (node free) take axial drag `q·πr²·drag.top·|cosα|` when the flow comes from the nose side,
   exposed bottoms likewise from the tail side, sides `q·(2r·h)·drag.side·sinα`; fins give a lift-like force along
   their plane normal `q·area·(v̂·n)·1.6`. Forces act at part positions → restoring/overturning torque emerges.
-  Parachutes: 'armed' → 'semi' when in atmosphere and airspeed < maxSpeed (else they wait); → 'full' below fullAlt radar altitude;
-  drag area semiArea/area, applied at the part; ripped ('cut') if deployed above maxSpeed·1.5.
+  Parachutes (docs/PARACHUTES.md, `js/core/parachute.js`): each open canopy is a second body on a line from its pack,
+  with drag on its own velocity and the inertia of the air it carries; the line tension is solved with the rigid body.
+  'armed' → 'semi' (reefed) when the air can fill it, Mach < maxMach and the predicted opening load is inside the line
+  strength (else `part.chuteWait` says why it waits); → 'full' below fullAlt above the ground; 'cut' when the line load
+  stays over `strength`. The drawn canopy (`js/render/canopy.js`) is built from the same `chuteShape` the physics flies.
 - Attitude: rigid body with diagonal inertia. Torque sources: reaction wheels (`torque`, uses elec 0.02 EC/s per kN·m at full),
   engine gimbal, control fins (∝ dynamic pressure), RCS (mono). SAS is a PD controller that feeds the same actuators.
 - Heating: Sutton-Graves-like flux `1.83e-4·sqrt(ρ)·v³` drives part skin temps on exposed windward parts; heat shields
