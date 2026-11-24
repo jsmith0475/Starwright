@@ -7,6 +7,7 @@ import { predictPatches, checkSoiTransition, toParentFrame, toChildFrame } from 
 import { Vessel, TUNING, surfaceAt } from './vessel.js';
 import { Craft } from './craft.js';
 import { stepTower } from './tower.js';
+import { stepStructures } from './structures.js';
 import { situationOf, EXPERIMENTS, experimentAllowed, BIOME_SITUATIONS } from './career.js';
 
 export const WARP_RATES = Object.freeze([1, 2, 3, 4, 5, 10, 50, 100, 1000, 10000, 100000]);
@@ -916,6 +917,7 @@ export class World {
       }
       if (docking > 1) this._dockingStep(dt);
       stepTower(this, ev);
+      stepStructures(this, ev);
       remaining -= dt; n++;
       if (ev.length) this._processEvents();
     }

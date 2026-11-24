@@ -497,6 +497,8 @@ class Kit {
     }
     return this;
   }
+  /** A solid shape the drawing does not make by itself (something that moves); kept only by recordSiteSolids. */
+  solid() { return this; }
   /** Point light sprite. kind: 0 lamp (night only), 1 beacon (slow pulse, always), 2 strobe. */
   glow(x, y, z, color, size = 1.6, kind = 0, period = 0, phase = 0) { this.glows.push([x, y, z, color, size, period, phase, kind]); return this; }
   /** Additive light pool on the ground. */
@@ -602,12 +604,13 @@ function buildPad(k) {
   }
   k.box('smooth', tx, H, 0, tw + 3, 0.4, tw + 3, 0x6b727b); k.box('smooth', tx + 1, H + 0.4, 0, 4.2, 3.4, 4.2, C.teal); k.box('smooth', tx + 1, H + 3.8, 0, 4.6, 0.4, 4.6, C.white);
   k.win(tx - 1.15, H + 1.4, 0, 3.4, 1.6, 'w', 1.7);
-  // hammerhead crane and lightning rod
-  k.beam('metal', [tx + 9, H + 5.4, 0], [tx - 13, H + 5.4, 0], 1.0, C.amber); k.beam('metal', [tx + 9, H + 6.9, 0], [tx - 13, H + 6.9, 0], 0.3, C.amber);
-  for (let i = 0; i < 11; i++) k.beam('metal', [tx + 9 - i * 2, H + 5.9, 0], [tx + 8 - i * 2, H + 6.9, 0], 0.16, C.amber);
-  k.box('smooth', tx + 8, H + 4.2, 0, 3, 2.6, 2.4, C.steelDark); k.beam('metal', [tx - 11, H + 5, 0], [tx - 11, H - 1, 0], 0.08, C.dark); k.box('smooth', tx - 11, H - 2, 0, 0.7, 1, 0.7, C.amber);
+  // hammerhead crane and lightning rod. The jib stops 11 m from the pad's axis (it reached 4 m, over a tall rocket's
+  // flaps, until the space centre was made solid: js/core/structures.js)
+  k.beam('metal', [tx + 9, H + 5.4, 0], [tx - 6, H + 5.4, 0], 1.0, C.amber); k.beam('metal', [tx + 9, H + 6.9, 0], [tx - 6, H + 6.9, 0], 0.3, C.amber);
+  for (let i = 0; i < 8; i++) k.beam('metal', [tx + 9 - i * 2, H + 5.9, 0], [tx + 8 - i * 2, H + 6.9, 0], 0.16, C.amber);
+  k.box('smooth', tx + 8, H + 4.2, 0, 3, 2.6, 2.4, C.steelDark); k.beam('metal', [tx - 4.5, H + 5, 0], [tx - 4.5, H - 1, 0], 0.08, C.dark); k.box('smooth', tx - 4.5, H - 2, 0, 0.7, 1, 0.7, C.amber);
   k.beam('metal', [tx + 1, H + 4.2, 0], [tx + 1, H + 22, 0], 0.22, 0xd9dee2); k.glow(tx + 1, H + 22.6, 0, 0xff3524, 3, 1, 1.6, 0);
-  k.glow(tx - 13, H + 5.4, 0, 0xff3524, 2, 1, 1.6, 0.5);
+  k.glow(tx - 6, H + 5.4, 0, 0xff3524, 2, 1, 1.6, 0.5);
   // lightning masts and floodlight towers
   for (const [x, z] of [[-50, -50], [50, -50], [-50, 50], [50, 50]]) {
     k.box('concrete', x, 0, z, 5, 0.6, 5, C.concDark); k.lattice(x, z, 4, 0.9, 0.6, 72, 12, C.white, C.red, 0.24); k.beam('metal', [x, 72, z], [x, 84, z], 0.14, 0xd9dee2);
@@ -771,6 +774,7 @@ function buildTracking(k, movers) {
     ke.cyl('smooth', 0, -1.2, 0, R * 0.22, R * 0.22, 1.8, C.steelDark, 14); ke.box('smooth', 0, -R * 0.2, -R * 0.36, R * 0.44, R * 0.3, R * 0.2, C.steelDark);
     ka.build(az, MAT); ke.build(el, MAT); az.add(el);
     movers.push({ az, el, phase, speed: 18 / D });
+    k.solid('sph', x, hp + R * 0.55, z, R * 0.85, 1);                // for the physics: the dish turns, so all the room it sweeps
     return az;
   };
   const dishes = [dish(-58, -22, 52, 26, 0.3), dish(34, -40, 30, 16, 2.1), dish(74, 2, 24, 13, 4.0)];
@@ -1501,3 +1505,63 @@ export function createBase({ quality = 'high', interactive = false, planetRadius
 
 /** The shared materials (after the first createBase): lets a host scene set envMap intensities, etc. */
 export function baseMaterials() { return MAT || (MAT = buildMaterials()); }
+
+// ---------------------------------------------------------------------------------------------
+// The solid space centre: what a vessel can hit (js/core/sitesolids.js is written from this)
+// ---------------------------------------------------------------------------------------------
+/** Runs every builder of the fixed space centre (the buildings, the pad, the scenery, the parked crawler) through a kit
+ *  that keeps no geometry, only the solid shapes it is asked for, in the pad's frame (+X east, +Y up, +Z south):
+ *    ['box', cx, cy, cz, hx, hy, hz, m]   a box: centre, half sizes along its own axes, m = its 3 axes (9 numbers,
+ *                                         columns x, y, z; omitted when it is square to the frame)
+ *    ['cap', ax, ay, az, bx, by, bz, r]   a rod between two points (pipes, posts, beams)
+ *    ['cyl', x, y0, z, r, h]              an upright drum
+ *    ['sph', x, y, z, r, sy]              a ball, squashed sy upright (domes are taken as whole balls: their lower half is
+ *                                         inside what they sit on)
+ *  A lattice mast is one box (its bracing is too close-knit to fly through) cut into four lengths as it tapers. What
+ *  lies flat (paving, markings, decals), window panes, lamps, light pools, fences and lamp heads are not solid; nor is
+ *  anything whose top is less than 12 cm off the ground (the ground has that). js/core/structures.js does the rest. */
+export function recordSiteSolids() {
+  const out = [], SKIP = { lamp: 1, pool: 1, beam: 1, ao: 1, mark: 1, decal: 1, fence: 1 }, r2 = v => Math.round(v * 100) / 100 || 0;
+  const m4 = new THREE.Matrix4(), v = V3(0, 0, 0), ax = V3(0, 0, 0), ay = V3(0, 0, 0), az = V3(0, 0, 0);
+  class Rec extends Kit {
+    constructor(seed, ox = 0, oz = 0) { super(seed); this.ox = ox; this.oz = oz; this.inLattice = false; }
+    push() { return this; }
+    keep(s) { if (s[0] === 'box' && s[2] + s[5] < 0.12) return; if (s[0] === 'cap' && Math.max(s[2], s[5]) + s[7] < 0.12) return; if (s[0] === 'cyl' && s[2] + s[5] < 0.12) return; out.push(s.map(x => (typeof x === 'number' ? r2(x) : Array.isArray(x) ? x.map(y => Math.round(y * 1e4) / 1e4 || 0) : x))); }
+    box(bucket, x, y0, z, w, h, d, color, ry = 0) {
+      if (SKIP[bucket] || this.inLattice) return this;
+      const s = ['box', x + this.ox, y0 + h / 2, z + this.oz, w / 2, h / 2, d / 2];
+      if (ry) { const c = Math.cos(ry), sn = Math.sin(ry); s.push([c, 0, -sn, 0, 1, 0, sn, 0, c]); }
+      this.keep(s); return this;
+    }
+    boxM(bucket, w, h, d, color, m) {
+      if (SKIP[bucket]) return this;
+      v.set(0, h / 2, 0).applyMatrix4(m); m.extractBasis(ax, ay, az);
+      const sx = ax.length(), sy = ay.length(), sz = az.length(); ax.normalize(); ay.normalize(); az.normalize();
+      this.keep(['box', v.x + this.ox, v.y, v.z + this.oz, w * sx / 2, h * sy / 2, d * sz / 2, [ax.x, ax.y, ax.z, ay.x, ay.y, ay.z, az.x, az.y, az.z]]); return this;
+    }
+    cyl(bucket, x, y0, z, r1, r2_, h) { if (bucket === 'glass') this.win(); if (!SKIP[bucket]) this.keep(['cyl', x + this.ox, y0, z + this.oz, Math.max(r1, r2_), h]); return this; }
+    tube(bucket, a, b, r, color, seg, rb = r) { if (!SKIP[bucket]) this.keep(['cap', a[0] + this.ox, a[1], a[2] + this.oz, b[0] + this.ox, b[1], b[2] + this.oz, Math.max(r, rb)]); return this; }
+    beam(bucket, a, b, th) { if (!SKIP[bucket] && !this.inLattice) this.keep(['cap', a[0] + this.ox, a[1], a[2] + this.oz, b[0] + this.ox, b[1], b[2] + this.oz, th * 0.6]); return this; }
+    sphere(bucket, x, y, z, r, color, sy = 1) { if (!SKIP[bucket]) this.keep(['sph', x + this.ox, y, z + this.oz, r, sy]); return this; }
+    dome(bucket, x, y0, z, r, color, sy = 1) { if (!SKIP[bucket]) this.keep(['sph', x + this.ox, y0, z + this.oz, r, sy]); return this; }
+    lattice(cx, cz, w0, w1, y0, y1, n, colA, colB, th = 0.3) {
+      for (let i = 0; i < 4; i++) {
+        const ya = y0 + (y1 - y0) * i / 4, yb = y0 + (y1 - y0) * (i + 1) / 4, w = Math.max(w0 + (w1 - w0) * i / 4, w0 + (w1 - w0) * (i + 1) / 4) + th * 1.25;
+        this.keep(['box', cx + this.ox, (ya + yb) / 2, cz + this.oz, w / 2, (yb - ya) / 2, w / 2]);
+      }
+      return this;
+    }
+    solid(...s) { s[1] += this.ox; s[3] += this.oz; this.keep(s); return this; }
+    win() { (this.b.glass ||= []).push({}); return this; }            // (one builder turns its last window after)
+    flat() { return this; } poly() { return this; } disc() { return this; } bands() { return this; }
+    decalWall() { return this; } decalFlat() { return this; } glow() { return this; } pool() { return this; }
+  }
+  const keepMat = MAT; MAT = MAT || new Proxy({}, { get: () => undefined });       // moving parts (the dishes) build meshes of their own
+  const L = BASE_LAYOUT, builders = { hangar: buildHangar, pad: buildPad, runway: buildRunway, spaceplane: buildSpaceplaneHangar, tracking: buildTracking, research: buildResearch, missions: buildMissions, crew: buildCrew, school: buildSchool, admin: buildAdmin };
+  const groups = {};
+  BASE_BUILDINGS.forEach((def, i) => { const n0 = out.length; builders[def.id](new Rec(100 + i * 17, L[def.id][0], L[def.id][1]), []); groups[def.id] = [n0, out.length]; });
+  { const n0 = out.length; buildScenery(new Rec(7), 'high'); groups.scenery = [n0, out.length]; }
+  // the crawler, parked on its way (as createBase parks it when no show rocket rides it)
+  { const n0 = out.length; const k = new Rec(31, 0, 392); buildCrawler(k); groups.crawler = [n0, out.length]; }
+  return { solids: out, groups };
+}

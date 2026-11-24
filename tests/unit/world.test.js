@@ -6,6 +6,7 @@ import { Vessel, TUNING } from '../../js/core/vessel.js';
 import { Craft, stockCrafts } from '../../js/core/craft.js';
 import { Orbit } from '../../js/core/orbit.js';
 import { SYSTEM } from '../../js/core/bodies.js';
+import { STRUCTURES } from '../../js/core/structures.js';
 
 const home = SYSTEM.home, pell = SYSTEM.byId.pell;
 const stock = name => stockCrafts().find(c => c.name === name);
@@ -410,8 +411,10 @@ test('terminal velocity and drag sanity', () => {
   assert.ok(noseErr() < 0.1, 'weathervanes: ' + noseErr());
 });
 
-test('impact: above tolerance destroys, weak parts crumple first', () => {
-  // free fall from 3 km without a parachute: everything goes
+test('impact: above tolerance destroys, weak parts crumple first', (t) => {
+  // free fall from 3 km without a parachute: everything goes. (It drifts 14 m east on the way down, into the top of the
+  // pad's service tower: this is about the ground, so the space centre is not solid here; tests/unit/structures.test.js)
+  STRUCTURES.solid = false; t.after(() => { STRUCTURES.solid = true; });
   let w = new World();
   let v = above(w, capsule({ chute: false }), SYSTEM.launchSite.dir, 3000);
   let log = record(w);
