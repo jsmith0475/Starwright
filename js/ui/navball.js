@@ -39,6 +39,7 @@ export const MARKER_STYLE = {
   antiTarget: { color: '#e879f9', label: 'Away from target' },
   relPrograde: { color: '#e879f9', label: 'Toward where you drift (relative to the target)' },
   relRetrograde: { color: '#e879f9', label: 'Against your drift (relative to the target)' },
+  lift: { color: '#ffe066', label: 'Lift: the way the air is pushing the vessel across its path' },
 };
 
 function ballTexture() {
@@ -309,6 +310,10 @@ export function drawGlyph(g, kind, x, y, s) {
       halo(g, h => { poly(pts); if (h) g.stroke(); else g.fill(); });
       break;
     }
+    case 'lift':                // an arrow head: the way the lift points
+      halo(g, () => { poly([[-0.85, 0.55], [0, -0.75], [0.85, 0.55]], false); g.stroke(); });
+      g.beginPath(); g.arc(0, 0.35 * s, s * 0.16, 0, Math.PI * 2); g.fill();
+      break;
     case 'antiTarget':          // "directly away from the target": three short spokes around a hollow centre
       halo(g, () => {
         for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 3; g.beginPath(); g.moveTo(Math.cos(a) * s * 0.42, Math.sin(a) * s * 0.42); g.lineTo(Math.cos(a) * s * 1.05, Math.sin(a) * s * 1.05); g.stroke(); }

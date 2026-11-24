@@ -415,6 +415,13 @@ The game integrates this over each part's real surface, including the rounded fa
 shield. A part wholly in the wake of a wider part upstream keeps a tenth of its force above
 Mach 1.5. The full model is in [docs/AERODYNAMICS.md](docs/AERODYNAMICS.md).
 
+A capsule can make use of that. Its **Entry trim** switch moves ballast a few centimetres off
+the axis, so the air holds the capsule at 18 degrees and the heat shield lifts 0.27 times its
+drag. **Bank hold** turns that lift about the velocity with the roll keys. From low orbit the
+Acorn Capsule meets 3.1 g with no lift, 1.8 g with the lift up and 5.3 g with it down, and
+lands 110 km further on or 46 km short. The flight screen shows the peaks ahead and the map
+draws the path through the air to the landing point: [docs/ENTRY.md](docs/ENTRY.md).
+
 A wing or fin of area $S$ at angle of attack $\alpha$, with lift-curve slope $a$ (3.6 per
 radian for a wing, 1.6 for a fin). While the flow is attached:
 

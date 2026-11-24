@@ -385,6 +385,17 @@ export function createHud(app, act) {
   let stShown = 0, stPct = -1, stWhy = '', stFlash = 0, stStamp = -1, stWhyPct = -1;
   setCls(structBox, 'sw-hidden', true); setCls(structBox, 'idle', true);
   resBox.appendChild(structBox);
+  // Entry: the capsule's trim and bank, what the air is doing now and where this path ends (docs/ENTRY.md)
+  const eBtn = (key, label, tip, fn) => el('button', { class: 'fl-entry-btn', text: label, tip, attrs: { type: 'button', 'data-entry': key }, on: { click: blurClick(fn) } });
+  const bTrim = eBtn('trim', 'TRIM', 'Entry trim: shift the capsule\'s ballast so it rests at an angle to the air and lifts', () => act.toggleEntryTrim());
+  const bBank = eBtn('bank', 'BANK', 'Bank hold: keep the trim attitude, and turn the lift with the roll keys (Q / E)', () => act.toggleBankHold());
+  const kvEntry = el('div', { class: 'fl-kv entry' });
+  const nBank = kvRow(kvEntry, 'Bank'), nLd = kvRow(kvEntry, 'Lift / drag'), nFlux = kvRow(kvEntry, 'Heat flux'), nPeak = kvRow(kvEntry, 'Peaks ahead'), nEnd = kvRow(kvEntry, 'This path');
+  const entryBox = el('div', { class: 'fl-entry', data: { hud: 'entry' } },
+    el('div', { class: 'fl-entry-head' }, el('span', { class: 'nm', text: 'Entry' }), bTrim, bBank), kvEntry);
+  setCls(entryBox, 'sw-hidden', true);
+  resBox.appendChild(entryBox);
+  let entryShown = false;
 
   const tool = (key, label, kbd, tip, fn, cls = '') => {
     const b = el('button', { class: 'fl-tool ' + cls, tip: label + (kbd ? '  [' + kbd + ']' : '') + (tip ? ' — ' + tip : ''), attrs: { type: 'button', 'data-tool': key, 'aria-label': label }, on: { click: blurClick(fn) } });
@@ -1064,6 +1075,31 @@ export function createHud(app, act) {
       const hr = v.isHot ? (v.maxTempRatio || 0) : 0;
       setText(nHeat, hr > 0.02 ? Math.round(hr * 100) + '%' : 'cool'); setCls(nHeat, 'warn', hr > 0.6 && hr <= 0.85); setCls(nHeat, 'bad', hr > 0.85);
       values.heat = hr; values.q = q;
+    }
+    // ---- entry read-out
+    if (tick) {
+      const top = body.atmo ? body.atmo.height : 0, inAir = top > 0 && v.altitude < top && !v.landed;
+      const canTrim = v.type === 'ship' && v.trimParts && v.trimParts.length > 0, trimOn = !!v.entryTrimOn, bankOn = !!v.ctrl.sas && v.ctrl.sasMode === 'bankHold';
+      const pred = top > 0 && act.entryPrediction ? act.entryPrediction(v) : null;
+      const show = top > 0 && !v.landed && v.type === 'ship' && ((inAir && v.mach > 3) || bankOn || (canTrim && (trimOn || !!pred)));
+      if (show !== entryShown) { entryShown = show; setCls(entryBox, 'sw-hidden', !show); }
+      values.entry = null;
+      if (show) {
+        setCls(bTrim, 'sw-hidden', !canTrim); setCls(bTrim, 'on', trimOn); setCls(bBank, 'on', bankOn);
+        const deg = r => Math.round(r * 180 / Math.PI), sgn = d => (d > 0 ? d + '° right' : d < 0 ? -d + '° left' : '0°');
+        const ld = inAir ? v.liftDrag() : null, bn = inAir && ld && ld.ld > 0.03 ? v.bankNow() : null;
+        setText(nBank, (bn === null ? '--' : sgn(deg(bn))) + (bankOn ? ' · set ' + sgn(deg(v.bank)) : ''));
+        setText(nLd, ld ? ld.ld.toFixed(2) : '--');
+        const flux = inAir ? v.heatFlux || 0 : 0;
+        setText(nFlux, flux >= 500 ? fmt.num(flux / 1000, flux < 99500 ? 1 : 0) + ' kW/m²' : '--');
+        if (pred) {
+          setText(nPeak, (pred.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num(pred.maxFlux / 1000, 0) + ' kW/m²');
+          const left = Math.max(0, pred.t - (world.ut - pred.ut));
+          setText(nEnd, pred.end === 'skip' ? 'skips back out to space' : 'down in ' + fmt.time(left));
+          setCls(nEnd, 'warn', pred.end === 'skip'); setCls(nPeak, 'warn', pred.maxG > 6 * 9.80665);
+        } else { setText(nPeak, '--'); setText(nEnd, inAir ? '--' : 'stays in orbit'); setCls(nEnd, 'warn', false); setCls(nPeak, 'warn', false); }
+        values.entry = { trim: trimOn, bankHold: bankOn, bank: bn, bankSet: v.bank, ld: ld ? ld.ld : null, flux, end: pred ? pred.end : null, peakG: pred ? pred.maxG / 9.80665 : null, peakFlux: pred ? pred.maxFlux : null };
+      }
     }
     // ---- throttle + lights + SAS
     const c = v.ctrl;

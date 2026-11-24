@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
+    text: 'Capsules have a new switch, Entry trim. It shifts ballast so the capsule rests at 18 degrees to the air and lifts. A new hold, Bank hold, lets the roll keys turn that lift: up for a gentler, longer entry, down for a shorter, harder one. An Entry box on the flight screen shows bank, lift, heating and the peaks ahead, and the map now draws the path through the air to where you come down.' },
   { id: 'autopilot-reads-terrain', date: '2026-11-23', title: 'The landing autopilot looks at the ground',
     text: 'Land here now reads the terrain. From orbit it waits for ground the lander can stand on, the braking burn keeps clear of hills, and at the hover it flies across to the nearest level spot before it sets down. It warns you when nothing in reach is fit. In 288 test landings on the twelve airless worlds the old autopilot left 212 landers standing; this one left all 288.' },
   { id: 'catch-tower', date: '2026-11-23', title: 'A tower that catches the booster',

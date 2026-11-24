@@ -15,6 +15,12 @@ import { dragRise, bluntness, wakeFraction, newtonWeight, pitotCp } from '../../
 
 const ctx = scienceContext(SYSTEM, G0);
 
+test('tex: words inside \\text keep their spaces', () => {
+  assert.match(texToMathML(String.raw`C_p = 0 \text{ in the lee}`), /<mtext>\u00a0in the lee<\/mtext>/);
+  assert.match(texToMathML(String.raw`\text{where it faces the flow}`), /<mtext>where it faces the flow<\/mtext>/);
+  assert.match(texToMathML(String.raw`\frac{1}{3\ \text{s}}`), /<mtext>s<\/mtext>/);
+});
+
 test('tex: fractions, roots, scripts, accents and Greek become MathML', () => {
   const m = texToMathML(String.raw`\Delta v = v_e \ln\frac{m_0}{m_1}`, { display: true });
   assert.match(m, /^<math [^>]*display="block"/);

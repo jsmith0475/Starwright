@@ -150,6 +150,17 @@ body[data-screen="flight"] .sw-toasts { top: 132px; }
 .fl-struct-why { display: none; margin-top: 2px; font-size: 10.5px; line-height: 1.3; color: var(--sw-dim); white-space: normal; }
 .fl-struct:hover .fl-struct-why, .fl-struct.on .fl-struct-why, .fl-struct.warn .fl-struct-why, .fl-struct.bad .fl-struct-why { display: block; }
 .fl-struct-why:empty { display: none !important; }
+/* entry: trim and bank switches, and the read-outs of a path through the air */
+.fl-entry { margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.fl-entry-head { display: flex; align-items: center; gap: 5px; height: 18px; font-size: 11px; }
+.fl-entry-head .nm { flex: 1; color: var(--sw-dim); font-weight: 650; }
+.fl-entry-btn { padding: 1px 6px; border: 1px solid #3a4757; border-radius: 3px; background: transparent; color: var(--sw-dim); font: inherit; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; cursor: pointer; }
+.fl-entry-btn:hover { color: var(--sw-text); border-color: #56677c; }
+.fl-entry-btn.on { color: #10151b; background: var(--sw-amber); border-color: var(--sw-amber); }
+.fl-kv.entry { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin-top: 2px; font-size: 11px; }
+.fl-kv.entry .k { color: var(--sw-faint); white-space: nowrap; }
+.fl-kv.entry .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.fl-kv.entry .v.warn { color: var(--sw-amber); }
 .fl-struct.warn .fl-struct-why { color: var(--sw-amber); } .fl-struct.bad .fl-struct-why { color: var(--sw-red); }
 .fl-struct.flash { animation: fl-struct-flash 0.4s ease-in-out 4 alternate; }
 @keyframes fl-struct-flash { from { background: transparent; box-shadow: none; } to { background: rgba(255, 179, 71, 0.3); box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.3), 0 0 12px rgba(255, 179, 71, 0.55); } }

@@ -19,6 +19,7 @@ import { SYSTEM, BARGE, TOWER } from '../core/bodies.js';
 import { PARTS } from '../core/parts.js';
 import { EXPERIMENTS, programStep } from '../core/career.js';
 import { closestApproach } from '../core/trajectory.js';
+import { predictEntry } from '../core/entry.js';
 import { el, fmt, showModal, isModalOpen } from './dom.js';
 import { openSettings } from './hub.js';
 import { createBase } from '../render/basegfx.js';
@@ -102,7 +103,9 @@ export function createFlightScreen(app) {
   const strainKey = (a, b) => a * 1048576 + b;
   const state = { speedMode: 'surface', paused: false, assist: null, assistKind: '', mapOpen: false, heading: 0, pitch: 90, approach: null, fine: false, danger: 0, rumble: 0, buffet: 0, roll: 0 };
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion();
-  const markerDirs = { prograde: new THREE.Vector3(), retrograde: new THREE.Vector3(), normal: new THREE.Vector3(), antinormal: new THREE.Vector3(), radialOut: new THREE.Vector3(), radialIn: new THREE.Vector3(), maneuver: new THREE.Vector3(), target: new THREE.Vector3(), antiTarget: new THREE.Vector3() };
+  const markerDirs = { prograde: new THREE.Vector3(), retrograde: new THREE.Vector3(), normal: new THREE.Vector3(), antinormal: new THREE.Vector3(), radialOut: new THREE.Vector3(), radialIn: new THREE.Vector3(), maneuver: new THREE.Vector3(), target: new THREE.Vector3(), antiTarget: new THREE.Vector3(), lift: new THREE.Vector3() };
+  // the entry prediction of the active vessel (js/core/entry.js), worked out twice a second for the HUD and the map
+  const entry = { id: null, stamp: -1e9, res: null };
 
   const active = () => (world && world.active && !world.active.dead ? world.active : null);
   const flyable = v => v && !v.dead && (v.type === 'ship' || v.type === 'eva');
@@ -580,6 +583,37 @@ export function createFlightScreen(app) {
     },
     hasGear(v) { return !!v && v.hasGear === true; },
     gearDown(v) { if (!v) return false; const legs = (v.legParts || []).length > 0; return (legs ? !!v.legsDown : true) && (v.hasGear === true ? !!v.gearDown : true) && (legs || v.hasGear === true); },
+    /** Entry trim on every capsule that has it (docs/ENTRY.md). */
+    toggleEntryTrim() {
+      const v = active(); if (!v || !v.trimParts || !v.trimParts.length) return;
+      const on = v.toggleEntryTrim(); entry.stamp = -1e9; app.audio.play('switch');
+      toast(on ? 'Entry trim on: the capsule rests at an angle to the air, and lifts' : 'Entry trim off: the capsule is balanced again');
+    },
+    /** Bank hold on or off. */
+    toggleBankHold() {
+      const v = active(); if (!v || v.type !== 'ship') return;
+      if (v.ctrl.sas && v.ctrl.sasMode === 'bankHold') { v.ctrl.sasMode = 'hold'; v.sasTarget = null; toast('Bank hold off'); return; }
+      if (assist) dropAssist(assistName() + ' off');
+      // already flying a settled, lifting entry: keep the bank it has. Otherwise the last one commanded (lift up at first).
+      const ld = v.entryTrimOn && v.mach > 3 ? v.liftDrag() : null, b = ld && ld.ld > 0.15 && v.w.lengthSq() < 0.0025 ? v.bankNow() : null;
+      if (b !== null) v.bank = Math.round(b * 36 / Math.PI) * Math.PI / 36;
+      v.ctrl.sas = true; v.ctrl.sasMode = 'bankHold'; entry.stamp = -1e9;
+      toast('Bank hold: the roll keys turn the lift. 0° is lift up, 180° is lift down.');
+    },
+    /**
+     * Where the active vessel's path through the air ends, from the entry equations with the drag, lift and bank it
+     * has now: the result of predictEntry (with its path), or null when it is not on its way into an atmosphere.
+     */
+    entryPrediction(v = active()) {
+      if (!v || v.dead || v.landed || v.type !== 'ship' || !v.body.atmo) return null;
+      const now = performance.now();
+      if (entry.id === v.id && now - entry.stamp < 500) return entry.res;
+      entry.id = v.id; entry.stamp = now; entry.res = null;
+      const r = predictEntry(v.body, v.pos, v.vel, world.ut, { ...v.entryModel(), path: true, maxT: 30000 });
+      r.ut = world.ut; r.body = v.body;
+      entry.res = r.end === 'land' || r.end === 'skip' ? r : null;
+      return entry.res;
+    },
     toggleSolar() { const v = active(); if (!v || !(v.solarParts || []).length) return; app.audio.play('switch'); toast(v.toggleSolar() ? 'Solar panels out' : 'Solar panels folded'); },
     /** true / false, or null when the vessel carries no lamps (or the core has none). */
     lightState(v) { return v && (v.lightParts || []).length && typeof v.toggleLights === 'function' ? !!v.lightsOn : null; },
@@ -1400,7 +1434,7 @@ export function createFlightScreen(app) {
     if (want) {
       if (!mapModule) { toast('The map is not available', 'warn'); return; }
       if (!map) {
-        try { map = mapModule.createMapView(app, { getWorld: () => world, insets: { top: 96, left: 12, right: 54, bottom: Math.round(hud.consoleHeight()) + 64 } }); }
+        try { map = mapModule.createMapView(app, { getWorld: () => world, getEntry: v => actions.entryPrediction(v), insets: { top: 96, left: 12, right: 54, bottom: Math.round(hud.consoleHeight()) + 64 } }); }
         catch (err) { console.error('[flight] map failed to start:', err); toast('The map could not be opened', 'bad'); return; }
         if (app.flight) app.flight.map = map;
         // first look: stand on the craft's side of its world (the default view is fixed in space and, depending on
@@ -1619,6 +1653,8 @@ export function createFlightScreen(app) {
           { kind: 'radialOut', dir: markerDirs.radialOut }, { kind: 'radialIn', dir: markerDirs.radialIn });
       }
     }
+    // in fast air: which way the air is pushing the vessel across its path
+    if (v.mach > 3 && !v.landed) { const ld = v.liftDrag(markerDirs.lift); if (ld && ld.ld > 0.03) list.push({ kind: 'lift', dir: markerDirs.lift, showBehind: true }); }
     if (v.nodes.length) {
       const bv = v.burnVector(world.ut, v2);
       if (bv && bv.lengthSq() > 1e-6) { markerDirs.maneuver.copy(bv).normalize(); list.push({ kind: 'maneuver', dir: markerDirs.maneuver, showBehind: true }); }
