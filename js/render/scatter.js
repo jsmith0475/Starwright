@@ -11,12 +11,17 @@
 // clods, flat slabs and wind-cut ventifacts. A world's style names one or two of them (scatter.rockKinds in
 // worldstyle.js), so the loose stone under a rover's wheels is that world's own: each kind has its own shape and its
 // own shading. A second kind costs one more draw call in each rock layer (its stones share the layer's tiles and are
-// sorted into their own instanced mesh when the tiles are packed), so a world has at most two. Rocks are only
-// pictures: nothing collides with them.
+// sorted into their own instanced mesh when the tiles are packed), so a world has at most two.
+//
+// Boulders are solid. Where each one lies, its size and the way it stands come from core/boulders.js, the same
+// field the ground-contact physics collides with: this file only draws them (and colours them). So they are drawn
+// at every quality setting and in full number, because a rock a rover can hit must be on the screen. Pebbles are
+// still only pictures, placed here.
 import * as THREE from '../lib/three.module.min.js';
 import { faceDir, dirToFace } from './terrainmesh.js';
 import { buildTree, growSkeleton } from './treegen.js';
 import { SUN_SURFACE, ATMO_GLSL, atmoUniforms } from './atmosphere.js';
+import { boulderField, boulderCell } from '../core/boulders.js';
 
 const _d = { x: 0, y: 0, z: 0 }, _rgb = [0, 0, 0];
 const REC = 10;      // numbers kept for each placed object (see `rec` in createScatter)
@@ -390,6 +395,9 @@ uniform float uRange, uTime, uSway;
 uniform vec4 uShadowDims;        // of the thing that casts it, per unit of its height scale: radius, height; then lift off the ground (m), depth pull
 uniform vec3 uSun;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
+#ifdef ROCK
+varying vec3 vM; varying float vS;
+#endif
 void main(){
   vec4 ip = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
   vec4 wc = modelMatrix * ip;
@@ -416,6 +424,12 @@ void main(){
     vN = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * normal));
     vC = instanceColor; vY = uv.y; vT = uv.x; vFade = k;
     vL = position + fract(ip.xyz * 0.173) * 9.0;                // each object gets its own piece of the noise
+    #ifdef ROCK
+      // the stone as it lies, in metres (turned, squashed and stretched as it is drawn), and how big it is: the
+      // grain of a rock is the same size on a pebble and on a block as big as a house
+      vS = length(mat3(instanceMatrix) * vec3(1.0, 0.0, 0.0));
+      vM = mat3(instanceMatrix) * position + fract(ip.xyz * 0.173) * 9.0;
+    #endif
     vView = wp.xyz - cameraPosition;
     gl_Position = projectionMatrix * viewMatrix * wp;
   #endif
@@ -427,6 +441,9 @@ ${ATMO_GLSL}
 ${NOISE}
 uniform vec3 uSun, uSunColor, uAmb, uUp, uCamU; uniform float uRadius, uShadowK, uShadowGain; uniform vec4 uShadowDims;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
+#ifdef ROCK
+varying vec3 vM; varying float vS;
+#endif
 void main(){
   #include <logdepthbuf_fragment>
   if (vFade < 0.02) discard;
@@ -475,10 +492,22 @@ void main(){
   #endif
   #ifdef ROCK
     // every kind of rock: mottled, a little bumpy, dark where it meets the ground; then each look in its own way
-    float r1 = n3(vL * 2.4), r2 = n3(vL * 7.5 + 2.0), r3 = n3(vL * 23.0 + 5.0);
-    vec3 bump = vec3(n3(vL * 6.1 + 11.0), n3(vL * 6.1 + 23.0), n3(vL * 6.1 + 37.0)) - 0.5 + 0.5 * (vec3(n3(vL * 19.0 + 3.0), n3(vL * 19.0 + 13.0), r3) - 0.5);
+    // The pattern is laid out in the stone's own shape up to a metre across (a pebble keeps its mottling), and in
+    // metres beyond that: on a great block the marks stay the size they are on a small one, and do not smear along
+    // the way the block was stretched. Close to, two finer grains come in (they fade before they can shimmer).
+    vec3 q = mix(vL, vM, smoothstep(0.7, 1.3, vS));
+    float near1 = 1.0 - smoothstep(6.0, 22.0, dist), near2 = 1.0 - smoothstep(2.5, 9.0, dist);
+    float g1 = n3(vM * 61.0 + 7.0), g2 = n3(vM * 173.0 + 3.0);
+    float r1 = n3(q * 2.4), r2 = n3(q * 7.5 + 2.0), r3 = mix(n3(q * 23.0 + 5.0), 0.5 * n3(q * 23.0 + 5.0) + 0.3 * g1 + 0.2 * g2, near1);
+    vec3 bump = vec3(n3(q * 6.1 + 11.0), n3(q * 6.1 + 23.0), n3(q * 6.1 + 37.0)) - 0.5 + 0.5 * (vec3(n3(q * 19.0 + 3.0), n3(q * 19.0 + 13.0), r3) - 0.5);
+    bump += near1 * 0.45 * (vec3(g1, n3(vM * 61.0 + 19.0), n3(vM * 61.0 + 31.0)) - 0.5) + near2 * 0.3 * (vec3(g2, n3(vM * 173.0 + 17.0), n3(vM * 173.0 + 29.0)) - 0.5);
+    // hairline cracks and a few pits, on stones big enough to have them
+    float bigK = smoothstep(0.9, 2.2, vS) * near1;
+    float crack = (1.0 - smoothstep(0.0, 0.022, abs(n3(vM * 1.9 + 41.0) - 0.5))) * smoothstep(0.35, 0.6, n3(vM * 0.7 + 5.0));
+    float pit = smoothstep(0.74, 0.86, n3(vM * 27.0 + 13.0));
     float top = dot(N, uUp);                                    // which way the face itself looks, before the bumps
-    float foot = smoothstep(0.04, 0.6, vY);
+    // dark where it meets the ground: a hand's breadth on a pebble, not half the height of a great block
+    float foot = smoothstep(0.04, 0.04 + 0.56 / max(1.0, vS * 1.4), vY);
     #if LOOK == 1
       // ice: hard clean facets, rime on what looks up and clear blue ice between; light gets a little way into it,
       // so the shaded side is not black; a broad glint off the faces that catch the sun
@@ -520,9 +549,9 @@ void main(){
       extra = uSunColor * (pow(max(dot(N, normalize(uSun + V)), 0.0), 14.0) * 0.05 * step(0.0, dot(N, uSun)));
     #elif LOOK == 5
       // fresh broken rock: clean flat fracture faces, one a little lighter than the next, hardly any dust yet
-      N = normalize(N + bump * 0.4);
+      N = normalize(N + bump * (0.4 + 0.3 * smoothstep(0.9, 2.2, vS)));
       ndl = max(dot(N, uSun), 0.0);
-      alb *= (0.86 + 0.2 * r1) * (0.9 + 0.2 * r3) * (0.84 + 0.32 * vT);
+      alb *= (0.86 + 0.2 * r1) * (0.9 + 0.2 * smoothstep(0.9, 2.2, vS) * (n3(vM * 0.9 + 17.0) - 0.5)) * (0.9 + 0.2 * r3) * (0.84 + 0.32 * vT);
       alb *= 1.0 + 0.1 * smoothstep(0.5, 0.95, top);
       ao = 0.42 + 0.58 * foot;
     #else
@@ -532,6 +561,9 @@ void main(){
       alb *= (0.66 + 0.5 * r1) * (0.8 + 0.3 * r2) * (0.88 + 0.24 * r3);
       alb *= 1.0 + 0.22 * smoothstep(0.35, 0.9, dot(N, uUp));
       ao = (0.42 + 0.58 * foot) * (0.75 + 0.25 * smoothstep(0.25, 0.6, r2));
+    #endif
+    #if LOOK != 1
+      alb *= 1.0 - bigK * (0.55 * crack + 0.22 * pit);
     #endif
   #endif
   vec3 col = alb * (uSunColor * ndl * ao + uAmb * ao * (0.6 + 0.4 * max(dot(N, uUp), 0.0))) + extra;
@@ -554,6 +586,7 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
   const sc = style.scatter, R = body.radius, faceSize = (Math.PI / 2) * R;
   const group = new THREE.Group(); group.name = 'scatter_' + body.id;
   const dens = quality === 'high' ? 1 : 0.6;
+  const bouldersOnly = quality === 'low';      // the lowest setting draws no clutter but the boulders, which are solid
   const home = !!body.sites;
   const layers = [];
   const cellLevel = (size) => Math.max(0, Math.round(Math.log2(faceSize / size)));
@@ -648,10 +681,27 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
     const rockLayer = (name, big, cell, per, range) => makeLayer(name, 'ROCK', kinds[0][big ? 'big' : 'small'](), cell, 2, per, range,
       (r, face, u, v, o) => ground(u, v, face, g) && stone(r, o, big),
       { stretch: 0.3, look: kinds[0].look, also: two ? [{ geo: kinds[1][big ? 'big' : 'small'](), look: kinds[1].look }] : [] });
-    boulders = rockLayer('boulders', true, 64, Math.max(3, sc.rocks * 1.5 * dens), 150);
-    rockLayer('pebbles', false, 20, Math.max(4, sc.rocks * 4.5 * dens), 46);
+    // boulders: placed by the simulation (core/boulders.js), drawn here. One record per boulder of the cell.
+    const field = boulderField(body);
+    boulders = rockLayer('boulders', true, 64, field ? field.perCell : Math.max(3, sc.rocks * 1.5), 150);
+    if (field && field.cells === boulders.cells) boulders.fill = (face, ix, iy, o, next) => {
+      const list = boulderCell(body, face, ix, iy);
+      let n = 0;
+      for (let i = 0; i < list.length && n < boulders.perTile; i++) {
+        const b = list[i], K = kinds[Math.min(b.kind, kinds.length - 1)], c = K.color;
+        next(n);
+        g.x = b.dx; g.y = b.dy; g.z = b.dz; g.h = b.h;
+        o.up(b.ux, b.uy, b.uz);
+        body.surfaceColorAt(g, _rgb);
+        const t = 0.72 + 0.45 * b.c1, w = K.own + 0.3 * b.c2;      // some stones take the ground's colour, some keep their own
+        o.set(g, b.size, b.yaw, b.tilt, b.squash, (w * c[0] + (1 - w) * _rgb[0]) * t, (w * c[1] + (1 - w) * _rgb[1]) * t, (w * c[2] + (1 - w) * _rgb[2]) * t, b.sink, Math.min(b.kind, kinds.length - 1));
+        n++;
+      }
+      return n;
+    };
+    if (!bouldersOnly) rockLayer('pebbles', false, 20, Math.max(4, sc.rocks * 4.5 * dens), 46);
   }
-  if (sc.grass) {
+  if (sc.grass && !bouldersOnly) {
     const tuft = (r, o, s, dryK) => {
       body.surfaceColorAt(g, _rgb);
       if (body.id === 'verda' ? !isGreen(_rgb) : Math.max(_rgb[0], _rgb[1], _rgb[2]) > 0.8) return false;      // on green ground only; not on ice
@@ -668,7 +718,7 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
     makeLayer('sward', 'GRASS', grassGeometry(9, 0.14, 0.4, 0.012, 0.024, 0.24, 5), 9, 2, sc.grass * 7.5 * dens, 23, (r, face, u, v, o) => ground(u, v, face, g) && tuft(r, o, 0.6 + 0.8 * r(), 0.1), { sway: 0.05, side: THREE.DoubleSide });
     makeLayer('grass', 'GRASS', grassGeometry(5, 0.24, 0.55, 0.022, 0.04, 0.3, 8), 32, 2, sc.grass * 9 * dens, 80, (r, face, u, v, o) => ground(u, v, face, g) && tuft(r, o, 0.6 + 0.7 * r(), 0.14), { sway: 0.07, side: THREE.DoubleSide });
   }
-  if (sc.trees) {
+  if (sc.trees && !bouldersOnly) {
     const noise = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
     const tree = (kind) => (r, face, u, v, o) => {
       if (!ground(u, v, face, g)) return false;
@@ -735,7 +785,8 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
     const f = L.data[slot], cols = L.cols[slot];
     const u0 = -1 + (2 * ix) / L.cells, du = 2 / L.cells, v0 = -1 + (2 * iy) / L.cells;
     let n = 0;
-    for (let k = 0; k < L.perTile; k++) {
+    if (L.fill) n = L.fill(face, ix, iy, rec, (k) => { rec.f = f; rec.i = k * REC; rec.c = cols; rec.ci = k * 3; rec.k = L.kind && L.kind[slot]; });
+    else for (let k = 0; k < L.perTile; k++) {
       rec.f = f; rec.i = n * REC; rec.c = cols; rec.ci = n * 3; rec.k = L.kind && L.kind[slot];
       if (L.place(r, face, u0 + r() * du, v0 + r() * du, rec)) n++;
     }
@@ -852,3 +903,12 @@ export function createScatter(body, style, { quality = 'high' } = {}) {
   };
   return api;
 }
+
+/** Bounding box of each kind's boulder model, [min x, max x, top y, min z, max z] in model units: the unit test that holds core/boulders.js ROCK_BOX to the models reads it. */
+export function rockModelBoxes() {
+  const out = {};
+  for (const k in ROCK_KINDS) { const g = ROCK_KINDS[k].big(); g.computeBoundingBox(); const b = g.boundingBox; out[k] = [b.min.x, b.max.x, b.max.y, b.min.z, b.max.z]; g.dispose(); }
+  return out;
+}
+/** The placement numbers of each kind (for the same test). */
+export function rockKindNumbers() { const out = {}; for (const k in ROCK_KINDS) { const K = ROCK_KINDS[k]; out[k] = { size: K.size, squash: K.squash, tilt: K.tilt, sink: K.sink, lie: K.lie, wind: K.wind }; } return out; }

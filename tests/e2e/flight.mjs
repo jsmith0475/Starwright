@@ -343,7 +343,7 @@ async function mainFlight() {
     v.ctrl.sas = true; v.ctrl.sasMode = 'srfRetrograde'; v._stamp++;
     while (v.nodes.length) v.removeNode(v.nodes[0]);
   });
-  await ff(page, 400, 'v && v.heatFlux > 60000');
+  await ff(page, 400, 'v && v.heatFlux > 45000');      // (the peak on this path is 58 kW/m² for a 1 m nose)
   await ff(page, 3);
   t = await tel(page);
   ok(t.v.heat > 30000, `re-entry heating builds up (${(t.v.heat / 1000).toFixed(0)} kW/m²)`);

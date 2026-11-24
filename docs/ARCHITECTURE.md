@@ -233,9 +233,10 @@ Physics model (per sub-step, active and nearby vessels ≤ 2.5 km; others ride o
   their plane normal `q·area·(v̂·n)·1.6`. Forces act at part positions → restoring/overturning torque emerges.
   Parachutes (docs/PARACHUTES.md, `js/core/parachute.js`): each open canopy is a second body on a line from its pack,
   with drag on its own velocity and the inertia of the air it carries; the line tension is solved with the rigid body.
-  'armed' → 'semi' (reefed) when the air can fill it, Mach < maxMach and the predicted opening load is inside the line
-  strength (else `part.chuteWait` says why it waits); → 'full' below fullAlt above the ground; 'cut' when the line load
-  stays over `strength`. The drawn canopy (`js/render/canopy.js`) is built from the same `chuteShape` the physics flies.
+  'armed' → 'drogue' (a main pack's built-in `chute.drogue`, Mach < 3) → 'semi' (the main, reefed) when the air can fill
+  it, Mach < maxMach and the predicted opening load is inside the line strength (else `part.chuteWait` says why it
+  waits; a slow craft skips the drogue); → 'full' below fullAlt above the ground; 'cut' when the line load stays over
+  `strength`, and on touchdown, when the picture topples and deflates the canopy (`chuteDown`, `js/render/partmesh.js`). The drawn canopy (`js/render/canopy.js`) is built from the same `chuteShape` the physics flies.
 - Attitude: rigid body with diagonal inertia. Torque sources: reaction wheels (`torque`, uses elec 0.02 EC/s per kN·m at full),
   engine gimbal, control fins (∝ dynamic pressure), RCS (mono). SAS is a PD controller that feeds the same actuators.
 - Heating (docs/HEATING.md): Sutton-Graves flux `k·sqrt(ρ)·v³` for a 1 m nose, `k` from the world's gas; each part meets
@@ -502,7 +503,7 @@ point (x, z) metres from the pad is `home.dirFromLatLon(-z / R, x / R)`.
 | `globe.js` | `createBodyVisual`: a whole body on a unit sphere (maps, clouds, ocean glint, rings, atmosphere shell, star glare) |
 | `atmosphere.js` | the scattering model, as GLSL (`ATMO_GLSL`) and as the same maths in JS (`skyAt`, `sunTransmit`, `skyColor`) |
 | `sky.js` | `createStarfield`: point stars + galactic band and nebulae (baked once into a cube map) |
-| `scatter.js` | instanced rocks, grass tufts and trees near the camera |
+| `scatter.js` | instanced rocks, grass tufts and trees near the camera. Boulder placement comes from `js/core/boulders.js`, which the physics also collides with ([BOULDERS.md](BOULDERS.md)) |
 | `bodytex.js`, `bodybake.js` | baked colour / relief / glow / cloud / ring maps per body, cached, made by workers |
 | `workpool.js`, `terrainworker.js` | pool of module workers (falls back to time-sliced work on the main thread) |
 | `worldstyle.js` | per-body look: rock colour, strata, lava glow, clouds, water colours, snow line, clutter |

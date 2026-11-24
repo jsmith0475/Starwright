@@ -46,7 +46,7 @@ test('legacy parts keep their ids and numbers', () => {
   assert.deepEqual(PARTS.eng_goshawk.engine, { type: 'liquid', thrust: 220, ispVac: 305, ispAtm: 265, gimbal: 3.5 });
   assert.deepEqual(PARTS.tank_m200.res, { fuel: 1000 });
   assert.deepEqual(PARTS.legs.legs, { reach: 1.1, spread: 0.9, stroke: 0.32 });      // stroke: the suspension's travel (landing-leg suspension)
-  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxMach: 1.5, strength: 500 });
+  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxMach: 0.4, strength: 150, drogue: { area: 10, maxMach: 3, strength: 150, minPressure: 0.0002 } });
   assert.deepEqual(PARTS.solar.solar, { rate: 1.6, span: 2.4 });
 });
 

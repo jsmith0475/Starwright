@@ -36,10 +36,13 @@ import { World } from '../core/world.js';
 import * as PM from '../render/partmesh.js';
 import * as GFX from '../render/planetgfx.js';
 import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVaporCone, createGroundGlow } from '../render/fx.js';
+import { createSeaFoam } from '../render/splash.js';
+import { swellAt } from '../render/swell.js';
 import { createPostChain } from '../render/post.js';
 import { createBarge } from '../render/barge.js';
 import { createTower } from '../render/tower.js';
 import { towerClient } from '../core/tower.js';
+import { isSpan, vesselSpan } from '../core/span.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
@@ -349,6 +352,18 @@ export function createFlightScene(app) {
   // ---- effects
   const gRef = { body: null, ok: false, dir: new THREE.Vector3(), prev: new THREE.Vector3() };
   const smoke = new SmokeTrail({ max: 3600 }); near.add(smoke.object);
+  // foam on the sea where a craft came down and round a hull that floats (render/splash.js), and the slow swell a
+  // floating craft rides once the physics has pinned it (render/swell.js: the picture moves, the physics does not)
+  const foam = createSeaFoam(); near.add(foam.object);
+  const FOAM_LIFT = 0.05;                                    // m above the sea, clear of its triangles
+  const swell = { heave: 0, tiltA: 0, tiltB: 0 }, bobA = new THREE.Vector3(), bobB = new THREE.Vector3(), bobQ2 = new THREE.Quaternion(), foamLight = new THREE.Color();
+  const fmP = new THREE.Vector3(), fmU = new THREE.Vector3(), fmAx = new THREE.Vector3(), fmD = new THREE.Vector3();
+  const foamPlace = (b, dir, out) => {
+    if (b !== anchor.body) return null;
+    b.surfaceDirToInertial(dir, anchor.ut, out).multiplyScalar(b.radius + (b.seaLevel || 0) + FOAM_LIFT).sub(anchor.pos);
+    return out.lengthSq() < 9e6 ? out : null;
+  };
+  const foamUp = (pos, out) => out.copy(pos).add(anchor.pos).normalize();
   const explosions = [];          // {fx, pos, vel, body}
   const views = new Map();        // Vessel → view
   const flagViews = new Map();    // flag object → mesh
@@ -473,6 +488,13 @@ export function createFlightScene(app) {
     }
     // docking re-expresses parts in a new craft frame (and undocking may turn the frame over): refresh them all
     for (const e of view.parts.values()) orient(e);
+    // struts and fuel lines are drawn to the part the core says they reach (core/span.js: the same rule braces a joint)
+    for (const e of view.parts.values()) {
+      if (!isSpan(e.part.def)) continue;
+      let sp = null;
+      try { sp = vesselSpan(v, e.part); } catch { sp = null; }
+      setPartState(e.mesh, { span: PM.spanState(sp, e.part.pos, e.q0) });
+    }
     view.stamp = v.structureStamp;
     view.dirty = false;
     view.kind = v.type;
@@ -483,13 +505,37 @@ export function createFlightScene(app) {
   /** A random unit-ish vector perpendicular to `n` (into v5). */
   function radial(n) { v5.set(rnd(), rnd(), rnd()); v5.addScaledVector(n, -v5.dot(n)); if (v5.lengthSq() < 1e-6) v5.set(n.y, n.z, n.x).addScaledVector(n, -(n.y * n.x + n.z * n.y + n.x * n.z)); return v5.normalize(); }
 
-  const fxP = new THREE.Vector3(), fxR = new THREE.Vector3(), fxQ = new THREE.Quaternion();
+  /** Foam round each part of a floating craft that sits in the surface: an ellipse the shape of its waterline. */
+  function foamCollars(view, v, body, bobDt) {
+    view.wetT = (view.wetT || 0) + bobDt;
+    const seaR = body.radius + (body.seaLevel || 0), gq = view.group.quaternion, gp = view.group.position, com = v.com;
+    // more foam while the hull is still working in the water, a thin wash once it only rides the swell
+    const vs = v.splashed ? (view.heaveRate || 0) : Math.abs(v.verticalSpeed || 0);
+    const strength = Math.min(1, view.wetT / 0.8) * clamp(0.42 + 0.5 * vs, 0.42, 1);
+    let n = 0;
+    for (const e of view.parts.values()) {
+      if (n >= 6) break;
+      const p = e.part, def = p.def, r = def.r || def.rw || 0.5, h = def.h || 1;
+      fmP.set(p.pos.x - com.x, p.pos.y - com.y, p.pos.z - com.z).applyQuaternion(gq).add(gp);
+      fmD.copy(fmP).add(anchor.pos);
+      const R = fmD.length(), above = R - seaR;
+      fmU.copy(fmD).multiplyScalar(1 / R);
+      fmAx.set(0, 1, 0).applyQuaternion(gq);
+      const uy = fmAx.dot(fmU), lie = Math.sqrt(Math.max(0, 1 - uy * uy));
+      if (Math.abs(above) > Math.abs(uy) * h * 0.5 + lie * r + 0.1) continue;       // wholly under, or wholly out of the water
+      fmP.addScaledVector(fmU, -above + FOAM_LIFT);
+      if (foam.collar(fmP, fmU, fmAx, lie * h * 0.5 + Math.abs(uy) * r, r, strength, (view.bobSeed || 0) + n * 0.37)) n++;
+    }
+  }
+
+  const fxP = new THREE.Vector3(), fxR = new THREE.Vector3(), fxQ = new THREE.Quaternion(), sunL = new THREE.Vector3();
   function updateView(view, dt, simDt, isActive, world) {
     const v = view.vessel, body = v.body;
     if (view.dirty || (view.kind !== v.type && (view.kind === 'debris' || v.type === 'debris'))) syncParts(view, true);
     else if (view.stamp !== v.structureStamp || view.parts.size !== v.parts.size) syncParts(view);
     else for (const [id, e] of view.parts) { if (v.parts.get(id) !== e.part) { syncParts(view); break; } }
     view.group.quaternion.copy(v.q);
+    if (view.bobQ) view.group.quaternion.premultiply(view.bobQ);          // riding the swell (see the vessel loop in update)
     const com = v.com;
     const alt = v.pos.length() - body.radius;
     const pAtm = body.pressureAtm(alt), rho = body.density(alt);
@@ -536,7 +582,7 @@ export function createFlightScene(app) {
       const level = loaded && p.ignited && !p.flameout ? (Number.isFinite(p.level) ? p.level : 0) : 0;
       const st = pstate;
       st.deployed = p.deployed; st.throttle = level; st.ignited = p.ignited && level > 0; st.flameout = p.flameout; st.temp = p.temp;
-      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.fold = undefined;
+      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.sun = st.fold = undefined;
       if (def.engine && def.engine.gimbal > 0 && act) {
         // the bell swings so the exhaust pushes the tail the way the torque command asks (pitch, roll, −yaw)
         const g = def.engine.gimbal * Math.PI / 180 * (live && level > 0.01 ? 1 : 0) * (p.pos.y < com.y ? 1 : -1);
@@ -568,13 +614,19 @@ export function createFlightScene(app) {
       }
       // a body flap stands where the core has folded it (part.fold); one with no lee side to fold to stays flat
       if (def.flap && p.fold !== undefined) st.fold = p._flap === false ? 0 : p.fold;
+      if (def.solar && !def.solar.fixed) {
+        // folding arrays turn to the sun, as the power they are paid assumes (core/vessel.js). In moving air they
+        // stand edge-on along the craft instead, which is the plate the drag model flies (vessel.js _pA).
+        if (p.deployed && v.sunDir && v.sunlit && !(v.dynamicPressure > 20)) st.sun = sunL.copy(v.sunDir).applyQuaternion(q2.copy(mesh.quaternion).premultiply(v.q).invert());
+        else st.sun = null;
+      }
       if (def.light) {
         st.light = p.deployed ? 1 : 0;
         if (p.deployed && isActive) { lampN++; lampAcc.x += p.pos.x - com.x; lampAcc.y += p.pos.y - com.y; lampAcc.z += p.pos.z - com.z; lampDir.x += Math.cos(p.rot || 0); lampDir.z -= Math.sin(p.rot || 0); }
       }
       const canopy = mesh.userData.canopy;
-      const cv = canopy && (p.deployed === 'semi' || p.deployed === 'full') ? v.chuteView(p, e.cv || (e.cv = {})) : null;
-      if (canopy) st.chute = cv;
+      const cv = canopy && (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') ? v.chuteView(p, e.cv || (e.cv = {})) : null;
+      if (canopy) { st.chute = cv; st.chuteDown = !!(v.landed || v.splashed || v._touched); }
       setPartState(mesh, st);
       if (cv) {
         view.canopyOpen = Math.max(view.canopyOpen || 0, mesh.userData.canopyTop || 12);
@@ -582,7 +634,7 @@ export function createFlightScene(app) {
         v2.set(cv.x, cv.y, cv.z).applyQuaternion(q2.copy(mesh.quaternion).invert());
         canopy.quaternion.setFromUnitVectors(Y_AXIS, v2.normalize());
         e.canopyQ = true;
-      } else if (canopy && e.canopyQ) { e.canopyQ = null; canopy.quaternion.identity(); }
+      } else if (canopy && e.canopyQ && mesh.userData.chuteDown === undefined) { e.canopyQ = null; canopy.quaternion.identity(); }
 
       // ---- engines: plume, smoke, ground wash, light
       if (e.plume) {
@@ -935,6 +987,8 @@ export function createFlightScene(app) {
       } else gRef.ok = false;
       smoke.update(simDt, shift, up);
     }
+    foam.update(simDt > 0 ? Math.min(simDt, 0.25) : 0, foamPlace, foamUp);
+    foam.beginCollars();
     let padDistNow = Infinity;
     if (body === SYSTEM.home) { body.surfaceDirToInertial(SYSTEM.launchSite.dir, ut, v2).multiplyScalar(surfaceRadius(body, SYSTEM.launchSite.dir)).sub(anchor.pos); padDistNow = v2.length(); }
     // ---- launch site (placed before the vessels: what stands on its slabs is put on them as drawn this frame)
@@ -1015,8 +1069,26 @@ export function createFlightScene(app) {
           view.group.position.addScaledVector(hv.copy(v.pos).normalize(), view.lift);
         }
       }
+      // afloat and at rest (pinned by the physics): the picture of the craft rides a slow swell. It comes in over a
+      // few seconds, so nothing jumps at the moment of pinning, and goes out the same way when the craft is woken.
+      const bobDt = simDt > 0 ? Math.min(dt, 0.1) : 0;
+      view.bobK = clamp((view.bobK || 0) + (v.splashed && body.ocean ? bobDt / 3 : -bobDt / 1.5), 0, 1);
+      if (view.bobK > 0.001) {
+        if (view.bobSeed === undefined) view.bobSeed = Math.random() * 50;
+        view.bobT = (view.bobT || 0) + bobDt;
+        const k = view.bobK * view.bobK * (3 - 2 * view.bobK);
+        swellAt(view.bobT, view.bobSeed, v.baseRadius, swell);
+        hv.copy(v.pos).normalize();
+        bobA.set(hv.y, hv.z, hv.x); bobA.addScaledVector(hv, -bobA.dot(hv)).normalize(); bobB.crossVectors(hv, bobA);
+        view.bobQ = (view.bobQ || new THREE.Quaternion()).setFromAxisAngle(bobA, swell.tiltA * k).multiply(bobQ2.setFromAxisAngle(bobB, swell.tiltB * k));
+        view.group.position.addScaledVector(hv, swell.heave * k);
+        view.heaveRate = Math.abs(swell.heave - (view.heave0 ?? swell.heave)) / Math.max(bobDt, 1e-3) * k; view.heave0 = swell.heave;
+      } else { view.bobQ = null; view.heaveRate = 0; view.heave0 = undefined; }
       updateView(view, dt, simDt, v === a, world);
+      if (body.ocean && d < 1500 && (v.splashed || v._floating)) foamCollars(view, v, body, bobDt);
+      else view.wetT = 0;
     }
+    foam.endCollars();
     for (const [v, view] of views) if (v.dead || !world.vessels.includes(v)) { freeView(view); views.delete(v); }
     if (stressOn) updateStressOverlay();
     if (!a || !views.has(a)) {
@@ -1098,6 +1170,7 @@ export function createFlightScene(app) {
     ambTint.copy(sky).multiplyScalar(0.55).addScalar(0.1 + 0.12 * lit);
     col2.copy(sunTint).multiplyScalar(1.15 * sunPow);
     smoke.setLight(sunDir, col2, ambTint);
+    foam.setLight(foamLight.copy(col2).multiplyScalar(0.3 + 0.55 * Math.max(0, sinElev)).add(ambTint));
     for (const ex of explosions) if (ex.fx.setLight) ex.fx.setLight(sunDir, col2, ambTint);
     if (vapor && vapor.setLight) vapor.setLight(col2.copy(sunTint).multiplyScalar(0.9 * sunPow).addScalar(0.25));
 
@@ -1277,22 +1350,59 @@ export function createFlightScene(app) {
       info.jolt = Math.max(info.jolt || 0, clamp(1 - at.length() / 300, 0, 1) * 0.7);
       return;
     }
-    if ((type === 'landed' || type === 'splashed') && p.vessel && p.vessel.body === body) {
+    if (type === 'splashed' && p.vessel && p.vessel.body === body) {
+      // Into the sea. The water the base pushes aside goes up as a crown round the hull and falls back; fine spray
+      // hangs a little longer; and a ring of foam runs out over the surface from where it struck (render/splash.js).
+      const v = p.vessel, R = v.pos.length(), seaR = body.radius + (body.seaLevel || 0);
+      const upv = v2.copy(v.pos).multiplyScalar(1 / R);
+      // the surface under the craft. Events come out of the physics step, which is ahead of the frame the scene last
+      // drew (and the sea turns with the world at some 170 m/s), so the place is taken from where the craft is drawn
+      const view = views.get(v);
+      const at = view ? v1.copy(view.group.position).addScaledVector(upv, seaR - R) : v1.copy(upv).multiplyScalar(seaR).sub(anchor.pos);
+      if (at.lengthSq() > 4e6) return;
+      const speed = Math.max(0.5, p.speed || 2), k = clamp(speed / 6.5, 0.35, 2.2), g = body.surfaceG || 9.8;
+      const r0 = clamp(v.baseRadius || 1, 0.3, 4), air = body.density(0) > 0.01;
+      body.inertialToSurfaceDir(fmD.copy(at).add(anchor.pos).normalize(), anchor.ut, fmD);      // (the frame as last drawn: its own time and origin)
+      foam.ring(body, fmD, r0, speed);
+      const white = col2.setRGB(0.93, 0.96, 1);
+      // the crown: a wall of water thrown up and outward from the hull's edge
+      burst(at, Math.round(90 * k * pq), () => {
+        radial(upv);
+        t3.copy(at).addScaledVector(v5, r0 * (0.85 + Math.random() * 0.35)).addScaledVector(upv, 0.1 + Math.random() * 0.4);
+        t1.copy(v5).multiplyScalar((1.6 + Math.random() * 2.6) * k).addScaledVector(upv, (3.5 + Math.random() * 4.5) * k);
+        smoke.emit(t3, { size: 0.35 + Math.random() * 0.25, growth: 0.8, life: 0.8 + Math.random() * 0.7, alpha: 0.78, vel: t1, drag: 0.35, gravity: g, color: white, fadeIn: 0.03 });
+      });
+      // drops flung further, small and quick
+      burst(at, Math.round(56 * k * pq), () => {
+        radial(upv);
+        t3.copy(at).addScaledVector(v5, r0 * (0.6 + Math.random() * 0.6)).addScaledVector(upv, 0.2);
+        t1.copy(v5).multiplyScalar((3 + Math.random() * 6) * k).addScaledVector(upv, (5 + Math.random() * 8) * k);
+        smoke.emit(t3, { size: 0.1 + Math.random() * 0.14, growth: 0, life: 1.0 + Math.random() * 0.9, alpha: 0.9, vel: t1, drag: 0.15, gravity: g, color: white, fadeIn: 0.01, shrink: true });
+      });
+      // mist that drifts off on the air (none on an airless world: there it all falls back)
+      if (air) burst(at, Math.round(14 * k * pq), () => {
+        radial(upv);
+        t3.copy(at).addScaledVector(v5, r0 * (0.5 + Math.random())).addScaledVector(upv, 0.4 + Math.random() * 1.2);
+        t1.copy(v5).multiplyScalar((0.8 + Math.random() * 1.6) * k).addScaledVector(upv, (1 + Math.random() * 2) * k);
+        smoke.emit(t3, { size: 1.2, growth: 1.9, life: 2.2 + Math.random() * 1.8, alpha: 0.2, vel: t1, drag: 1.4, gravity: 0.6, color: white, fadeIn: 0.15 });
+      });
+      if (v === anchor.vessel) info.jolt = Math.max(info.jolt || 0, clamp(speed / 12, 0.1, 0.6));
+      return;
+    }
+    if (type === 'landed' && p.vessel && p.vessel.body === body) {
       const view = views.get(p.vessel);
       const at = v1.copy(p.vessel.pos).sub(anchor.pos).addScaledVector(info.up, -(view ? view.ext : 1) + 0.2);
       if (at.lengthSq() > 4e6) return;
       const sp = clamp((p.speed || 2) / 6, 0.3, 2.5), air = body.density(0) > 0.01;
-      const water = type === 'splashed';
-      burst(at, Math.round((water ? 40 : 26) * sp * pq), () => {
+      burst(at, Math.round(26 * sp * pq), () => {
         radial(info.up);
         t3.copy(at).addScaledVector(v5, 0.5 + Math.random() * 2);
-        t1.copy(v5).multiplyScalar((water ? 5 : 3) + Math.random() * 6 * sp).addScaledVector(info.up, (water ? 6 : 1) + Math.random() * (water ? 8 : 2.5) * sp);
-        if (water) smoke.emit(t3, { size: 0.5, growth: 1.8, life: 1.1 + Math.random() * 0.9, alpha: 0.7, vel: t1, drag: 0.6, gravity: 9, color: col2.setRGB(0.92, 0.96, 1), fadeIn: 0.03 });
-        else smoke.emit(t3, { size: 0.8, growth: 2.6, life: 1.8 + Math.random() * 2.2, alpha: 0.36, vel: t1, drag: air ? 1.6 : 0.1, gravity: air ? 0 : body.surfaceG || 1.6, rise: air ? 0.3 : 0, color: dustCol, fadeIn: 0.08 });
+        t1.copy(v5).multiplyScalar(3 + Math.random() * 6 * sp).addScaledVector(info.up, 1 + Math.random() * 2.5 * sp);
+        smoke.emit(t3, { size: 0.8, growth: 2.6, life: 1.8 + Math.random() * 2.2, alpha: 0.36, vel: t1, drag: air ? 1.6 : 0.1, gravity: air ? 0 : body.surfaceG || 1.6, rise: air ? 0.3 : 0, color: dustCol, fadeIn: 0.08 });
       });
       return;
     }
-    if (type === 'chute' && p.vessel && p.part && (p.state === 'semi' || p.state === 'full') && p.vessel.body === body) {
+    if (type === 'chute' && p.vessel && p.part && (p.state === 'drogue' || p.state === 'semi' || p.state === 'full') && p.vessel.body === body) {
       const view = views.get(p.vessel); if (!view) return;
       const e = view.parts.get(p.part.id); if (!e) return;
       e.mesh.getWorldPosition(v1);
@@ -1397,7 +1507,7 @@ export function createFlightScene(app) {
     if (vapor) { vapor.object.removeFromParent(); vapor.dispose(); vapor = null; }
     far.remove(stars); stars.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
     haze.geometry.dispose(); haze.material.dispose();
-    smoke.dispose(); pool.dispose(); lampPool.dispose(); lamp.dispose();
+    smoke.dispose(); foam.dispose(); pool.dispose(); lampPool.dispose(); lamp.dispose();
     if (stressMesh) { stressMesh.removeFromParent(); stressMesh.dispose(); stressGeo.dispose(); stressMat.dispose(); stressMesh = null; }
     catcher.geometry.dispose(); catcher.material.dispose();
     if (pad) pad.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.dispose) o.material.dispose(); });

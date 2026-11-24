@@ -35,6 +35,8 @@ import { createPostChain } from '../render/post.js';
 import { isModalOpen } from './dom.js';
 import { PARTS, PART_LIST, partDef } from '../core/parts.js';
 import { Craft } from '../core/craft.js';
+import { isSpan, spanTarget } from '../core/span.js';
+const defOfCraftPart = p => partDef(p.type);
 import { techNode } from '../core/career.js';
 import { SYSTEM } from '../core/bodies.js';
 import * as A from './builder/asm.js';
@@ -321,6 +323,21 @@ export function createBuilderScreen(app) {
     for (const [id, g] of partObjs) if (!seen.has(id)) { G.freePartObject(meshApi, g); partObjs.delete(id); }
     for (const id of settle.keys()) if (!seen.has(id)) settle.delete(id);
     syncInterstages();
+    syncSpans();
+  }
+  /** Struts and fuel lines are drawn to the part they reach (core/span.js), as they will be in flight. */
+  function syncSpans() {
+    if (!meshApi || typeof meshApi.spanState !== 'function') return;
+    for (const p of craft.parts) {
+      const d = partDef(p.type);
+      if (!isSpan(d)) continue;
+      const g = partObjs.get(p.id);
+      if (!g || g.userData.fallback) continue;
+      try {
+        const sp = spanTarget(craft.parts, p, defOfCraftPart, craft.getPart(p.parent));
+        meshApi.setPartState(g, { span: meshApi.spanState(sp, p.pos, g.quaternion) });
+      } catch { /* cosmetic */ }
+    }
   }
   /** The lattice rings between stages (craft.interstages()): drawn on the part that carries each one, so they move
    *  with it. They come and go by themselves as parts are stacked under an engine or taken away. */
