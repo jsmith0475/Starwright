@@ -66,7 +66,6 @@ export function windTunnel(world, v, aoas = [50 * DEG, 70 * DEG, 88 * DEG]) {
       if (!ok) { cd.push(0); ld.push(0); continue; }
       acc.copy(c.vel).sub(v0).multiplyScalar(1 / dt).addScaledVector(up, g);
       const qd = 0.5 * rho * sp * sp, D = -acc.dot(u) * c.mass / qd, L = acc.dot(up) * c.mass / qd;
-      if (globalThis.__TUN) console.log('tunnel', m, 'alt', alt.toFixed(0), 'rho', rho.toExponential(2), 'sp', sp.toFixed(0), 'acc', acc.x.toFixed(2), acc.y.toFixed(2), acc.z.toFixed(2), 'mass', c.mass.toFixed(0), 'q', c.dynamicPressure.toFixed(0), 'mach', c.mach.toFixed(2), 'D', D.toFixed(0));
       cd.push(D); ld.push(D > 0 ? L / D : 0);
     }
     const drag = new Float64Array(121);
@@ -89,7 +88,7 @@ export function windTunnel(world, v, aoas = [50 * DEG, 70 * DEG, 88 * DEG]) {
 export function shipReturn(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), periapsis: 0.42 * body.atmo.height, aoa: 70 * DEG, aoaMin: 52 * DEG, aoaMax: 86 * DEG,
-    overAlt: 11000, lightAlt: 4000, slideGain: 0.35, carry: 4.7, noseRate: 0.12, minTwr: 1.4, maxTilt: 0.6, flipTime: 2.5, burnThrottle: 0.9, floor: 0, sets: null, period: 2, landing: {}, ...opts };
+    overAlt: 11000, lightAlt: 4000, slideGain: 0.35, carry: 4.7, noseRate: 0.12, minTwr: 1.4, maxTilt: 0.6, flipTime: 2.5, burnThrottle: 0.9, floor: 0, sets: null, period: 2, landing: {}, useWarp: false, ...opts };
   const c = { name: 'return', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, target: o.target, tunnel: null, landing: null, burnAt: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -205,6 +204,7 @@ export function shipReturn(world, vessel, opts = {}) {
       case 'turn': {
         v.ctrl.sas = true; v.ctrl.sasMode = 'retrograde'; v.ctrl.throttle = 0;
         engineSet(o.sets && o.sets.deorbit);
+        if (o.useWarp && world.warpTarget === null && world.ut < c.burnAt - 50) world.warpTo(c.burnAt - 40);
         if (world.ut >= c.burnAt) { st.v0 = v.vel.length(); st.dvLeft = st.plan.dv; c.phase = 'deorbit'; c.note('braking burn'); }
         break;
       }
@@ -222,6 +222,14 @@ export function shipReturn(world, vessel, opts = {}) {
       }
       case 'coast': {
         v.ctrl.throttle = 0; v.bellyAoa = st.aoa; v.bellyLift = null; v.bellyNose = null; belly();
+        if (o.useWarp && alt > top + 3000 && world.warpTarget === null && st.warped !== true) {
+          // skip the quiet fall to the air, once the ship has turned its belly to it
+          st.settle = (st.settle || 0) + 1;
+          if (st.settle > 600) {
+            st.warped = true;
+            try { const tIn = Orbit.fromState(v.pos, v.vel, body.gm, world.ut).timeAtRadius(body.radius + top + 2500, true, world.ut); if (Number.isFinite(tIn) && tIn > world.ut + 30) world.warpTo(tIn); } catch { /* fly it out at 1x */ }
+          }
+        }
         if (alt < top) { c.phase = 'entry'; c.note(`into the air at ${(v.surfaceVel.length()).toFixed(0)} m/s`); }
         break;
       }

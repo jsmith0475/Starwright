@@ -678,6 +678,26 @@ const DEFS = [
     },
   },
   {
+    id: 'belly-first', name: 'Belly First', world: 'verda', situation: 'In orbit, cargo delivered', difficulty: 'Hard', start: 'flight',
+    goal: 'Bring Shearwater down from orbit on its four flaps and set it between the arms of the catch tower.',
+    brief: 'Shearwater circles Verda at 100 km with its bay empty and 26 tonnes of propellant left: enough for one braking burn and one landing burn, with little to spare. It has no legs. It falls flat on its belly, the four flaps holding it there and the tiles taking the heat, then swings upright in the last kilometres and comes down on its engines between the arms.',
+    tips: ['Open the Autopilot panel and pick Return to the tower. Watch one before you try it by hand: the fall takes about fifteen minutes and the last thirty seconds are the busy ones.', 'By hand: the Belly hold in the SAS row lays the ship flat to the wind. Pitching the nose down a little carries it farther along its path, and pitching up drops it short.', 'The ship cannot hover for long. The landing burn starts near 1.5 km up and there is propellant for one try.'],
+    objectives: [
+      { id: 'air', text: 'Fall belly first below 30 km', test: w => ships(w).some(v => v.body.id === 'verda' && v.crew.length && !v.landed && altOf(v) < 30000 && v.situation !== 'prelaunch') },
+      { id: 'catch', text: 'Be caught by the tower arms', test: w => ships(w).some(v => v.crew.length > 0 && v.landed && v.surface && v.surface.held === 'tower') },
+    ],
+    build(ctx) {
+      const b = body('verda'), w = ctx.world;
+      const st = orbitState(b, { pe: 100000, phase: 1.5 }, w.ut);
+      const pro = st.vel.clone().normalize(), out = st.pos.clone().normalize();
+      const v = w.spawn(shearwaterShip({ cargo: false }), { crew: ['Juno', 'Bram'], body: b, pos: st.pos, vel: st.vel.clone(), q: attitude(pro, out) });
+      setFuel(v, 0.16);
+      readyInSpace(v);
+      v.ctrl.rcs = true;
+      return v;
+    },
+  },
+  {
     id: 'pell-descent', name: 'Above Pell', world: 'pell', situation: 'In orbit of Pell', difficulty: 'Medium', start: 'flight',
     goal: 'Take the Pellfarer down from a 30 km orbit and land on Pell.',
     brief: 'The Pellfarer circles Pell at 30 km with its transfer stage still attached and a third full. The grey plains are below.',

@@ -13,6 +13,7 @@ import { returnReserve } from './booster.js';
 import { findSite, slopeLimit, footprint } from './landingsite.js';
 export { assessSite, findSite, slopeLimit, footprint } from './landingsite.js';
 export { boosterRecovery, predictFall, returnReserve, recoverableStage } from './booster.js';
+export { shipReturn, bellyFlyer, windTunnel } from './shipreturn.js';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
