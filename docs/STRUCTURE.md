@@ -94,11 +94,16 @@ snaps at 133 %.
 
 ## Brace struts
 
-A Brace Strut whose outer tip comes within 0.25 m of another part braces that part to the one
-it is mounted on. Every joint on the path between the two then shares its load with the strut:
+A Brace Strut braces the part its far end reaches to the one it is mounted on. Where the far
+end goes is one rule, in `js/core/span.js`, read by both the structure and the drawing, so a
+strut that is drawn joined to a part is bracing it and one drawn with a bare end is not. The
+rule: the part its made length (0.9 m) comes within 0.25 m of, as before; failing that, the
+first stack part along the strut's own axis within 4 m of its mount. A strut can be tilted in
+the assembly building to reach a booster higher up or lower down. The Sip Fuel Line is drawn by
+the same rule and carries nothing. Every joint on the path between the two then shares its load with the strut:
 bending is scaled by `capM / (capM + n × STRUT_FORCE × arm)` and forces by
-`capF / (capF + n × STRUT_FORCE)`, where `arm` is the distance from the strut's tip to the
-joint and `n` the number of struts. The reported `axial`, `shear`, `bending` stay the raw
+`capF / (capF + n × STRUT_FORCE)`, where `arm` is the distance from the strut's far end (its made tip, under the
+first half of the rule) to the joint and `n` the number of struts. The reported `axial`, `shear`, `bending` stay the raw
 free-body loads; only the utilisation (and the flex) see the relief. This is load sharing by
 capacity, not a solved truss.
 

@@ -340,17 +340,33 @@ export function hexTileMaps() {
 // ---------------------------------------------------------------------------------------------
 export function treadMaps() {
   if (cache.has('tread')) return cache.get('tread');
-  const W = 256, Hh = 256, col = canvas(W, Hh), hgt = canvas(W, Hh), c = ctxOf(col), hh = ctxOf(hgt), r = rng(8);
-  c.fillStyle = '#3c3e42'; c.fillRect(0, 0, W, Hh); hh.fillStyle = grey(40); hh.fillRect(0, 0, W, Hh);
-  const n = 4, pw = W / n;
+  // One tile = one pitch of the tread round the tyre (u) by the tyre's width (v): two rows of raked lugs meeting at a
+  // centre groove, each lug with a chamfered edge and two sipes, shoulder blocks at the edges. Drawn at 512 so a lug
+  // has an edge when the camera sits beside the wheel.
+  const W = 512, Hh = 512, col = canvas(W, Hh), hgt = canvas(W, Hh), c = ctxOf(col), hh = ctxOf(hgt), r = rng(8);
+  c.fillStyle = '#2b2d30'; c.fillRect(0, 0, W, Hh); hh.fillStyle = grey(30); hh.fillRect(0, 0, W, Hh);
+  const n = 4, pw = W / n, half = Hh * 0.5;
+  const lug = (g, x, ya, yb, rake, inset, fill) => {
+    g.fillStyle = fill; g.beginPath();
+    g.moveTo(x + inset, ya + inset); g.lineTo(x + pw * 0.56 - inset, ya + inset);
+    g.lineTo(x + pw * 0.56 + rake - inset, yb - inset); g.lineTo(x + rake + inset, yb - inset); g.closePath(); g.fill();
+  };
   for (let i = -1; i <= n; i++) for (const side of [0, 1]) {
-    const x = i * pw + (side ? pw / 2 : 0), y0 = side ? Hh * 0.5 : 0;
-    hh.fillStyle = grey(225); c.fillStyle = '#55585d';
-    for (const g of [hh, c]) { g.beginPath(); g.moveTo(x + 6, y0 + 8); g.lineTo(x + pw * 0.55, y0 + 8); g.lineTo(x + pw * 0.8, y0 + Hh * 0.5 - 6); g.lineTo(x + pw * 0.3, y0 + Hh * 0.5 - 6); g.closePath(); g.fill(); }
+    const x = i * pw + (side ? pw / 2 : 0), ya = side ? half + 10 : Hh * 0.11, yb = side ? Hh * 0.89 : half - 10, rake = (side ? -1 : 1) * pw * 0.26;
+    const x0 = side ? x - rake : x;
+    lug(hh, x0, ya, yb, rake, 4, grey(150)); lug(hh, x0, ya, yb, rake, 12, grey(232));      // chamfer, then the flat top
+    lug(c, x0, ya, yb, rake, 4, '#3b3d41'); lug(c, x0, ya, yb, rake, 12, '#4d5055');
+    // sipes: two thin cuts across each lug
+    for (const u of [0.36, 0.68]) {
+      const yy = ya + (yb - ya) * u, xs = x0 + rake * u;
+      for (const [g, f] of [[hh, grey(70)], [c, '#2f3134']]) { g.fillStyle = f; g.fillRect(xs + 14, yy - 2, pw * 0.56 - 28, 4); }
+    }
+    // shoulder block at the tyre's edge, between the lugs
+    const ys = side ? Hh * 0.91 : 0, xsb = x0 + pw * 0.62 + (side ? rake : 0);
+    for (const [g, f] of [[hh, grey(190)], [c, '#44474b']]) { g.fillStyle = f; g.fillRect(xsb, ys + 5, pw * 0.3, Hh * 0.09 - 10); }
   }
-  hh.fillStyle = grey(40); hh.fillRect(0, Hh * 0.5 - 5, W, 10); c.fillStyle = '#2c2e31'; c.fillRect(0, Hh * 0.5 - 5, W, 10);
-  speckle(c, W, Hh, r, 1800, 60, 150, 0.25, 2);
-  const maps = { map: tex(col, { srgb: true }), normalMap: tex(normalFromHeight(hgt, 3.5)) };
+  speckle(c, W, Hh, r, 5200, 60, 150, 0.22, 2);
+  const maps = { map: tex(col, { srgb: true, aniso: 16 }), normalMap: tex(normalFromHeight(hgt, 3.5), { aniso: 16 }) };
   cache.set('tread', maps); return maps;
 }
 export function fabricMaps() {
