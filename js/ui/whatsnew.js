@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'drogue-parachutes', date: '2026-11-24', title: 'Drogues, and parachutes with real limits',
+    text: 'Every main parachute pack now carries a small drogue. It comes out first, as fast as Mach 3, and slows the craft until the main can open below Mach 0.4, so Hopper I comes home at 4 g where it used to take 18. Lines are as strong as real ones, and a craft far too heavy for its parachute will tear it. After touchdown or splashdown the canopy no longer vanishes: it topples over and settles beside the craft.' },
   { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
     text: 'Capsules have a new switch, Entry trim. It shifts ballast so the capsule rests at 18 degrees to the air and lifts. A new hold, Bank hold, lets the roll keys turn that lift: up for a gentler, longer entry, down for a shorter, harder one. An Entry box on the flight screen shows bank, lift, heating and the peaks ahead, and the map now draws the path through the air to where you come down.' },
   { id: 'true-parachutes', date: '2026-11-24', title: 'Parachutes at their true size, on real lines',

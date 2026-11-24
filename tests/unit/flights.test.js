@@ -71,7 +71,7 @@ test('flight 1: Hopper I - launch, coast, parachute, safe landing', () => {
   assert.equal(m.count('explosion'), 0, 'landed in one piece');
   const touchdown = m.events.find(e => e.type === 'landed' || e.type === 'splashed');
   assert.ok(touchdown.speed < 6, 'touchdown speed ' + touchdown.speed);
-  assert.deepEqual(m.events.filter(e => e.type === 'chute').map(e => e.state), ['armed', 'semi', 'full']);
+  assert.deepEqual(m.events.filter(e => e.type === 'chute').map(e => e.state), ['armed', 'drogue', 'semi', 'full']);
   const sum = w.recover(v);
   assert.deepEqual(sum.crew, ['Ada']);
   assert.equal(sum.partsCost, stock('Hopper I').cost());

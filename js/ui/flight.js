@@ -262,8 +262,8 @@ export function createFlightScreen(app) {
         break;
       case 'chute':
         if (mine) {
-          if (p.state === 'semi' || p.state === 'full') app.audio.play('chute');
-          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'semi' ? 'Parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? (p.load ? `Parachute lines failed at ${Math.round(p.load / 1000)} kN (they hold ${Math.round(p.rated / 1000)})` : 'Parachute torn away!') : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
+          if (p.state === 'drogue' || p.state === 'semi' || p.state === 'full') app.audio.play('chute');
+          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'drogue' ? 'Drogue out' : p.state === 'semi' ? 'Main parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? (p.load ? `Parachute lines failed at ${Math.round(p.load / 1000)} kN (they hold ${Math.round(p.rated / 1000)})` : 'Parachute torn away!') : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
         }
         break;
       case 'warp':
@@ -393,8 +393,10 @@ export function createFlightScreen(app) {
     }
     // armed and still packed: say what it is waiting for
     if (atmoH && falling && !chuteWaiting) {
+      const under = (v.chuteParts || []).find(p => p.deployed === 'drogue' && p.chuteWait);
+      if (under) return { id: 'chutewait', items: [[null, under.chuteWait === 'mach' ? `Under the drogue: the main opens below Mach ${under.def.chute.maxMach}` : under.chuteWait === 'thin' ? 'Under the drogue: the main opens lower down, in thicker air' : 'Under the drogue: the main opens when its lines can take the pull']] };
       const wait = (v.chuteParts || []).find(p => p.deployed === 'armed' && p.chuteWait && p.chuteWait !== 'thin');
-      if (wait) return { id: 'chutewait', items: [[null, wait.chuteWait === 'mach' ? `Parachute armed: it opens below Mach ${wait.def.chute.maxMach}` : 'Parachute armed: too fast and too heavy to open yet, its lines would not hold']] };
+      if (wait) { const lim = (wait.def.chute.drogue || wait.def.chute).maxMach; return { id: 'chutewait', items: [[null, wait.chuteWait === 'mach' ? `Parachute armed: ${wait.def.chute.drogue ? 'its drogue' : 'it'} opens below Mach ${lim}` : 'Parachute armed: too fast and too heavy to open yet, its lines would not hold']] }; }
     }
     // dry tanks with more rocket below the next separator
     if (lit.length && !alive && v.hasEngineStagesLeft() && (c.throttle > 0 || v.situation === 'flying' || v.situation === 'suborbital')) {
@@ -2020,7 +2022,7 @@ export function createFlightScreen(app) {
       if (au.setReentry) au.setReentry(clamp((info.heatGlow || 0) * 1.2, 0, 1) * quiet);
       // cabin warnings: a caution chirp when a new alert comes up, the master alarm while it is critical
       const hot = v.isHot ? (v.maxTempRatio || 0) : 0;
-      const terrain = !v.landed && v.type === 'ship' && v.verticalSpeed < -12 && v.radarAlt > 0 && v.radarAlt < Math.max(250, -v.verticalSpeed * 7) && !(v.chuteParts || []).some(p => p.deployed === 'full' || p.deployed === 'semi');
+      const terrain = !v.landed && v.type === 'ship' && v.verticalSpeed < -12 && v.radarAlt > 0 && v.radarAlt < Math.max(250, -v.verticalSpeed * 7) && !(v.chuteParts || []).some(p => p.deployed === 'full' || p.deployed === 'semi' || p.deployed === 'drogue');
       const danger = Math.max(clamp((hot - 0.55) / 0.35, 0, 1), clamp(((v.gForce || 0) - 5) / 4, 0, 1), terrain ? clamp(-v.verticalSpeed / 60, 0.3, 1) : 0, v.type === 'ship' && !v.controllable && !v.landed ? 0.4 : 0);
       state.danger += (danger - state.danger) * Math.min(1, dt * 4);
       warnAcc -= dt;

@@ -41,6 +41,7 @@ export const CHUTE = {
   OPEN_AIR: 1.1,       // the sequencer's allowance for the air the canopy sets moving, on top of its drag
   FAIL_TIME: 0.25,     // s at twice its strength before the canopy tears away
   CONTACT_W: 4,        // rad/s: stiffness of two canopies pressing on each other, as a natural frequency
+  DROGUE_MIN: 2,       // s: a pack's drogue flies at least this long before it pulls the main out
   MIN_MASS: 1,         // kg: floor of the canopy's inertia (in thin air it carries almost none)
 };
 
@@ -62,7 +63,18 @@ export function chuteSpec(def, cd = 1.6) {
   s = {
     cd, cdsFull, cdsReef, count, d0, gore: d0 / 2, line: CHUTE.LINE * d0, riser: CHUTE.RISER * d0,
     rmFull: CHUTE.PROJ * d0 / 2, maxMach: ch.maxMach || 1.5, rated: (ch.strength || 25 * cdsReef) * 1000, fullAlt: ch.fullAlt,
+    minPressure: ch.minPressure, drogue: null,
   };
+  // A pack with a drogue of its own (`chute.drogue`): one small canopy, a single stage (its "reefed" drag area is all
+  // of it), flown and drawn by the same rules while the part is in the 'drogue' stage.
+  if (ch.drogue) {
+    const dr = ch.drogue, c = dr.area * cd, dd = Math.sqrt(4 * c / (Math.PI * CHUTE.CD0));
+    s.drogue = {
+      cd, cdsFull: c, cdsReef: c, count: 1, d0: dd, gore: dd / 2, line: CHUTE.LINE * dd, riser: CHUTE.RISER * dd,
+      rmFull: CHUTE.PROJ * dd / 2, maxMach: dr.maxMach || 2.5, rated: (dr.strength || 25 * c) * 1000, fullAlt: ch.fullAlt,
+      minPressure: dr.minPressure, drogue: null,
+    };
+  }
   specs.set(def, s);
   return s;
 }
@@ -77,6 +89,11 @@ export function chuteDragArea(spec, stage, fill, from = spec.cdsReef) {
   if (stage === 'full') return from + (spec.cdsFull - from) * Math.pow(f, CHUTE.DISREEF_EXP);
   return 0;
 }
+
+/** The canopy a parachute part is flying in a stage: its drogue in 'drogue', its main otherwise. */
+export function chuteStageSpec(spec, stage) { return stage === 'drogue' && spec.drogue ? spec.drogue : spec; }
+/** The filling law of a stage: a drogue fills as a reefed stage does. */
+export const chuteLaw = stage => (stage === 'drogue' ? 'semi' : stage);
 
 /** Distance (m) the canopy travels through the air to complete a stage. */
 export function chuteFillDistance(spec, stage) { return (stage === 'semi' ? CHUTE.STRETCH : CHUTE.DISREEF) * spec.d0; }
@@ -194,7 +211,7 @@ export function chuteDisreefLoad(spec, q, rho, mass, from = spec.cdsReef, g = 0)
  * → 'ok' | 'thin' (not enough air to fill it) | 'mach' (too fast) | 'load' (opening now would overload its lines)
  */
 export function chuteGate(spec, pAtm, minPressure, mach, qdyn, rho, mass, g = 0) {
-  if (!(pAtm >= minPressure)) return 'thin';
+  if (!(pAtm >= (spec.minPressure ?? minPressure))) return 'thin';
   if (mach >= spec.maxMach) return 'mach';
   if (chuteOpeningLoad(spec, qdyn, rho, mass, g) > CHUTE.OPEN_MARGIN * spec.rated) return 'load';
   return 'ok';
