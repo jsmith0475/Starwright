@@ -52,6 +52,8 @@
 //                                            `truss`); pass null / [] to take them off. One draw call each.
 //   PLANE_DORSAL_ANGLE, DECAL names via parts/textures.js
 import * as THREE from '../lib/three.module.min.js';
+import { chuteSpec, chuteShape, chuteDragArea } from '../core/parachute.js';
+import { canopyLayout, canopyIndex, canopyColors, writeCanopy, canopyPlacement } from './canopy.js';
 import { PALETTE, mat, hasPartEnvironment, setPartEnvironment as setEnv, buildEnvironment, partEnvIntensity } from './parts/materials.js';
 import { PB, P, M, Mdir, sub, mergeGeometries, TAU } from './parts/geo.js';
 import * as stackShapes from './parts/shapes_stack.js';
@@ -89,55 +91,60 @@ const shapes = {
 };
 
 // --- parachute canopy -----------------------------------------------------------------------
-const canopyGeos = {};
-function canopyGeometry(kind) {
-  if (canopyGeos[kind]) return canopyGeos[kind];
-  const gores = 12, rings = 8, pos = [], col = [], uv = [], c = new THREE.Color();
-  const A = kind === 'drogue' ? [P.redPaint, P.hull] : [P.teal, P.hull], crown = kind === 'drogue' ? P.hull : P.amber;
-  const pt = (i, j, sub8) => {
-    const th = (i / (gores * sub8)) * TAU, ph = (j / rings) * (Math.PI / 2) * 0.93 + 0.11;       // ph from the vent rim down to the skirt
-    const bulge = 1 + 0.07 * Math.abs(Math.sin(th * gores / 2)) * Math.sin(ph), dip = 0.09 * (1 - Math.abs(Math.sin(th * gores / 2))) * Math.pow(j / rings, 3);
-    return [Math.cos(th) * Math.sin(ph) * bulge, Math.cos(ph) - Math.cos(Math.PI / 2 * 0.93 + 0.11) - dip, Math.sin(th) * Math.sin(ph) * bulge];
-  };
-  const S = 4;
-  for (let i = 0; i < gores * S; i++) for (let j = 0; j < rings; j++) {
-    const gore = Math.floor(i / S);
-    c.set(j === 0 ? crown : j === rings - 1 && kind !== 'drogue' ? (gore % 2 ? P.teal : P.hull) : A[gore % 2]);
-    const a = pt(i, j, S), b = pt(i + 1, j, S), d = pt(i, j + 1, S), e = pt(i + 1, j + 1, S);
-    for (const q of [a, d, b, b, d, e]) { pos.push(q[0], q[1], q[2]); col.push(c.r, c.g, c.b); uv.push(q[0] * 3, q[2] * 3); }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.computeVertexNormals();
-  const lp = [];
-  for (let i = 0; i < gores; i++) { const q = pt(i * S, rings, S); lp.push(q[0], 1 + q[1], q[2], 0, 0, 0); }
-  const lines = new THREE.BufferGeometry(); lines.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
-  return (canopyGeos[kind] = { dome: g, lines });
+// The cloth and the lines come from ./canopy.js, written each frame from the shape the flight physics flies
+// (core/parachute.js chuteShape): the drawn canopy is as wide and stands as far above the craft as the one that makes
+// the drag, and every line ends on the skirt vertex of its seam. Each part instance owns its buffers.
+const canopyShared = {};
+function canopyStatics(kind, q) {
+  const key = kind + q;
+  if (canopyShared[key]) return canopyShared[key];
+  const lay = canopyLayout(kind, q), c = new THREE.Color(), rgb = h => { c.set(h); return [c.r, c.g, c.b]; };
+  const drogue = kind === 'drogue';
+  const col = canopyColors(lay, rgb(drogue ? P.redPaint : P.teal), rgb(P.hull), rgb(drogue ? P.hull : P.amber), !drogue);
+  return (canopyShared[key] = { lay, color: new THREE.Float32BufferAttribute(col, 3), index: new THREE.BufferAttribute(canopyIndex(lay), 1) });
 }
 function addCanopy(def, g, y) {
-  const kind = def.variant === 'drogue' ? 'drogue' : 'main', geo = canopyGeometry(kind), triple = def.shape === 'chute' && def.r > 0.5;
   const canopy = new THREE.Group(); canopy.name = 'canopy'; canopy.position.set(0, y, 0); canopy.visible = false;
-  const dome = new THREE.Group(); dome.name = 'canopyDome'; const lines = new THREE.Group(); lines.name = 'canopyLines';
-  const n = triple ? 3 : 1;
-  for (let i = 0; i < n; i++) {
-    const a = i * TAU / 3, off = triple ? 0.62 : 0, tilt = triple ? 0.32 : 0;
-    const d = new THREE.Mesh(geo.dome, mat('canopy')); d.frustumCulled = false; d.castShadow = true; d.name = 'canopyCloth';
-    const l = new THREE.LineSegments(geo.lines, mat('lines')); l.frustumCulled = false; l.name = 'canopyLine';
-    if (triple) {
-      d.scale.setScalar(0.62); d.position.set(Math.cos(a) * off, -0.05, Math.sin(a) * off); d.rotation.set(Math.sin(a) * tilt, 0, -Math.cos(a) * tilt);
-      // lines of each sub-canopy converge on the pack: shear the unit line set toward the offset dome
-      l.scale.set(0.62, 1, 0.62); const m = new THREE.Matrix4().makeShear(0, 0, Math.cos(a) * off, Math.sin(a) * off, 0, 0); l.matrix.copy(m).multiply(new THREE.Matrix4().makeScale(0.62, 1, 0.62)); l.matrixAutoUpdate = false;
-    }
-    dome.add(d); lines.add(l);
-  }
-  canopy.add(dome, lines); g.add(canopy);
+  g.add(canopy);
 }
-function chuteDims(def, st) {
-  const ch = def.chute || {}, full = 7 * Math.sqrt((ch.area || 420) / 420), semi = 1.5 * Math.sqrt((ch.semiArea || 12) / 12);
-  // line length (pack → skirt): about 0.8 canopy diameters, as on a real round parachute; streaming it trails 4 m
-  if (st === 'semi') return { w: semi, hgt: 4, dome: semi * 1.5 };
-  if (st === 'full') return { w: full, hgt: 0.6 + full * 0.8, dome: full * 0.36 };
-  return { w: 0.3, hgt: 0.6, dome: 0.3 };
+function rigCanopy(def, u, q) {
+  const n = def.chute.count || 1, kind = def.variant === 'drogue' ? 'drogue' : n > 1 ? 'cluster' : 'main';
+  const { lay, color, index } = canopyStatics(kind, q), units = [];
+  const dyn = (len, size) => { const a = new THREE.BufferAttribute(new Float32Array(len * size), size); a.setUsage(THREE.DynamicDrawUsage); return a; };
+  const riserGeo = new THREE.BufferGeometry(); riserGeo.setAttribute('position', dyn(2, 3));
+  const riser = new THREE.LineSegments(riserGeo, mat('lines')); riser.frustumCulled = false; riser.name = 'canopyRiser';
+  u.canopy.add(riser);
+  for (let k = 0; k < n; k++) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', dyn(lay.verts, 3)); geo.setAttribute('normal', dyn(lay.verts, 3)); geo.setAttribute('uv', dyn(lay.verts, 2));
+    geo.setAttribute('color', color); geo.setIndex(index);
+    const cloth = new THREE.Mesh(geo, mat('canopy')); cloth.frustumCulled = false; cloth.castShadow = true; cloth.name = 'canopyCloth';
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', dyn(lay.lines * 2, 3));
+    const lines = new THREE.LineSegments(lg, mat('lines')); lines.frustumCulled = false; lines.name = 'canopyLine';
+    const unit = new THREE.Group(); unit.name = 'canopyUnit'; unit.add(cloth, lines);
+    u.canopy.add(unit);
+    units.push({ unit, geo, lg });
+  }
+  u.rig = { lay, units, riserGeo, own: [riserGeo, ...units.flatMap(x => [x.geo, x.lg])] };
+}
+const _lean = new THREE.Vector3();
+function drawCanopy(u, shape, breath) {
+  const rig = u.rig, place = canopyPlacement(shape);
+  const rp = rig.riserGeo.attributes.position.array; rp[0] = rp[1] = rp[2] = 0; rp[3] = 0; rp[4] = shape.riser; rp[5] = 0;
+  rig.riserGeo.attributes.position.needsUpdate = true;
+  for (let k = 0; k < rig.units.length; k++) {
+    const x = rig.units[k], pl = place[k] || place[0], a = x.geo.attributes;
+    writeCanopy(shape, rig.lay, a.position.array, a.normal.array, a.uv.array, x.lg.attributes.position.array, breath, k * 0.4);
+    a.position.needsUpdate = a.normal.needsUpdate = a.uv.needsUpdate = true; x.lg.attributes.position.needsUpdate = true;
+    x.unit.position.set(0, shape.riser, 0);
+    x.unit.quaternion.setFromAxisAngle(_lean.set(pl.dz, 0, -pl.dx), pl.tilt);
+  }
+  u.canopyTop = shape.top;
+}
+/** The shape a parachute part is drawn in when nobody supplies the flying one: fully filled in its stage. */
+function restShape(def, st, out) {
+  const spec = chuteSpec(def);
+  return chuteShape(spec, chuteDragArea(spec, st, 1), out);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -207,7 +214,7 @@ export function buildPartMesh(def, { ghost = false, quality = 'high' } = {}) {
   });
   const u = g.userData;
   u.refs = refs; u.glow = glow; u.beam = beam; u.heatGlow = heatGlow;
-  if (refs.canopy) u.canopy = refs.canopy;
+  if (refs.canopy) { u.canopy = refs.canopy; if (!ghost) rigCanopy(def, u, q); }
   if (def.shape === 'pip') {
     const parts = {}; for (const k of Object.keys(refs)) if (k.startsWith('pip_')) parts[k.slice(4)] = refs[k];
     u.parts = parts;
@@ -378,11 +385,14 @@ function applyAnim(g, def, initial = false) {
     for (let i = 0; r['petal' + i]; i++) r['petal' + i].rotation.z = ang;
   }
   if (u.canopy) {
-    const c = u.canopy, d = u.chuteDim || chuteDims(def, 'stowed');
-    c.visible = !!u.chuteVisible && !u.ghost;
-    const wob = initial ? 1 : 1 + Math.sin(performance.now() * 0.006 + g.id) * 0.025;
-    r.canopyDome.position.y = d.hgt; r.canopyDome.scale.set((d.w / 2) * wob, d.dome, (d.w / 2) / wob);
-    r.canopyLines.scale.set((d.w / 2) * wob, d.hgt, (d.w / 2) / wob);
+    const open = !!u.chuteVisible && !!u.rig;
+    u.canopy.visible = open;
+    if (open) {
+      // the cloth is never quite still: a fully open canopy breathes a little, a reefed one flutters
+      const full = u.chuteState === 'full' && !(u.chuteFill < 1), t = performance.now() * 0.001;
+      const breath = initial ? 1 : 1 + (full ? 0.012 * Math.sin(t * 2.2 + g.id) : 0.04 * Math.sin(t * 11 + g.id) * Math.sin(t * 2.7));
+      drawCanopy(u, u.chuteShape, breath);
+    }
   }
   if (r.gimbal && u.gimbal) { r.gimbal.rotation.x = u.gimbal.x; r.gimbal.rotation.z = u.gimbal.z; }
   if (r.ctrl && u.control !== undefined) r.ctrl.rotation.x = u.control * 0.44;
@@ -419,6 +429,7 @@ function applyTint(g) {
  * @param {THREE.Group} group  from buildPartMesh (or a THREE.LOD from createPartLOD)
  * @param {object} state
  *   deployed: legs/solar/gear/brakes/ladders/dish → truthy/falsy (or 0..1); chutes → 'stowed'|'armed'|'semi'|'full'|'cut'
+ *   chute: for an open parachute, Vessel.chuteView(part): the canopy as the physics has it ({ shape, fill, ... })
  *   throttle: 0..1, ignited: bool, flameout: bool → engine inner glow
  *   temp: skin temperature in K; above 800 K the part ramps to a red-hot emissive tint
  *   gimbal: {x, z} radians | number; control: -1..1; steer: radians; spin: radians; compress: 0..1; light: bool | 0..1
@@ -440,13 +451,11 @@ export function setPartState(group, state = {}) {
   } else if (u.canopy) {
     if (state.deployed !== undefined) u.chuteState = state.deployed === true ? 'full' : state.deployed || 'stowed';
     const st = u.chuteState || 'stowed', open = st === 'semi' || st === 'full';
-    const tgt = chuteDims(def, st);
-    if (!open) { u.chuteVisible = false; u.chuteDim = tgt; }
-    else {
-      const cur = !u.chuteVisible || snap ? (snap ? tgt : chuteDims(def, 'stowed')) : u.chuteDim, k = snap ? 1 : Math.min(1, dt * 3.2);
-      u.chuteDim = { w: cur.w + (tgt.w - cur.w) * k, hgt: cur.hgt + (tgt.hgt - cur.hgt) * k, dome: cur.dome + (tgt.dome - cur.dome) * k };
-      u.chuteVisible = true;
-    }
+    // state.chute: the flying canopy (Vessel.chuteView). Without one the part is drawn fully filled in its stage.
+    if (state.chute !== undefined) u.chuteLive = state.chute || null;
+    const live = open ? u.chuteLive : null;
+    u.chuteVisible = open;
+    if (open) { u.chuteShape = live && live.shape ? live.shape : restShape(def, st, u.chuteRest || (u.chuteRest = {})); u.chuteFill = live ? live.fill : 1; }
     dirty = true;
   }
   if (state.gimbal !== undefined) { const gm = state.gimbal; u.gimbal = typeof gm === 'number' ? { x: 0, z: gm } : { x: gm.x || 0, z: gm.z || 0 }; dirty = true; }
@@ -505,6 +514,8 @@ export function disposePartMesh(group) {
     if (o.userData.tintMat) { o.userData.tintMat.dispose(); o.userData.tintMat = null; }
     if (o.userData.own) o.material.dispose();
   });
+  const rig = group.userData && group.userData.rig;
+  if (rig) { for (const geo of rig.own) geo.dispose(); group.userData.rig = null; }
 }
 
 // ---------------------------------------------------------------------------------------------

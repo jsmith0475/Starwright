@@ -284,7 +284,7 @@ function figReentry() {
     <g transform="translate(346 102) rotate(118)"><path d="M-9 4 Q0 -14 9 4z" fill="#f3e7c9"/><rect x="-10" y="4" width="20" height="4" rx="1.5" fill="#5b3b22"/><path d="M-12 10 Q0 22 12 10" fill="none" stroke="${AMBER}" stroke-width="3" opacity=".9"/></g>
     ${label(366, 96, 'periapsis 25–35 km: just right, shield first', 'teal')}
     <g transform="translate(450 214)"><path d="M-16 -14 Q0 -36 16 -14z" fill="#ff8a3d"/><path d="M-16 -14 L0 6 L16 -14" stroke="${INK}" stroke-width="1" fill="none"/><path d="M-5 12 L-3 5 L3 5 L5 12z" fill="#f3e7c9"/></g>
-    ${label(476, 206, 'chute opens once you are below 420 m/s')}
+    ${label(476, 206, 'chute opens once you are below Mach 1.5')}
     ${label(476, 224, 'and blooms fully under 900 m', 'dim')}
     ${label(cx + r + atmo - 4, 284, 'air: 72 km', 'dim', 'end')}`,
   'Coming home is free: the air does the braking. Your only job is to choose how deep the first pass dips.');
@@ -447,7 +447,7 @@ const LESSONS = [
         `Before you reach the air, stage away everything except the capsule and its shield. Empty tanks do not help.`,
         `Set SAS to **retrograde**: shield forward, parachute behind. Keep it there.`,
         `The glow starts around 55 km and peaks near 35 km. The shield's ablator burns away slowly; that is what it is for.`,
-        `Arm the parachute with ${KEY('Space')} any time. It will wait until you are below 420 m/s before it opens, and it opens fully under 900 m.`,
+        `Arm the parachute with ${KEY('Space')} any time. It waits until you are below Mach 1.5 and the jolt of opening is one its lines can take. Then it comes out reefed, a narrow sock that fills over six seconds, and opens fully 900 m above the ground.`,
         `Touchdown should be 5–7 m/s. The sea is kinder than the land. Then ${KEY('Esc')} and **Recover**.`),
       TIP('A bare Acorn capsule survives a gentle return from low orbit. Coming back from Pell you arrive about 900 m/s faster, and that is no longer gentle: take the Ablative Shield from **Coming Home**.', { warn: true, seed: 'Bram' }),
       H('Why recover near the pad?'),
