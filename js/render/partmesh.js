@@ -52,7 +52,7 @@
 //                                            `truss`); pass null / [] to take them off. One draw call each.
 //   PLANE_DORSAL_ANGLE, DECAL names via parts/textures.js
 import * as THREE from '../lib/three.module.min.js';
-import { chuteSpec, chuteShape, chuteDragArea } from '../core/parachute.js';
+import { chuteSpec, chuteShape, chuteDragArea, chuteStageSpec, chuteLaw } from '../core/parachute.js';
 import { canopyLayout, canopyIndex, canopyColors, writeCanopy, canopyPlacement } from './canopy.js';
 import { PALETTE, mat, hasPartEnvironment, setPartEnvironment as setEnv, buildEnvironment, partEnvIntensity } from './parts/materials.js';
 import { PB, P, M, Mdir, sub, mergeGeometries, TAU } from './parts/geo.js';
@@ -127,7 +127,8 @@ function rigCanopy(def, u, q) {
   }
   u.rig = { lay, units, riserGeo, own: [riserGeo, ...units.flatMap(x => [x.geo, x.lg])] };
 }
-const _lean = new THREE.Vector3();
+const _lean = new THREE.Vector3(), _fallQ = new THREE.Quaternion(), _fallAxis = new THREE.Vector3();
+const CANOPY_FALL = 3.2, CANOPY_LIE = 1.62;      // s to topple; rad from upright when it lies (a little past level: the craft sits above the ground)
 function drawCanopy(u, shape, breath) {
   const rig = u.rig, place = canopyPlacement(shape);
   const rp = rig.riserGeo.attributes.position.array; rp[0] = rp[1] = rp[2] = 0; rp[3] = 0; rp[4] = shape.riser; rp[5] = 0;
@@ -136,6 +137,7 @@ function drawCanopy(u, shape, breath) {
     const x = rig.units[k], pl = place[k] || place[0], a = x.geo.attributes;
     writeCanopy(shape, rig.lay, a.position.array, a.normal.array, a.uv.array, x.lg.attributes.position.array, breath, k * 0.4);
     a.position.needsUpdate = a.normal.needsUpdate = a.uv.needsUpdate = true; x.lg.attributes.position.needsUpdate = true;
+    x.unit.visible = k < (shape.count || 1);
     x.unit.position.set(0, shape.riser, 0);
     x.unit.quaternion.setFromAxisAngle(_lean.set(pl.dz, 0, -pl.dx), pl.tilt);
   }
@@ -143,8 +145,8 @@ function drawCanopy(u, shape, breath) {
 }
 /** The shape a parachute part is drawn in when nobody supplies the flying one: fully filled in its stage. */
 function restShape(def, st, out) {
-  const spec = chuteSpec(def);
-  return chuteShape(spec, chuteDragArea(spec, st, 1), out);
+  const spec = chuteStageSpec(chuteSpec(def), st);
+  return chuteShape(spec, chuteDragArea(spec, chuteLaw(st), 1), out);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -390,8 +392,20 @@ function applyAnim(g, def, initial = false) {
     if (open) {
       // the cloth is never quite still: a fully open canopy breathes a little, a reefed one flutters
       const full = u.chuteState === 'full' && !(u.chuteFill < 1), t = performance.now() * 0.001;
-      const breath = initial ? 1 : 1 + (full ? 0.012 * Math.sin(t * 2.2 + g.id) : 0.04 * Math.sin(t * 11 + g.id) * Math.sin(t * 2.7));
-      drawCanopy(u, u.chuteShape, breath);
+      let breath = initial ? 1 : 1 + (full ? 0.012 * Math.sin(t * 2.2 + g.id) : 0.04 * Math.sin(t * 11 + g.id) * Math.sin(t * 2.7));
+      if (u.chuteDown !== undefined) {
+        // Down, and the lines have gone slack: the canopy does not vanish. It topples to one side over about three
+        // seconds, loses its air as it goes, and lies flat beside the craft, the cloth stirring a little.
+        const k = clamp((t - u.chuteDown) / CANOPY_FALL, 0, 1), fall = k * k * (3 - 2 * k), flat = clamp((t - u.chuteDown) / (CANOPY_FALL * 1.6), 0, 1);
+        breath = (1 - 0.3 * flat) * (1 + 0.015 * Math.sin(t * 1.3 + g.id));
+        _fallQ.setFromAxisAngle(_fallAxis.set(g.id % 2 ? 1 : -1, 0, 0), fall * CANOPY_LIE);
+        u.canopy.quaternion.copy(u.chuteDownQ).multiply(_fallQ);
+        drawCanopy(u, u.chuteShape, breath);
+        for (const x of u.rig.units) x.unit.scale.set(1, 1, 1 - 0.78 * flat);      // it falls about its own x, so its z is up: the cloth sinks flat
+      } else {
+        drawCanopy(u, u.chuteShape, breath);
+        if (u.chuteWasDown) { u.chuteWasDown = false; for (const x of u.rig.units) x.unit.scale.set(1, 1, 1); }
+      }
     }
   }
   if (r.gimbal && u.gimbal) { r.gimbal.rotation.x = u.gimbal.x; r.gimbal.rotation.z = u.gimbal.z; }
@@ -428,7 +442,7 @@ function applyTint(g) {
  * air brakes and parachutes ease toward their target using wall-clock time between calls; the first call snaps).
  * @param {THREE.Group} group  from buildPartMesh (or a THREE.LOD from createPartLOD)
  * @param {object} state
- *   deployed: legs/solar/gear/brakes/ladders/dish → truthy/falsy (or 0..1); chutes → 'stowed'|'armed'|'semi'|'full'|'cut'
+ *   deployed: legs/solar/gear/brakes/ladders/dish → truthy/falsy (or 0..1); chutes → 'stowed'|'armed'|'drogue'|'semi'|'full'|'cut'
  *   chute: for an open parachute, Vessel.chuteView(part): the canopy as the physics has it ({ shape, fill, ... })
  *   throttle: 0..1, ignited: bool, flameout: bool → engine inner glow
  *   temp: skin temperature in K; above 800 K the part ramps to a red-hot emissive tint
@@ -450,10 +464,18 @@ export function setPartState(group, state = {}) {
     if (prev !== u.deployK) dirty = true;
   } else if (u.canopy) {
     if (state.deployed !== undefined) u.chuteState = state.deployed === true ? 'full' : state.deployed || 'stowed';
-    const st = u.chuteState || 'stowed', open = st === 'semi' || st === 'full';
+    const st = u.chuteState || 'stowed', open = st === 'drogue' || st === 'semi' || st === 'full';
     // state.chute: the flying canopy (Vessel.chuteView). Without one the part is drawn fully filled in its stage.
     if (state.chute !== undefined) u.chuteLive = state.chute || null;
     const live = open ? u.chuteLive : null;
+    // state.chuteDown: the craft is on the ground or the sea. A canopy that was flying when its lines were let go
+    // there stays on screen and collapses (applyAnim); one torn away in flight is simply gone.
+    if (open) { if (u.chuteDown !== undefined) { u.chuteDown = undefined; u.chuteWasDown = true; } }
+    else if (st === 'cut' && u.chuteVisible && u.chuteDown === undefined && state.chuteDown && u.chuteShape && u.canopy) { u.chuteDown = performance.now() * 0.001; u.chuteDownQ = (u.chuteDownQ || new THREE.Quaternion()).copy(u.canopy.quaternion); }
+    else if (st !== 'cut') u.chuteDown = undefined;
+    const lying = u.chuteDown !== undefined;
+    if (lying) { u.chuteVisible = true; dirty = true; }
+    else
     u.chuteVisible = open;
     if (open) { u.chuteShape = live && live.shape ? live.shape : restShape(def, st, u.chuteRest || (u.chuteRest = {})); u.chuteFill = live ? live.fill : 1; }
     dirty = true;

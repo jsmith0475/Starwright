@@ -12,7 +12,7 @@ import { SYSTEM } from './bodies.js';
 import { BOULDERS, bouldersNear, boulderProbe, boulderAt } from './boulders.js';
 import { maneuverBasis } from './trajectory.js';
 import { Structure, STRUCT } from './structure.js';
-import { CHUTE, chuteSpec, chuteDragArea, chuteShape, chuteAddedMass, chuteFillDistance, chuteGate, chuteReach, chuteReefProgress, chuteDisreefLoad } from './parachute.js';
+import { CHUTE, chuteSpec, chuteDragArea, chuteShape, chuteAddedMass, chuteFillDistance, chuteGate, chuteReach, chuteReefProgress, chuteDisreefLoad, chuteStageSpec, chuteLaw } from './parachute.js';
 import { dragRise, bluntness, wakeFraction, newtonWeight, shadowWeight, pitotCp, newtonTable, newtonAt, SHADOW_KEEP, SHADOW_NEAR, SHADOW_FAR, NEWTON_ROWS } from './aero.js';
 
 const SIGMA = 5.670374419e-8;   // W/(m² K⁴), Stefan-Boltzmann
@@ -2900,21 +2900,33 @@ export class Vessel {
     const g = this.body.gm / this.pos.lengthSq();
     for (const p of this._chutes) {
       const st = p.deployed;
-      if (st === 'armed') {
-        if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'semi' || o.deployed === 'full') share++;
+      if (st === 'armed' || st === 'drogue') {
+        if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'drogue' || o.deployed === 'semi' || o.deployed === 'full') share++;
         const spec = chuteSpec(p.def, TUNING.CHUTE_CD), gate = chuteGate(spec, pAtm, TUNING.CHUTE_MIN_PRESSURE, this._envMach, qdyn, rho, this.mass / share, g);
-        p.chuteWait = gate === 'ok' ? null : gate;
-        if (gate === 'ok') {
-          p.deployed = 'semi'; p.deployT = 0; p._c = null; open = true;
-          ev.push({ type: 'chute', vessel: this, part: p, state: 'semi' });
+        if (st === 'drogue') {
+          // under its drogue: the main comes out as soon as it may (and the drogue has had a moment to fill)
+          open = true; p.chuteWait = gate === 'ok' ? null : gate;
+          if (gate !== 'ok' || !p._c || p._c.t < CHUTE.DROGUE_MIN) continue;
+        } else if (gate !== 'ok') {
+          // too fast, too thin or too hard for the main: the pack's own drogue goes first if it may
+          const dg = spec.drogue ? chuteGate(spec.drogue, pAtm, TUNING.CHUTE_MIN_PRESSURE, this._envMach, qdyn, rho, this.mass / share, g) : gate;
+          p.chuteWait = spec.drogue ? (dg === 'ok' ? gate : dg) : gate;
+          if (spec.drogue && dg === 'ok') {
+            p.deployed = 'drogue'; p.deployT = 0; p._c = null; open = true;
+            ev.push({ type: 'chute', vessel: this, part: p, state: 'drogue' });
+          }
+          continue;
         }
+        p.chuteWait = null;
+        p.deployed = 'semi'; p.deployT = 0; p._c = null; open = true;
+        ev.push({ type: 'chute', vessel: this, part: p, state: 'semi' });
       } else if (st === 'semi' || st === 'full') {
         open = true;
         if (st === 'semi' && radar < p.def.chute.fullAlt && p._c) {
           // the last reefing line: cut when the reefed stage is all the way out, or sooner if the mouth has filled
           // and opening fully from here stays inside what the lines hold (a parachute opened low and slow)
           const spec = chuteSpec(p.def, TUNING.CHUTE_CD), c = p._c;
-          if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'semi' || o.deployed === 'full') share++;
+          if (!share) for (const o of this._chutes) if (o.deployed === 'armed' || o.deployed === 'drogue' || o.deployed === 'semi' || o.deployed === 'full') share++;
           if (!(p.deployT >= 1 || (c.s >= chuteFillDistance(spec, 'semi') && chuteDisreefLoad(spec, qdyn, rho, this.mass / share, c.cds, g) <= CHUTE.OPEN_MARGIN * spec.rated))) continue;
           c.from = c.cds;
           p.deployed = 'full'; p.deployT = 0; c.s = 0; c.t = 0;
@@ -2937,7 +2949,7 @@ export class Vessel {
    */
   _chuteForces(dt, rho, ux, uy, uz, Fx, Fy, Fz, Tx, Ty, Tz, SW, ev) {
     const list = _pcl; list.length = 0;
-    for (const p of this._chutes) if (p.deployed === 'semi' || p.deployed === 'full') list.push(p);
+    for (const p of this._chutes) if (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') list.push(p);
     const n = list.length;
     _pcf[0] = _pcf[1] = _pcf[2] = _pcf[3] = _pcf[4] = _pcf[5] = 0;
     if (!n) return false;
@@ -2959,7 +2971,7 @@ export class Vessel {
     const N = n * 16;
     if (_pcw.length < N) { _pcw = new Float64Array(N * 2); _pcA = new Float64Array(n * n * 4); _pcT = new Float64Array(n * 2); _pcb = new Float64Array(n * 2); }
     for (let i = 0; i < n; i++) {
-      const p = list[i], d = p.def, spec = chuteSpec(d, TUNING.CHUTE_CD), o = i * 16;
+      const p = list[i], d = p.def, spec = chuteStageSpec(chuteSpec(d, TUNING.CHUTE_CD), p.deployed), o = i * 16;
       const rx = p.pos.x - com.x, ry = p.pos.y - com.y + d.h / 2, rz = p.pos.z - com.z;
       const vax = ux + (w.y * rz - w.z * ry), vay = uy + (w.z * rx - w.x * rz), vaz = uz + (w.x * ry - w.y * rx);
       let c = p._c;
@@ -2983,9 +2995,9 @@ export class Vessel {
       const vcx = vax + wlx, vcy = vay + wly, vcz = vaz + wlz, sp = Math.sqrt(vcx * vcx + vcy * vcy + vcz * vcz);
       // filling: by the distance the canopy has come through the air
       c.s += sp * dt; c.t += dt;
-      const fill = p.deployed === 'semi' ? chuteReefProgress(spec, c.s, c.t) : Math.min(1, c.s / chuteFillDistance(spec, 'full'));
+      const fill = p.deployed !== 'full' ? chuteReefProgress(spec, c.s, c.t) : Math.min(1, c.s / chuteFillDistance(spec, 'full'));
       p.deployT = fill;
-      const cds = chuteDragArea(spec, p.deployed, fill, c.from);
+      const cds = chuteDragArea(spec, chuteLaw(p.deployed), fill, c.from);
       if (cds !== c.cds) { c.cds = cds; chuteShape(spec, cds, c.shape); c.L = c.shape.L; }
       const ma = chuteAddedMass(spec, c.shape, rho), mdot = c.ma >= 0 && ma > c.ma ? (ma - c.ma) / dt : 0;
       c.ma = ma;
@@ -3043,7 +3055,7 @@ export class Vessel {
     const alx = al0x + ctx * iIx, aly = al0y + cty * iIy, alz = al0z + ctz * iIz;
     let worst = 0, sum = 0, torn = null;
     for (let i = 0; i < n; i++) {
-      const p = list[i], c = p._c, o = i * 16, spec = chuteSpec(p.def, TUNING.CHUTE_CD);
+      const p = list[i], c = p._c, o = i * 16, spec = chuteStageSpec(chuteSpec(p.def, TUNING.CHUTE_CD), p.deployed);
       const rx = W[o + 6], ry = W[o + 7], rz = W[o + 8], kap = W[o + 9], mi = W[o + 10], t = T[i], L = c.L;
       let ex = W[o], ey = W[o + 1], ez = W[o + 2];
       const vax = ux + (w.y * rz - w.z * ry), vay = uy + (w.z * rx - w.x * rz), vaz = uz + (w.x * ry - w.y * rx);
@@ -3079,8 +3091,9 @@ export class Vessel {
       const t = p._c.T, i = list.indexOf(p), o = i * 16;
       cfx -= t * W[o]; cfy -= t * W[o + 1]; cfz -= t * W[o + 2]; ctx -= t * W[o + 3]; cty -= t * W[o + 4]; ctz -= t * W[o + 5];
       if (SW) { const k = this._list.indexOf(p) * 6; if (k >= 0) { SW[k] -= t * W[o]; SW[k + 1] -= t * W[o + 1]; SW[k + 2] -= t * W[o + 2]; SW[k + 3] -= t * W[o + 3]; SW[k + 4] -= t * W[o + 4]; SW[k + 5] -= t * W[o + 5]; } }
+      p._rated = chuteStageSpec(chuteSpec(p.def, TUNING.CHUTE_CD), p.deployed).rated;
       p.deployed = 'cut'; p.deployT = 0; p._c = null; this.chuteTension -= t;
-      ev.push({ type: 'chute', vessel: this, part: p, state: 'cut', load: t, rated: chuteSpec(p.def, TUNING.CHUTE_CD).rated });
+      ev.push({ type: 'chute', vessel: this, part: p, state: 'cut', load: t, rated: p._rated });
     }
     _pcf[0] = cfx; _pcf[1] = cfy; _pcf[2] = cfz; _pcf[3] = ctx; _pcf[4] = cty; _pcf[5] = ctz;
     return true;
@@ -3092,10 +3105,10 @@ export class Vessel {
    * or null while it is packed.
    */
   chuteView(p, out = {}) {
-    if (!p || !p.def.chute || !(p.deployed === 'semi' || p.deployed === 'full')) return null;
-    const spec = chuteSpec(p.def, TUNING.CHUTE_CD), c = p._c;
+    if (!p || !p.def.chute || !(p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full')) return null;
+    const spec = chuteStageSpec(chuteSpec(p.def, TUNING.CHUTE_CD), p.deployed), c = p._c;
     out.stage = p.deployed; out.fill = p.deployT;
-    out.cds = chuteDragArea(spec, p.deployed, p.deployT, c ? c.from : undefined);
+    out.cds = chuteDragArea(spec, chuteLaw(p.deployed), p.deployT, c ? c.from : undefined);
     out.shape = c && c.cds === out.cds ? c.shape : chuteShape(spec, out.cds, out.shape || {});
     if (c) { _pc2.set(c.ux, c.uy, c.uz).applyQuaternion(_pcq.copy(this.q).invert()); out.x = _pc2.x; out.y = _pc2.y; out.z = _pc2.z; out.load = c.load; }
     else { out.x = 0; out.y = 1; out.z = 0; out.load = 0; }
@@ -3455,7 +3468,7 @@ export class Vessel {
     if (touching && !this._touched) {
       this._touched = true;
       this._impact = speed;
-      for (const p of this._chutes) if (p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
+      for (const p of this._chutes) if (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
       ev.push({ type: g.water && wet > 0 ? 'splashed' : 'landed', vessel: this, speed: this._impact });
     }
     // --- pass 2: forces
@@ -3760,7 +3773,7 @@ export class Vessel {
     this.surface = { dir, qRel, h: R - body.radius, qTarget: null, fixed: true, vehicle: !!this._onWheels, slope: g ? g.slope : 0 };
     this.w.set(0, 0, 0);
     this.grounded = false; this._sleepT = 0; this._wake = false; this._nearGround = false;
-    for (const p of this._chutes) if (p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
+    for (const p of this._chutes) if (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
     this.gForce = body.gm / (R * R) / G0;
     this.syncLanded(ut);
   }
@@ -3855,7 +3868,7 @@ export class Vessel {
     _qb.setFromUnitVectors(yb, _c);
     this.surface.qTarget = _qb.clone().multiply(qRel).normalize();
     this.w.set(0, 0, 0);
-    for (const p of this._chutes) if (p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
+    for (const p of this._chutes) if (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') { p.deployed = 'cut'; p.deployT = 0; }
     this.gForce = body.gm / (R * R) / G0;
     this.syncLanded(ut);
     ev.push({ type: water ? 'splashed' : 'landed', vessel: this, speed });
