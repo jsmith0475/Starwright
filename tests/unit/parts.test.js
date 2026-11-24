@@ -6,7 +6,7 @@ import { PARTS, PART_LIST, CATEGORIES, SIZES, partDef, engineThrust, engineIsp }
 const num = (x, lo = 0) => typeof x === 'number' && Number.isFinite(x) && x >= lo;
 const pos = x => num(x) && x > 0;
 const CAT_IDS = new Set(CATEGORIES.map(c => c.id));
-const SHAPES = new Set(['hotring', 'flap', 'catchpin', 'cargobay', 'pylon', 'capsule', 'probe', 'tank', 'monotank', 'engine', 'srb', 'decoupler', 'radialdec', 'adapter', 'leg', 'nose',
+const SHAPES = new Set(['sideport', 'hotring', 'flap', 'catchpin', 'cargobay', 'pylon', 'capsule', 'probe', 'tank', 'monotank', 'engine', 'srb', 'decoupler', 'radialdec', 'adapter', 'leg', 'nose',
   'fin', 'heatshield', 'chute', 'chute_radial', 'battery', 'solar', 'gyro', 'rcs', 'antenna', 'sci_small', 'sci_jar', 'pip', 'dock',
   'cockpit', 'rover_body', 'fuselage', 'xenontank', 'radialtank', 'radialengine', 'multicoupler', 'girder', 'panel', 'strut',
   'fuelline', 'clamp', 'fairing', 'intake', 'airbrake', 'wing', 'elevon', 'tailfin', 'wheel', 'battery_radial', 'rtg', 'fuelcell',
@@ -140,7 +140,7 @@ test('wings, wheels and other second-pass fields', () => {
     if (d.chute) assert.ok(pos(d.chute.area) && pos(d.chute.semiArea) && d.chute.semiArea < d.chute.area && pos(d.chute.fullAlt) && pos(d.chute.maxMach) && pos(d.chute.strength), id);
     if (d.solar) assert.ok(pos(d.solar.rate) && num(d.solar.span) && (d.solar.fixed ? d.solar.span === 0 : d.solar.span > 0), id);
     if (d.decoupler) assert.ok(num(d.decoupler.force), id);
-    if (d.dock) assert.ok(d.dock.size === d.size && d.shape === 'dock', id);
+    if (d.dock) assert.ok(d.dock.side ? d.shape === 'sideport' && d.attach.radial && pos(d.pipe) : d.dock.size === d.size && d.shape === 'dock', id);
     if (d.rcs) assert.ok(pos(d.rcs.thrust) && pos(d.rcs.isp), id);
     if (d.antenna) assert.ok(pos(d.antenna.rate), id);
     if (d.generator) assert.ok(pos(d.generator.rate), id);

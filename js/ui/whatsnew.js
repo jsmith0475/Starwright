@@ -37,6 +37,8 @@ export const RECENT_DAYS = 6;
 export const RELEASES = [
   { id: 'true-parachutes', date: '2026-11-24', title: 'Parachutes at their true size, on real lines',
     text: 'A parachute is now as big as its drag says: 22 m across on 33 m lines, and every line ends on the skirt. The canopy is its own body in the air, so the capsule swings under it. It comes out as a narrow sock, fills over six seconds, then opens fully 900 m above the ground. Each parachute has a line strength: it waits while opening would break its lines.' },
+  { id: 'orbital-refuelling', date: '2026-11-23', title: 'Refuelling in orbit',
+    text: 'Shearwater now carries a Flank Port on its side. In the new scenario Topping Up it docks side by side with the depot Deepwell and takes on 93 tonnes of oxygen and methane in five minutes. Liquid in free fall floats about in its tank, so the pump only draws while thrusters push gently along the stack. Stop the push and the flow stops.' },
   { id: 'autopilot-reads-terrain', date: '2026-11-23', title: 'The landing autopilot looks at the ground',
     text: 'Land here now reads the terrain. From orbit it waits for ground the lander can stand on, the braking burn keeps clear of hills, and at the hover it flies across to the nearest level spot before it sets down. It warns you when nothing in reach is fit. In 288 test landings on the twelve airless worlds the old autopilot left 212 landers standing; this one left all 288.' },
   { id: 'catch-tower', date: '2026-11-23', title: 'A tower that catches the booster',

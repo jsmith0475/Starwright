@@ -256,11 +256,17 @@ with 33 Peregrine engines and a ship with 6. Three things about it are new.
   5 m/s down and 2 m/s sideways, and upright to within 8°. Miss any of those and the game says
   which.
 
-Launch it with the ascent assist and it reaches an 80 km orbit with about 43 % of the ship's
-propellant left. That is not enough to go to Pell and come back. The propellant depot that
-makes up the difference and the ship's return are not built yet:
-[SHEARWATER.md](SHEARWATER.md) has the numbers and the plan. In career mode it needs the
-launch pad at its top level (769 t).
+- **Refuelling in orbit.** The ship carries a **Flank Port** on its side. Meet a depot that has
+  one (the scenario **Topping Up** puts you 150 m from *Deepwell*), open the Dock panel and
+  engage the docking assist: the two dock side by side with their hulls parallel. Then open the
+  Fuel panel and press **Fill Shearwater**. Oxygen and methane cross at 300 kg a second while
+  the thrusters push gently along the stack; liquid in free fall floats in its tank, and the
+  push holds it on the outlet. Stop the push and the flow stops.
+
+Launch it with the ascent assist and it reaches an 80 km orbit with about 42 % of the ship's
+propellant left. That is not enough to go to Pell and come back, which is what the depot is
+for. The ship's return is not built yet: [SHEARWATER.md](SHEARWATER.md) has the numbers and
+the plan. In career mode it needs the launch pad at its top level (772 t).
 
 ## Targeting, rendezvous and docking
 

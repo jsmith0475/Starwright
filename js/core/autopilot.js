@@ -4,7 +4,7 @@
 //
 // Every controller is { phase, done, failed, log: [{t, msg}], update(dt) }. Call update() once per frame
 // (or per World.step) until `done`. They tolerate update intervals up to ~0.25 s of simulated time.
-import { Vector3, Quaternion } from '../lib/three.module.min.js';
+import { Vector3, Quaternion, Matrix4 } from '../lib/three.module.min.js';
 import { Orbit } from './orbit.js';
 import { predictPatches, applyManeuver, closestApproach } from './trajectory.js';
 import { SYSTEM } from './bodies.js';
@@ -972,6 +972,7 @@ export function planCorrection(world, vessel, moon, opts = {}) {
 // ---------------------------------------------------------------------------------------------
 const _qi = new Quaternion();
 /** Command RCS translation so that the inertial velocity error `err` (m/s) is removed in about `tau` seconds. */
+const _yUp = new Vector3(0, 1, 0), _e2 = new Vector3(), _f2 = new Vector3(), _m1 = new Matrix4(), _m2 = new Matrix4(), _qs = new Quaternion(), _qt = new Quaternion();
 function translate(vessel, err, tau = 0.8, deadband = 0.01) {
   const c = vessel.ctrl;
   const acc = vessel.rcsThrust / Math.max(1, vessel.mass);
@@ -1269,10 +1270,24 @@ export function dockingApproach(world, vessel, target, opts = {}) {
     const a = rel.dot(NT);
     lat.copy(rel).addScaledVector(NT, -a);
     const rho = lat.length();
-    target.pointVelocity(tp.pos.x, tp.pos.y + tp._face * tp.def.h / 2, tp.pos.z, vT);
+    target.portLocal(tp, vT); target.pointVelocity(vT.x, vT.y, vT.z, vT);
     // attitude: my port axis opposite to the target's
-    _a.copy(NT).multiplyScalar(-mp._face);
-    point(v, _a);
+    if (mp._side) {
+      // side ports: the whole attitude is fixed. My port looks back along the target's, and my stack lies along the
+      // target's, nose by nose or nose to tail, whichever is the smaller turn from where I am now
+      const yT = _b.set(0, 1, 0).applyQuaternion(target.q), yM = _c.set(0, 1, 0).applyQuaternion(v.q);
+      yT.addScaledVector(NT, -yT.dot(NT)).normalize();
+      if (yT.dot(yM) < 0) yT.negate();
+      const nL = v.portAxisLocal(mp, _d);                              // in my craft frame: the port's outward axis, ⟂ +Y
+      const zL = _e2.crossVectors(nL, _yUp), zW = _a.copy(NT).negate().cross(yT);   // (n, y, n × y) is right-handed in both
+      _m1.makeBasis(nL, _yUp, zL); _m2.makeBasis(_f2.copy(NT).negate(), yT, zW);
+      _qs.setFromRotationMatrix(_m2).multiply(_qt.setFromRotationMatrix(_m1).invert()).normalize();
+      v.ctrl.sas = true; v.ctrl.sasMode = 'hold';
+      if (!v.sasTarget) v.sasTarget = _qs.clone(); else v.sasTarget.copy(_qs);
+    } else {
+      _a.copy(NT).multiplyScalar(-mp._face);
+      point(v, _a);
+    }
     v.ctrl.throttle = 0;
     const align = NM.angleTo(_b.copy(NT).negate());
     const Rs = target.boundRadius + v.boundRadius + 3;

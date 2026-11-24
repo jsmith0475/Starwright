@@ -131,7 +131,9 @@ And around the flying:
   Starship at five-eighths size: 33 engines under the booster, 6 under the ship, two real
   liquids burnt 3.6 to 1, rings of engines you switch in flight, and hot staging. It launches
   from a **Catch Tower**, and its booster flies back and is caught by the tower's arms on two
-  pins, with no legs. These are the first two steps of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
+  pins, with no legs. In orbit the ship docks side by side with a propellant depot and is
+  filled through a propellant line that only draws while thrusters hold the liquid settled
+  in its tanks. These are the first three steps of an orbital refuelling mission. See [Shearwater](docs/SHEARWATER.md) for the numbers,
   where it differs from the real one, and what is not built yet.
 - **Three pieces at separation.** A stack separator fires at both ends: the upper stage goes
   on, the stage below falls back clean, and half a second later the ring between them is thrown clear as a piece of its own, with

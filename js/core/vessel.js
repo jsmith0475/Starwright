@@ -42,6 +42,8 @@ export const TUNING = {
   DT_COAST: 0.1,             // sub-step while coasting in vacuum under physics warp (s)
   DECOUPLE_IMPULSE: 250,     // N·s of separation impulse per unit of def.decoupler.force
   RING_BORE: 0.72,           // the hole through a separator ring, as a fraction of its radius
+  SETTLE_ACCEL: 0.002,       // m/s²: the push along the stack that holds a liquid against its tank's outlet, so that it can be pumped
+  SETTLE_PATIENCE: 20,       // s a running pump waits for that push before it gives up
   HOT_STAGE_DELAY: 0.8,      // s a hot-staging ring holds on after the stage above has lit its engines through its vents
   RING_DELAY: 0.5,           // s between a stack separator's two planes: the ring leaves the dropped stage this long after staging
   RING_KICK: 20, RING_LIFT: 1, // m/s the ring is thrown sideways, and off the end of the stage, relative to the two together
@@ -442,6 +444,7 @@ export class Vessel {
     this.thrust = 0; this.maxThrust = 0; this.isp = 0;
     this.altitude = 0; this.radarAlt = 0; this.surfaceVel = new Vector3(); this.airspeed = 0;
     this.verticalSpeed = 0; this.horizontalSpeed = 0; this.orbitalSpeed = 0;
+    this.pump = null; this.lastPump = null; this.axialAccel = 0;
     this.dynamicPressure = 0; this.mach = 0; this.gForce = 0; this.heatFlux = 0; this.maxTempRatio = 0;
     this.situation = 'prelaunch';
     this.apoapsis = 0; this.periapsis = 0; this.period = 0;   // altitudes above the surface (m), s
@@ -663,6 +666,9 @@ export class Vessel {
         _a.set(0, 0, -1).applyQuaternion(_pq); p._nx = _a.x; p._ny = _a.y; p._nz = _a.z;
         _a.set(1, 0, 0).applyQuaternion(_pq); p._sx = _a.x; p._sy = _a.y; p._sz = _a.z;
       } else { p._ax = 0; p._ay = p.flip ? -1 : 1; p._az = 0; }
+      // a side port (dock.side) is a radial part whose mating face looks straight out from the hull; free until docked
+      p._side = !!(d.dock && d.dock.side);
+      if (p._side) { p._face = p.dockedTo === null || p.dockedTo === undefined ? 1 : 0; if (p._face) this._ports.push(p); }
       if (p._stack) {
         let coverTop = 0, coverBot = 0, hasTop = false, hasBot = false;
         for (const id of p.links) {
@@ -1031,6 +1037,7 @@ export class Vessel {
     if (!a || !b || a === b || !(amount > 0)) return 0;
     if (!(resource in a.res) || !(resource in b.res)) return 0;
     if (resource === 'solid' || resource === 'ablator' || resource === 'evafuel') return 0;
+    if (resource === 'lox' || resource === 'ch4') return 0;      // the cold liquids go through a propellant line: startPump
     const moved = Math.max(0, Math.min(amount, a.res[resource], b.def.res[resource] - b.res[resource]));
     if (!(moved > 0)) return 0;
     a.res[resource] -= moved; b.res[resource] += moved;
@@ -1041,13 +1048,116 @@ export class Vessel {
     return moved;
   }
 
+  // ------------------------------------------------------------------ pumping propellant between docked ships
+  /** The docked pairs of ports that carry a propellant line: [[port, port, kg/s], ...]. */
+  get propellantLines() {
+    const out = [];
+    for (const p of this._list) {
+      if (!p.def.pipe || p.dockedTo === null || p.dockedTo === undefined || p.id > p.dockedTo) continue;
+      const o = this.parts.get(p.dockedTo);
+      if (o && o.def.pipe) out.push([p, o, Math.min(p.def.pipe, o.def.pipe)]);
+    }
+    return out;
+  }
+  /** The part ids on the same side of a propellant line as `portId` (everything joined to it without crossing a dock). */
+  lineSide(portId) {
+    const cut = new Set();
+    for (const p of this._list) if (p.dockedTo !== null && p.dockedTo !== undefined) cut.add(p.id);
+    cut.delete(portId);
+    return this._component(portId, cut);
+  }
+  /**
+   * Start pumping `resources` (default oxygen and methane) across a propellant line, from the ship on `fromPortId`'s
+   * side to the ship on the other. A liquid in free fall floats anywhere in its tank, so the pump only draws while
+   * something pushes the stack along its axis hard enough to hold the liquid on the source tank's outlet (its aft
+   * end): TUNING.SETTLE_ACCEL. With `settle` (the default) the pump fires the RCS along the stack to do that itself.
+   * The flow is the line's kg/s in all, shared between the liquids so that they finish together.
+   * opts: resources, amount (kg in all; default all that fits), settle. → { ok, why? }.
+   */
+  startPump(fromPortId, opts = {}) {
+    const line = this.propellantLines.find(l => l[0].id === fromPortId || l[1].id === fromPortId);
+    if (!line) return { ok: false, why: 'no propellant line is connected there' };
+    const a = line[0].id === fromPortId ? line[0] : line[1], b = a === line[0] ? line[1] : line[0];
+    const sa = this.lineSide(a.id), sb = this.lineSide(b.id);
+    const resources = (opts.resources || ['lox', 'ch4']).filter(r => r !== 'solid' && r !== 'ablator' && r !== 'evafuel');
+    const from = [], to = [], want = {};
+    let total = 0, up = 0, n = 0;
+    for (const r of resources) {
+      let have = 0, room = 0;
+      for (const p of this._list) {
+        if (!p.def.res || !(r in p.def.res)) continue;
+        if (sa.has(p.id) && p.res[r] > 0) { have += p.res[r]; if (!from.includes(p.id)) from.push(p.id); up += p.flip ? -1 : 1; n++; }
+        else if (sb.has(p.id) && p.def.res[r] - p.res[r] > 0) { room += p.def.res[r] - p.res[r]; if (!to.includes(p.id)) to.push(p.id); }
+      }
+      want[r] = Math.min(have, room); total += want[r];
+    }
+    if (!(total > 1e-6)) return { ok: false, why: from.length ? 'the tanks on the other side are full' : 'there is nothing to pump on that side' };
+    const amount = opts.amount > 0 ? Math.min(opts.amount, total) : total;
+    for (const r of resources) want[r] *= amount / total;
+    this.pump = { from, to, fromPort: a.id, toPort: b.id, want, total: amount, moved: 0, rate: line[2], sign: up < 0 ? -1 : 1,
+      settle: opts.settle !== false, settled: false, wait: 0, state: 'settling' };
+    return { ok: true };
+  }
+  /** Stop the pump. `why` is kept on `lastPump` for the read-outs. */
+  stopPump(why = 'stopped') {
+    if (!this.pump) return;
+    this.lastPump = { moved: this.pump.moved, total: this.pump.total, why };
+    this.pump = null;
+  }
+  /** The RCS command (−1…1 along the stack) a running pump asks for to hold the liquid on the outlet. */
+  _pumpSettle() {
+    const p = this.pump;
+    if (!p || !p.settle || !(this._rcsThrust > 0)) return 0;
+    if (p.sign * this.thrust > 0 && p.sign * this.axialAccel >= TUNING.SETTLE_ACCEL) return 0;      // the engines are doing it
+    return p.sign * Math.min(1, 1.5 * TUNING.SETTLE_ACCEL * this.mass / this._rcsThrust);
+  }
+  _stepPump(dt, ev) {
+    const p = this.pump;
+    const end = why => { this.stopPump(why); if (ev) ev.push({ type: 'pump', vessel: this, ...this.lastPump }); };
+    if (!this.parts.has(p.fromPort) || this.parts.get(p.fromPort).dockedTo !== p.toPort) return end('the line came apart');
+    p.settled = p.sign * this.axialAccel >= TUNING.SETTLE_ACCEL;
+    if (!p.settled) {
+      p.state = 'settling'; p.wait += dt;
+      if (p.wait > TUNING.SETTLE_PATIENCE) end('the tanks are not settled: nothing is pushing the liquid onto the outlet');
+      return;
+    }
+    p.wait = 0; p.state = 'pumping';
+    let moved = 0;
+    for (const r in p.want) {
+      let left = Math.min(p.rate * dt * p.want[r] / p.total, p.want[r] * (1 - p.moved / p.total) + 1e-9);
+      for (const fid of p.from) {
+        const a = this.parts.get(fid);
+        if (!a || !(a.res[r] > 0)) continue;
+        for (const tid of p.to) {
+          const b = this.parts.get(tid);
+          if (!b || !(r in b.res)) continue;
+          const m = Math.max(0, Math.min(left, a.res[r], b.def.res[r] - b.res[r]));
+          a.res[r] -= m; b.res[r] += m; left -= m; moved += m;
+          if (!(left > 1e-12)) break;
+        }
+        if (!(left > 1e-12)) break;
+      }
+    }
+    if (moved > 0) { p.moved += moved; this._massDirty = true; }
+    if (p.moved >= p.total - 1e-6) return end('done');
+    if (!(moved > 0)) return end('nothing more will go across');
+  }
+
   // ------------------------------------------------------------------ docking
   /** World position of a docking port's mating face and its outward axis (unit, world). Returns `outPos`. */
   portWorld(port, outPos = new Vector3(), outAxis = null) {
-    const f = port._face || 1;
-    outPos.set(port.pos.x, port.pos.y + f * port.def.h / 2, port.pos.z).sub(this.com).applyQuaternion(this.q).add(this.pos);
-    if (outAxis) outAxis.set(0, f, 0).applyQuaternion(this.q);
+    this.portLocal(port, outPos).sub(this.com).applyQuaternion(this.q).add(this.pos);
+    if (outAxis) this.portAxisLocal(port, outAxis).applyQuaternion(this.q);
     return outPos;
+  }
+  /** A port's mating face in craft coordinates: the exposed end of a stack ring, or the outer face of a side port. */
+  portLocal(port, out = new Vector3()) {
+    if (port._side) { const h = (port.def.rw || 0) / 2; return out.set(port.pos.x + Math.cos(port.rot) * h, port.pos.y, port.pos.z - Math.sin(port.rot) * h); }
+    return out.set(port.pos.x, port.pos.y + (port._face || 1) * port.def.h / 2, port.pos.z);
+  }
+  /** The way a port's face looks, in craft coordinates (unit): along the stack for a ring, straight out for a side port. */
+  portAxisLocal(port, out = new Vector3()) {
+    return port._side ? out.set(Math.cos(port.rot), 0, -Math.sin(port.rot)) : out.set(0, port._face || 1, 0);
   }
   /** Inertial velocity of a point fixed to the vessel at craft coordinates (x, y, z). */
   pointVelocity(x, y, z, out = new Vector3()) {
@@ -1083,11 +1193,19 @@ export class Vessel {
     // --- snapped relative attitude: yaw θ about the stack axis, plus a flip when the ports face the same way
     _qa.copy(this.q).invert().multiply(other.q);
     _a.set(1, 0, 0).applyQuaternion(_qa);
-    const theta = Math.atan2(-_a.z, _a.x);
-    const flip = sA * sB > 0;
+    let theta = Math.atan2(-_a.z, _a.x);
+    let flip = sA * sB > 0;
+    const side = !!(myPort._side && otherPort._side);
+    if (!!myPort._side !== !!otherPort._side) return null;
+    if (side) {
+      // side by side: the stacks lie parallel, nose by nose or nose by tail, whichever they are nearer; the yaw is
+      // the one that turns the other's port to look straight back into this one
+      flip = _a.set(0, 1, 0).applyQuaternion(_qa).y < 0;
+      theta = myPort.rot + Math.PI + (flip ? otherPort.rot : -otherPort.rot);
+    }
     const ct = Math.cos(theta), st = Math.sin(theta);
-    const fax = myPort.pos.x, fay = myPort.pos.y + sA * myPort.def.h / 2, faz = myPort.pos.z;
-    const fbx = otherPort.pos.x, fby = otherPort.pos.y + sB * otherPort.def.h / 2, fbz = otherPort.pos.z;
+    this.portLocal(myPort, _a); const fax = _a.x, fay = _a.y, faz = _a.z;
+    other.portLocal(otherPort, _a); const fbx = _a.x, fby = _a.y, fbz = _a.z;
     let offset = 0;
     for (const id of this.parts.keys()) if (id > offset) offset = id;
     for (const st2 of this.stages) for (const id of st2) if (id > offset) offset = id;
@@ -2142,8 +2260,9 @@ export class Vessel {
     let Tx = this._thrTx + this._tqx, Ty = (this._thrTy || 0) + this._tqy, Tz = this._thrTz + this._tqz;
 
     // --- translation thrusters (RCS / EVA jetpack)
-    if (this.controllable && (c.tx || c.ty || c.tz)) {
-      const tx = clamp(c.tx, -1, 1), ty = clamp(c.ty, -1, 1), tz = clamp(c.tz, -1, 1);
+    const sTy = this.pump ? this._pumpSettle() : 0;        // a running pump fires the thrusters along the stack itself
+    if (this.controllable && (c.tx || c.ty || c.tz || sTy)) {
+      const tx = clamp(c.tx, -1, 1), ty = clamp(c.ty || sTy, -1, 1), tz = clamp(c.tz, -1, 1);
       const use = Math.abs(tx) + Math.abs(ty) + Math.abs(tz);
       if (this.type === 'eva') {
         const need = TUNING.EVA_THRUST * use / TUNING.EVA_VE * dt;
@@ -2151,7 +2270,7 @@ export class Vessel {
           Fx += tx * TUNING.EVA_THRUST; Fy += ty * TUNING.EVA_THRUST; Fz += tz * TUNING.EVA_THRUST;
           this._massDirty = true;
         }
-      } else if (c.rcs && this._rcsThrust > 0) {
+      } else if ((c.rcs || (sTy && !c.tx && !c.tz)) && this._rcsThrust > 0) {
         const need = this._rcsThrust * use / (this._rcsIsp * G0) * dt;
         if (need > 0 && this._drain('mono', need) >= need * 0.999) {
           Fx += tx * this._rcsThrust; Fy += ty * this._rcsThrust; Fz += tz * this._rcsThrust;
@@ -2425,6 +2544,8 @@ export class Vessel {
     const im = 1 / (mMid > 0.5 * m ? mMid : m);
     _a.set(Fx * im, Fy * im, Fz * im);
     this.gForce = _a.length() / G0;
+    this.axialAccel = _a.y;                                  // what a liquid in the tanks feels along the stack, m/s²
+    if (this.pump) this._stepPump(dt, ev);
     _a.applyQuaternion(q);
     const gm = body.gm;
     let k = -gm / (R * R * R) * 0.5 * dt;
