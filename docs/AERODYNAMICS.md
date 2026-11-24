@@ -8,7 +8,7 @@ one. This step makes the force on a body depend on its shape and attitude at tha
 number.
 
 Below Mach 0.7 nothing changes. Wings, fins and open panels are not touched here (step D).
-Heating still follows the one flux law (step E).
+Heating by shape is step E ([HEATING.md](HEATING.md)).
 
 The code is `js/core/aero.js` (curves and tables) and the per-part loop of
 `js/core/vessel.js`. The independent reference is `tests/verify/ref_aero.mjs`.

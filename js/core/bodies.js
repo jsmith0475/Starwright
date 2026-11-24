@@ -15,11 +15,18 @@ const HOME_RHO0 = 1.22;
 // ---------------------------------------------------------------------------------------------
 /** Universal gas constant, J/(mol K). */
 export const R_GAS = 8.314462618;
-/** The gases of the system's atmospheres: ratio of specific heats `gamma` and molar mass `M` (kg/mol). */
+/**
+ * The gases of the system's atmospheres: ratio of specific heats `gamma`, molar mass `M` (kg/mol) and the
+ * Sutton-Graves constant `heatK` of stagnation-point heating, q = heatK sqrt(rho / R_nose) v^3 (kg^0.5 / m).
+ * Air and carbon dioxide are the published values. Hydrogen and helium is worked from Sutton and Graves' constants
+ * for the two gases (0.0395 and 0.0797 kg / (s m^1.5 atm^0.5)) by their mixing rule, 1/K^2 = sum of c_i / K_i^2
+ * over mass fractions, for the mixture with this molar mass (25 % helium by mass): K = 0.0438, and
+ * heatK = K / (2 sqrt(101325)).
+ */
 export const GASES = {
-  air: { name: 'air', gamma: 1.40, M: 0.028964 },
-  co2: { name: 'carbon dioxide', gamma: 1.29, M: 0.04401 },
-  h2he: { name: 'hydrogen and helium', gamma: 1.45, M: 0.0023 },
+  air: { name: 'air', gamma: 1.40, M: 0.028964, heatK: 1.7415e-4 },
+  co2: { name: 'carbon dioxide', gamma: 1.29, M: 0.04401, heatK: 1.9027e-4 },
+  h2he: { name: 'hydrogen and helium', gamma: 1.45, M: 0.0023, heatK: 6.88e-5 },
 };
 /**
  * Default temperature profile, the shape of Earth's standard atmosphere: [altitude in scale heights, temperature as a
@@ -955,7 +962,8 @@ export class Body {
     if (this.atmo) {
       // the gas, and what the scale height says about it: H = R T / (M g), so T_iso = M g H / R and a_iso = sqrt(gamma g H)
       const at = this.atmo, gas = GASES[def.airGas || 'air'];
-      at.gas = gas; at.gamma = gas.gamma; at.molarMass = gas.M;
+      at.gas = gas; at.gamma = gas.gamma; at.molarMass = gas.M; at.heatK = gas.heatK;
+      at.cp = gas.gamma * R_GAS / ((gas.gamma - 1) * gas.M);   // J/(kg K), for the total temperature of the oncoming air
       at.tIso = gas.M * this.surfaceG * at.scale / R_GAS;
       at.aIso = Math.sqrt(gas.gamma * this.surfaceG * at.scale);
       at.profile = def.tempProfile || TEMP_PROFILE;
