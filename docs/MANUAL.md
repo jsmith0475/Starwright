@@ -265,8 +265,16 @@ with 33 Peregrine engines and a ship with 6. Three things about it are new.
 
 Launch it with the ascent assist and it reaches an 80 km orbit with about 42 % of the ship's
 propellant left. That is not enough to go to Pell and come back, which is what the depot is
-for. The ship's return is not built yet: [SHEARWATER.md](SHEARWATER.md) has the numbers and
-the plan. In career mode it needs the launch pad at its top level (772 t).
+for.
+
+- **The ship's return.** With the freight gone and between 10 and 20 % of its propellant left,
+  the ship can come home to the tower. Pick **Return to the tower** in the Autopilot panel: a
+  braking burn, a fall flat on its belly with the four flaps steering, a flip to upright near
+  3 km, and down between the arms. The **BELLY** button in the SAS row holds the belly to the
+  wind for flying it by hand, and the pitch keys then set the angle to the air. The scenario
+  **Belly First** starts in orbit ready for it.
+
+[SHEARWATER.md](SHEARWATER.md) has the numbers. In career mode it needs the launch pad at its top level (772 t).
 
 ## Targeting, rendezvous and docking
 

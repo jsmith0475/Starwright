@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'ship-belly-return', date: '2026-11-24', title: 'Shearwater comes home on its belly',
+    text: 'The ship now returns from orbit: it falls flat on its belly with four flaps steering, flips upright near 3 km and is caught by the tower arms. Try the new scenario Belly First, pick Return to the tower in the Autopilot panel, or hold it yourself with the new BELLY button in the SAS row.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',
     text: 'The landing autopilot now gives itself time. A lander with a strong engine over a small world used to start braking six seconds before the hover; the burn now lasts 20 seconds where the engine allows, with more than half the thrust in hand. Every guidance burn also now waits until the ship has turned to face the right way before the engine lights.' },
   { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',
