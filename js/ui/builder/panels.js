@@ -124,6 +124,7 @@ export function partStatRows(d) {
     const cs = chuteSpec(d), n = cs.count > 1 ? `${cs.count} canopies, each ` : '';
     rows.push(['Parachute', `${n}${(2 * cs.rmFull).toFixed(0)} m across on ${cs.line.toFixed(0)} m lines · opens fully below ${d.chute.fullAlt} m`]);
     rows.push(['Limits', `opens under Mach ${d.chute.maxMach} · lines hold ${d.chute.strength} kN`]);
+    if (cs.drogue) rows.push(['Drogue', `built in: ${(2 * cs.drogue.rmFull).toFixed(1)} m across, out first under Mach ${cs.drogue.maxMach}, then it pulls the main out`]);
   }
   if (d.wing) rows.push(['Lifting area', `${d.wing.area} m²` + (d.wing.control ? ` · control: ${d.wing.control === true ? 'yes' : d.wing.control}` : '')]);
   if (d.fin) rows.push(['Fin', `${d.fin.area} m²` + (d.fin.control ? ' · steerable' : '')]);

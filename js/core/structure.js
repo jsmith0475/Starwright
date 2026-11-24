@@ -6,6 +6,8 @@
 // `solve` then cuts the vessel at every joint and asks Newton what the joint must carry for the far side to move
 // as it does. Nothing here feeds back into the trajectory except a joint that breaks.
 
+import { spanTarget } from './span.js';
+
 const PI = Math.PI;
 
 /** Tuning constants (exported so the UI, the tests and the assembly building can read them). */
@@ -140,6 +142,7 @@ function mountFactor(a, b) {
   const f = (fm === undefined ? 1 : fm) * (isStack(m) ? 1 : m.def.joint || 1);
   return fh === undefined ? f : Math.max(f, fh);
 }
+const defOfPart = p => p.def;
 const isStack = p => !!(p.def.attach && p.def.attach.stack);
 const faceTop = p => (p.flip ? p.def.rBottom : p.def.rTop) ?? p.def.r ?? 0.3;
 const faceBot = p => (p.flip ? p.def.rTop : p.def.rBottom) ?? p.def.r ?? 0.3;
@@ -272,23 +275,15 @@ export class Structure {
   _braces() {
     const v = this.vessel;
     for (const s of v._list) {
+      s._brace = undefined;
       if (s.def.shape !== 'strut') continue;
       const host = s._sp >= 0 ? v._list[s._sp] : null;
       if (!host) continue;
-      const ox = Math.cos(s.rot || 0), oz = -Math.sin(s.rot || 0), half = (s.def.rw || 0.9) / 2;
-      const tx = s.pos.x + ox * half, ty = s.pos.y, tz = s.pos.z + oz * half;
-      let hit = null;
-      for (const p of v._list) {
-        if (p === s || p === host || p.def.shape === 'strut') continue;
-        const d = p.def, reach = STRUCT.STRUT_REACH;
-        if (isStack(p)) {
-          if (Math.abs(ty - p.pos.y) > d.h / 2 + reach) continue;
-          const rr = Math.max(d.rTop ?? d.r ?? 0.3, d.rBottom ?? d.r ?? 0.3);
-          if (Math.hypot(tx - p.pos.x, tz - p.pos.z) > rr + reach) continue;
-        } else if (Math.hypot(tx - p.pos.x, ty - p.pos.y, tz - p.pos.z) > Math.max(d.rw || 0.2, d.h || 0.2) / 2 + reach) continue;
-        hit = p; break;
-      }
-      if (!hit) continue;
+      // where its far end goes is one rule for the structure and the drawing (core/span.js): the part its made
+      // length reaches, else the first stack part along its axis within SPAN.MAX
+      const sp = spanTarget(v._list, s, defOfPart, host, STRUCT.STRUT_REACH);
+      if (!sp) continue;
+      const hit = sp.part, tx = sp.tx, ty = sp.ty, tz = sp.tz;
       s._brace = hit.id;
       // joints on the tree path between host and hit: climb from both ends to their common ancestor
       const path = [];

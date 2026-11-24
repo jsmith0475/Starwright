@@ -44,7 +44,7 @@ const RES_UNIT = { lox: 'kg', ch4: 'kg', fuel: 'kg', mono: 'kg', elec: 'EC', xen
 const DOCK_ASSIST_RANGE = 1500;   // m: the docking assist takes over from here
 /** Guidance programs (the Autopilot panel): what the alert line and the toasts call them. */
 const PROGRAM_NAME = { ascent: 'Ascent assist', dock: 'Docking assist', takeoff: 'Take-off', hold: 'Heading and altitude hold', land: 'Runway landing',
-  drive: 'Cruise control', node: 'Maneuver autopilot', landhere: 'Landing autopilot', deorbit: 'Deorbit burn', recovery: 'Booster return' };
+  drive: 'Cruise control', node: 'Maneuver autopilot', landhere: 'Landing autopilot', deorbit: 'Deorbit burn', recovery: 'Booster return', shipreturn: 'Return to the tower' };
 const WARP_REASON = {
   atmosphere: 'entering the atmosphere', impact: 'close to the surface', soi: 'entering a new sphere of influence', node: 'maneuver coming up',
   thrust: 'engines are running', altitude: 'too low for that rate', warpTo: 'arrived', stage: 'staging', eva: 'spacewalk', switch: 'switched vessel',
@@ -262,8 +262,8 @@ export function createFlightScreen(app) {
         break;
       case 'chute':
         if (mine) {
-          if (p.state === 'semi' || p.state === 'full') app.audio.play('chute');
-          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'semi' ? 'Parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? (p.load ? `Parachute lines failed at ${Math.round(p.load / 1000)} kN (they hold ${Math.round(p.rated / 1000)})` : 'Parachute torn away!') : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
+          if (p.state === 'drogue' || p.state === 'semi' || p.state === 'full') app.audio.play('chute');
+          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'drogue' ? 'Drogue out' : p.state === 'semi' ? 'Main parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? (p.load ? `Parachute lines failed at ${Math.round(p.load / 1000)} kN (they hold ${Math.round(p.rated / 1000)})` : 'Parachute torn away!') : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
         }
         break;
       case 'warp':
@@ -393,8 +393,10 @@ export function createFlightScreen(app) {
     }
     // armed and still packed: say what it is waiting for
     if (atmoH && falling && !chuteWaiting) {
+      const under = (v.chuteParts || []).find(p => p.deployed === 'drogue' && p.chuteWait);
+      if (under) return { id: 'chutewait', items: [[null, under.chuteWait === 'mach' ? `Under the drogue: the main opens below Mach ${under.def.chute.maxMach}` : under.chuteWait === 'thin' ? 'Under the drogue: the main opens lower down, in thicker air' : 'Under the drogue: the main opens when its lines can take the pull']] };
       const wait = (v.chuteParts || []).find(p => p.deployed === 'armed' && p.chuteWait && p.chuteWait !== 'thin');
-      if (wait) return { id: 'chutewait', items: [[null, wait.chuteWait === 'mach' ? `Parachute armed: it opens below Mach ${wait.def.chute.maxMach}` : 'Parachute armed: too fast and too heavy to open yet, its lines would not hold']] };
+      if (wait) { const lim = (wait.def.chute.drogue || wait.def.chute).maxMach; return { id: 'chutewait', items: [[null, wait.chuteWait === 'mach' ? `Parachute armed: ${wait.def.chute.drogue ? 'its drogue' : 'it'} opens below Mach ${lim}` : 'Parachute armed: too fast and too heavy to open yet, its lines would not hold']] }; }
     }
     // dry tanks with more rocket below the next separator
     if (lit.length && !alive && v.hasEngineStagesLeft() && (c.throttle > 0 || v.situation === 'flying' || v.situation === 'suborbital')) {
@@ -698,6 +700,10 @@ export function createFlightScreen(app) {
       const v = active(); if (!v) return;
       if (mode === 'maneuver' && !v.nodes.length) { toast('No maneuver planned. Open the map (M) and click your orbit.', 'info'); return; }
       if (TARGET_MODES.has(mode) && !v.targetInfo) { toast('No target set. Press Y for the nearest vessel, or pick one with the Target button or in the map.', 'info'); return; }
+      if (mode === 'belly') {
+        if (!(v.body.atmo && v.partList.some(p => p.def.flap))) { toast('The belly hold needs body flaps and air to fall through', 'info'); return; }
+        v.bellyAoa = 70 * Math.PI / 180; v.bellyLift = null; v.bellyNose = null;
+      }
       if (assist) dropAssist(assistName() + ' off');
       v.ctrl.sas = true;
       if (speedMode === 'surface' && mode === 'prograde') mode = 'srfPrograde';
@@ -1062,6 +1068,10 @@ export function createFlightScreen(app) {
         if (isBody && tgt !== body && (tgt.parent === body || tgt.parent === body.parent)) add('correct', 'Plan: course correction to ' + tgt.name, 'a small burn that fixes the arrival', v.situation !== 'landed', '', true);
         if (body.parent && body.parent.type !== 'star') add('return', 'Plan: return to ' + body.parent.name, 'leaves ' + body.name + ' so the path dips to ' + body.parent.name, closed, 'Needs a closed orbit first', true);
         if (!atmoH && rocket) add('landhere', 'Land here', 'brakes out of orbit, finds level ground and sets down on the engine', (v.deltaV || 0) > 50, 'No propellant');
+        if (atmoH && rocket && closed && body === SYSTEM.home && towerCraft(v) && autopilot.bellyFlyer(v)) {
+          const why = shipReturnBlock(v);
+          add('shipreturn', 'Return to the tower', 'a braking burn, the fall belly first on the four flaps, the flip, and down between the tower arms', !why, why);
+        }
         if (atmoH && rocket && closed) add('deorbit', 'Deorbit', 'burns retrograde until the path dips into the air', (v.deltaV || 0) > 10, 'No propellant');
       } else if (!ground && !atmoH && rocket) add('landhere', 'Land here', 'brakes, finds level ground and sets down on the engine', (v.deltaV || 0) > 20, 'No propellant');
       return list;
@@ -1088,6 +1098,7 @@ export function createFlightScreen(app) {
         else if (id === 'node') ctl = autopilot.executeNode(world, v, { useWarp: true });
         else if (id === 'landhere') { if ((v.legParts || []).length && !v.legsDown) v.toggleLegs(); ctl = autopilot.hoverslamLanding(world, v, { useWarp: true }); }
         else if (id === 'recovery') ctl = returnProgram(v);
+        else if (id === 'shipreturn') ctl = autopilot.shipReturn(world, v, { target: SYSTEM.sites.tower.dir, floor: TOWER.hang - 0.5, sets: { deorbit: 2, burn: 0, final: 0 }, useWarp: true });
         else if (id === 'recoverybarge') { ctl = autopilot.boosterRecovery(world, v, { target: SYSTEM.sites.barge.dir, targetName: 'the barge' }); id = 'recovery'; }
         else if (id === 'deorbit') ctl = autopilot.deorbit(world, v, { periapsis: Math.min(atmoH * 0.45, 35000) });
         if (!ctl) return false;
@@ -1583,6 +1594,11 @@ export function createFlightScreen(app) {
     const roll = (held('rollRight') ? 1 : 0) - (held('rollLeft') ? 1 : 0);
     if (assist && (pitch || yaw || roll)) dropAssist(assistName() + ' off. You have control.');
     c.pitch = pitch * gain; c.yaw = yaw * gain; c.roll = roll * gain;
+    // belly hold: the pitch keys set the angle to the air (nose down glides farther, flat falls shorter) and the hold flies it
+    if (!assist && c.sas && c.sasMode === 'belly' && v.type === 'ship') {
+      if (pitch) v.bellyAoa = clamp((v.bellyAoa || 1.22) + pitch * gain * 0.25 * dt, 50 * Math.PI / 180, 88 * Math.PI / 180);
+      c.pitch = 0;
+    }
     // tail-strike guard: a held pull on or just above the runway eases off before the tail (or the engine) meets the ground
     if (c.pitch > 0 && (v.wheelParts || []).length >= 2 && (v.grounded || v.radarAlt < 4) && typeof v.tailStrikeMargin === 'function' && v.body.atmo) {
       const m = v.tailStrikeMargin() * 180 / Math.PI;
@@ -1733,6 +1749,17 @@ export function createFlightScreen(app) {
     let pins = 0, legs = 0;
     for (const p of parts) { const d = p.def || PARTS[p.type]; if (!d) continue; if (d.catchPin) pins++; if (d.legs) legs++; }
     return pins >= 2 && !legs;
+  }
+  /** Why the ship cannot be flown back to the tower right now ('' when it can): cargo aboard, or too much or too little propellant. */
+  function shipReturnBlock(c) {
+    if (c.partList.some(p => p.def.freight > 0)) return 'Unload the cargo first: the ship cannot fall on its flaps with freight in the nose';
+    const g0 = SYSTEM.home.gm / (SYSTEM.home.radius * SYSTEM.home.radius);
+    let F = 0;
+    for (const en of c.engines) { const d = en.part.def.engine; if (d.rings) for (const r of d.rings) F += r.n * r.thrust * 1000 * r.ispAtm / r.ispVac; else F += d.thrust * 1000 * (d.ispAtm || d.ispVac) / d.ispVac; }
+    const most = 0.9 * F / (1.4 * g0);
+    if (c.mass > most) return 'Too heavy to stop at the tower: ' + Math.ceil((c.mass - most) / 1000) + ' t of propellant too many';
+    if (!(c.deltaV > 350)) return 'Too little propellant for the braking burn and the landing';
+    return '';
   }
   /** The return program for a stage: to the tower's arms for one with pins, to the Return Pad for one with legs. */
   function returnProgram(b) {
@@ -2020,7 +2047,7 @@ export function createFlightScreen(app) {
       if (au.setReentry) au.setReentry(clamp((info.heatGlow || 0) * 1.2, 0, 1) * quiet);
       // cabin warnings: a caution chirp when a new alert comes up, the master alarm while it is critical
       const hot = v.isHot ? (v.maxTempRatio || 0) : 0;
-      const terrain = !v.landed && v.type === 'ship' && v.verticalSpeed < -12 && v.radarAlt > 0 && v.radarAlt < Math.max(250, -v.verticalSpeed * 7) && !(v.chuteParts || []).some(p => p.deployed === 'full' || p.deployed === 'semi');
+      const terrain = !v.landed && v.type === 'ship' && v.verticalSpeed < -12 && v.radarAlt > 0 && v.radarAlt < Math.max(250, -v.verticalSpeed * 7) && !(v.chuteParts || []).some(p => p.deployed === 'full' || p.deployed === 'semi' || p.deployed === 'drogue');
       const danger = Math.max(clamp((hot - 0.55) / 0.35, 0, 1), clamp(((v.gForce || 0) - 5) / 4, 0, 1), terrain ? clamp(-v.verticalSpeed / 60, 0.3, 1) : 0, v.type === 'ship' && !v.controllable && !v.landed ? 0.4 : 0);
       state.danger += (danger - state.danger) * Math.min(1, dt * 4);
       warnAcc -= dt;

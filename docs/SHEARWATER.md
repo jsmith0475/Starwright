@@ -188,7 +188,87 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 - A pump that is running when the game is saved is stopped when it is loaded.
 - Ship-to-ship transfer of this kind has not yet been done in space by anyone.
 
+## The ship's return
+
+The ship has no legs, no wings and no parachute. It comes home the way the real one does: flat
+on its belly through the air, then upright on its engines for the last kilometre and a half,
+and into the same two arms that caught the booster. The scenario **Belly First** starts in a
+100 km orbit with the bay empty and 26 t of propellant.
+
+**What you do.** Open the Autopilot panel and pick **Return to the tower**. To fly it by hand,
+the **BELLY** button in the SAS row lays the ship flat to the wind and the pitch keys set its
+angle to the air between 50 and 88 degrees.
+
+**The four flaps.** Each is a flat plate hinged along the hull. It folds from flat out (0) to
+80 degrees up toward the lee side, and the wind pushes on whatever is left facing it. The flaps
+do not make lift like a wing. They are drag you can take away, at four corners. Fold the two
+forward ones and the nose drops; fold the two on one side and the ship rolls; fold opposite
+corners and it yaws. They rest half folded so each can move both ways. The belly hold uses them
+whenever the air is thick enough to feel (above about 40 Pa), with the thrusters helping, and
+you can see them move.
+
+**What the guidance does.**
+
+1. **Wind tunnel.** Before anything else it flies a copy of the ship, at its present mass, in a
+   scratch world: at 50, 70 and 88 degrees to the air and at each Mach number from 0 to 12. That
+   gives the drag area and the glide of this ship as loaded today. At 70 degrees the drag area
+   is about 206 m2 and the glide ratio 0.29. At 50 degrees it glides 0.66 forward for each metre
+   it falls; flat on, nothing.
+2. **Braking burn.** It tries 72 places round the orbit, predicts the whole fall from each with
+   those figures, and picks the burn (about 58 m/s on the three vacuum engines) whose fall ends
+   over the tower. The burn lowers the low point of the orbit to 30 km.
+3. **The fall.** The ship meets the air at about 2,100 m/s. Every two seconds the guidance
+   predicts three falls from where the ship is now, steep, middling and flat, and picks the
+   angle in between that ends at the tower. Sideways error is taken out by rolling the lift
+   to one side, with the nose laid along the lean, because a round hull only pushes along its
+   own length.
+4. **Flat, from 11 km.** The ship lies fully flat and falls nearly straight down at about
+   170 m/s, sliding sideways the last few hundred metres by leaning.
+5. **The flip.** Near 3 km up all six engines light, the ship swings upright in
+   about two and a half seconds, and the landing burn of the booster's guidance takes over:
+   stop just above the arms, come down between them.
+
+**Measured** (`node tests/tools/ship_return_dev.mjs home 0.16` repeats it):
+
+| | |
+|---|---|
+| Mass leaving orbit | 96 t (67 t of ship, 3 t of thruster propellant, 26 t of methane and oxygen) |
+| Braking burn | 58 m/s on the three vacuum engines, 11 seconds |
+| Speed meeting the air at 72 km | 2,113 m/s |
+| Time from the top of the air to the arms | about 9 minutes |
+| Highest g | about 2 |
+| Hottest part | 63 % of its limit |
+| Speed at the flip | about 170 m/s down, 3 km up |
+| Caught | at 1.2 m/s, 0.1 to 0.4 m from the centre line |
+| Propellant left | 4 to 8 t |
+
+It was flown from four different places round the orbit and with 11, 13, 16 and 20 % of a tank,
+and caught each time.
+
+**What it will not do.**
+
+- **Come home loaded.** With freight in the bay the ship is nose heavy and far too heavy for
+  its engines. The program says so and does nothing.
+- **Come home with much propellant.** Low in the air the six engines give 1,553 kN, which
+  holds up about 100 t with the margin a landing needs. Above about 20 % of a tank the program
+  refuses and says how many tonnes too many. At 25 % it will try and lands 600 m short.
+- **Come home on fumes.** Under about 10 % there is not enough for both burns.
+- **Land anywhere else.** There are no legs. The return goes to the tower.
+
+**Where the weight went.** For the flaps to hold the ship flat its centre of mass has to sit
+between the two pairs. The first version carried its weight too far forward and fell nose
+first whatever the flaps did. Structure moved aft, into the tank and the engine section, and
+the freight, which leaves before the return, took up the difference: 68 t where it was 49 t.
+Launch mass and the ascent are unchanged.
+
 ## Where this differs from the real thing
+
+- **The belly-first fall is slower.** Verda is small and its orbit slow, so the ship meets the
+  air at 2.1 km/s where a real one meets it at 7.5. Peak heating and g are milder for it.
+- **The flip is quick and late.** The real ship flips at about 500 m. This one starts near
+  3 km because it has less thrust for its weight and stops more slowly.
+- **Flaps are flat plates.** Their force is the pressure of the wind on the area facing it, with
+  a factor that rises at high Mach. Flow round the hull between them is not modelled.
 
 - **Size.** Five-eighths scale: 5.6 m across where Starship is 9 m, 75 m tall where it is about
   124 m. Starwright's worlds are about a tenth the size of the real ones, and its other parts
@@ -198,7 +278,7 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
   depot would have nothing to do.
 - **The booster does more of the work.** On Earth the booster gives roughly a quarter of the
   speed to orbit. Here it gives nearer a third, and the ship arrives 42 % full where a real
-  Starship arrives nearly empty. The cargo (49 t in the bay, on a 45 t forward section) is
+  Starship arrives nearly empty. The cargo (68 t of freight in the bay) is
   chosen so that the ship cannot fly on to Pell and back without refuelling and can when full.
 - **One refuelling, not ten or more.** For the same reason.
 - **Landing on Pell is out of reach with the cargo aboard.** That needs about 3.1 km/s from low
@@ -216,10 +296,10 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 | 1 | The rocket: two liquids, ring engines, hot staging, flies to orbit | in the game |
 | 2 | A launch tower with catch arms, and the booster flying back to be caught by its two pins | in the game |
 | 3 | A propellant depot in low orbit, docking side by side, and a transfer that needs the tanks settled | in the game |
-| 4 | The ship's return: belly first on its four flaps, the flip, and the catch | next, after the re-entry model (roadmap item 6) |
+| 4 | The ship's return: belly first on its four flaps, the flip, and the catch | in the game |
 | 5 | The whole mission as one scenario, and a Science chapter on orbital refuelling | planned |
 
-The four flaps are fitted and weighed and do not steer yet.
+Unloading the freight is not built: the ship that comes home in the scenario **Belly First** starts with its bay already empty.
 
 ## For people reading the code
 
@@ -235,11 +315,14 @@ The four flaps are fitted and weighed and do not steer yet.
   (`surface.held`) in `vessel.js`, the return in `boosterRecovery` (`js/core/booster.js`, options `floor`,
   `sets`, `aimBurn`), the drawing in `js/render/tower.js`.
 - The stock design: `shearwater()` in `js/core/craft.js`.
+- The ship's return: the flap block of the air loop and `bellyAttitude` in `js/core/vessel.js` (`TUNING.FLAP_*`,
+  `BELLY_AOA`), `windTunnel` and `shipReturn` in `js/core/shipreturn.js`, `predictEntry` in `js/core/entry.js`,
+  the options `thrustScale` and `steerBurn` of `boosterRecovery`; the scenario is `belly-first`.
 - Side docking: `dock.side` in `parts.js`, `portLocal` / `portAxisLocal` and the side branch of `absorb` in
   `vessel.js`, `_dockingStep` in `world.js`, the attitude for side ports in `dockingApproach` (`autopilot.js`).
 - The pump: `startPump`, `_stepPump`, `_pumpSettle`, `propellantLines` in `vessel.js`; `TUNING.SETTLE_ACCEL`.
   The Fuel panel block is `lineRows` in `js/ui/hud.js`. The depot and the ship alone are `deepwell()` and
   `shearwaterShip()` in `craft.js`; the scenario is `topping-up` in `scenarios.js`.
-- Checks: `tests/unit/shearwater.test.js`, `tests/unit/tower.test.js`, `tests/unit/sideport.test.js`, and group 2e of the independent verification
+- Checks: `tests/unit/shearwater.test.js`, `tests/unit/ship_return.test.js`, `tests/unit/tower.test.js`, `tests/unit/sideport.test.js`, and group 2e of the independent verification
   (`tests/verify/checks_burns.mjs`): mass flow, mixture ratio and the rocket equation for each
   engine set.

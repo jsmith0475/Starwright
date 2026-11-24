@@ -11,8 +11,10 @@ import { SYSTEM } from './bodies.js';
 import { flightAngles, stallSpeed, surfaceAt, roverCruiseSpeed } from './vessel.js';
 import { returnReserve } from './booster.js';
 import { findSite, slopeLimit, footprint } from './landingsite.js';
+import { BOULDERS, bouldersNear } from './boulders.js';
 export { assessSite, findSite, slopeLimit, footprint } from './landingsite.js';
 export { boosterRecovery, predictFall, returnReserve, recoverableStage } from './booster.js';
+export { shipReturn, bellyFlyer, windTunnel } from './shipreturn.js';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -2007,7 +2009,7 @@ export function planeLand(world, vessel = world.active, opts = {}) {
  * Rover program: drives a wheeled vessel on its powered wheels. opts: { distance (m to cover) or heading (deg) +
  * distance, speed (m/s, default 8), brakeAtEnd (default true) }. Steers to hold the compass heading it starts on
  * (or opts.heading), eases off downhill and stops at the end. Done when the distance is covered and it has stopped.
- * `c.driven` is the ground distance covered so far.
+ * `c.driven` is how far it now is from where it set out.
  */
 const _rv1 = new Vector3(), _rv2 = new Vector3(), _rv3 = new Vector3(), Y_UP = new Vector3(0, 1, 0);
 export function roverDrive(world, vessel = world.active, opts = {}) {
@@ -2017,6 +2019,10 @@ export function roverDrive(world, vessel = world.active, opts = {}) {
   // where gravity is weak the same ground throws a rover about at a lower speed: cruise at what this world allows
   o.speed = Math.min(o.speed, roverCruiseSpeed(v.body, o.speed));
   let heading = o.heading, last = null, t0 = world.ut, stuck = 0, look = 0, grade = 0, rough = 0, track = null;
+  // boulders (core/boulders.js): `dodge` is how far to the side of its line it is steering to pass the ones ahead (m,
+  // to the right), `block` the distance to one it has not yet found a way round (m; Infinity = clear)
+  let dodge = 0, block = Infinity, jam = 0, backT = 0, backs = 0;
+  const rocksAhead = [], lanes = [];
   const slow = Math.min(1.2, 0.2 * v.body.surfaceG);       // m/s²: the braking it plans for, gentle enough for this gravity
   c.driven = 0;
   c.update = dt => {
@@ -2033,9 +2039,10 @@ export function roverDrive(world, vessel = world.active, opts = {}) {
     if (!track) {
       const east = new Vector3().crossVectors(Y_UP, here); if (east.lengthSq() < 1e-9) east.set(0, 0, -1); east.normalize();
       const along = new Vector3().crossVectors(here, east).multiplyScalar(Math.cos(heading * DEG)).addScaledVector(east, Math.sin(heading * DEG));
-      track = { right: new Vector3().crossVectors(along, here).normalize() };
+      track = { right: new Vector3().crossVectors(along, here).normalize(), start: here.clone() };
     }
-    if (last) { const step = here.distanceTo(last) * v.body.radius; if (step < 50) c.driven += step; }
+    // how far it has come from where it set out: going round a boulder, or backing away from one, is not progress
+    c.driven = Math.acos(clamp(here.dot(track.start), -1, 1)) * v.body.radius;
     last = here;
     const sp = v.landed ? 0 : v.groundSpeed;
     if (c.phase === 'drive') {
@@ -2048,6 +2055,42 @@ export function roverDrive(world, vessel = world.active, opts = {}) {
         const east = _rv1.crossVectors(Y_UP, here); if (east.lengthSq() < 1e-9) east.set(0, 0, -1); east.normalize();
         const fwd = _rv2.crossVectors(here, east).multiplyScalar(Math.cos(hr)).addScaledVector(east, Math.sin(hr));
         const h0 = surfaceAt(v.body, here);
+        // boulders within the distance it takes to steer round one: each one too tall to roll over closes a strip of
+        // ground across the line (in metres to the right of the line). Steer for the nearest open ground, with a
+        // lean toward the line itself and toward the side it is already passing on.
+        block = Infinity;
+        if (BOULDERS.solid && track) {
+          const Rb = v.body.radius, ahead = Math.max(16, sp * 4), along = _rv3.crossVectors(here, track.right).normalize();
+          let half = 0.5, rw = 9;
+          for (const p of v.wheelParts) { half = Math.max(half, Math.abs(p._wx - v.com.x) + 0.25); rw = Math.min(rw, p.def.wheel.radius || 0.3); }
+          const xtNow = here.dot(track.right) * Rb;
+          bouldersNear(v.body, here.x * (Rb + h0), here.y * (Rb + h0), here.z * (Rb + h0), ahead + 6, rocksAhead);
+          lanes.length = 0;
+          for (const b of rocksAhead) {
+            if (b.top < 0.5 * rw) continue;
+            const x = ((b.ox - here.x * Rb) * along.x + (b.oy - here.y * Rb) * along.y + (b.oz - here.z * Rb) * along.z);
+            const wide = Math.max(b.a, b.c);
+            if (x < -(wide + 1.5) || x - wide > ahead) continue;
+            const y = (b.ox * track.right.x + b.oy * track.right.y + b.oz * track.right.z) * (Rb / Math.hypot(b.ox, b.oy, b.oz));
+            lanes.push(y - wide - half - 0.6, y + wide + half + 0.6, x - wide);
+          }
+          const shut = y => { for (let i = 0; i < lanes.length; i += 3) if (y > lanes[i] && y < lanes[i + 1]) return true; return false; };
+          let best = null, cost = Infinity;
+          // (a way round is only a way if there is room to reach it: a rock that lies between here and there, nearer
+          // than the turn takes, is in the way of the turn itself)
+          const reach = y => { const lo = Math.min(y, xtNow), hi = Math.max(y, xtNow), need = 2 + 1.6 * (hi - lo); for (let i = 0; i < lanes.length; i += 3) if (lanes[i + 1] > lo + 0.4 && lanes[i] < hi - 0.4 && lanes[i + 2] < need && lanes[i + 2] > -half * 2) return false; return true; };
+          let strict = true;
+          const tryLane = y => { if (shut(y) || (strict && !reach(y))) return; const k = Math.abs(y - xtNow) + 0.3 * Math.abs(y) - (dodge && Math.sign(y) === Math.sign(dodge) ? 0.6 : 0); if (k < cost) { cost = k; best = y; } };
+          tryLane(0);
+          for (let i = 0; i < lanes.length; i += 3) { tryLane(lanes[i] - 0.2); tryLane(lanes[i + 1] + 0.2); }
+          // (no way round that there is room to turn into: make for the nearest open ground all the same. The rock
+          // in the way brings it up short, it backs off, and then it has the room)
+          if (best === null) { strict = false; tryLane(0); for (let i = 0; i < lanes.length; i += 3) { tryLane(lanes[i] - 0.2); tryLane(lanes[i + 1] + 0.2); } }
+          if (best !== null) dodge = best;
+          c.dodge = dodge;
+          // what still stands in the way of where it is now: slow for it, in time to stop short
+          for (let i = 0; i < lanes.length; i += 3) if (xtNow > lanes[i] + 0.5 && xtNow < lanes[i + 1] - 0.5 && lanes[i + 2] > -0.5) block = Math.min(block, lanes[i + 2]);
+        }
         grade = 0;
         for (const k of [0.5, 1, 2]) grade = Math.max(grade, Math.abs(surfaceAt(v.body, _rv3.copy(here).addScaledVector(fwd, k * L / v.body.radius).normalize()) - h0) / (k * L));
         // and the fine grain over the distance it takes to slow down: the rim of a small crater, a ledge
@@ -2065,20 +2108,36 @@ export function roverDrive(world, vessel = world.active, opts = {}) {
       }
       const under = v._gnd ? v._gnd.slope || 0 : 0;          // the tilt of the ground under the wheels right now
       const ease = Math.min(clamp(1 - (Math.max(grade, under) - 0.08) / 0.25, 0.4, 1), clamp(1 - (rough - 0.2) / 0.6, 0.6, 1));
-      const want = Math.min(o.speed * ease, Math.max(Math.min(1.5, o.speed), Math.sqrt(2 * slow * Math.max(left, 0))));
+      let want = Math.min(o.speed * ease, Math.max(Math.min(1.5, o.speed), Math.sqrt(2 * slow * Math.max(left, 0))));
+      c.block = block;
+      if (block < Infinity) want = Math.min(want, Math.max(block > 1 ? 0.6 : 0, Math.sqrt(2 * slow * Math.max(block - 2.5, 0))));
       v.ctrl.drive = clamp(0.6 * (want - sp), -1, 1);
       v.ctrl.brake = sp > want * 1.4;
+      // brought up short against a boulder with no room left to turn: back off a few metres and come round it
+      if (block < 2 && sp < 0.25) jam += dt; else jam = 0;
+      // (held by a stone too low to have steered round counts too; and never on a steep slope, where reversing
+      // downhill and then braking is how a rover goes over backwards)
+      const held = stuck > 4 && BOULDERS.solid && (v.wheelParts.some(p => p._rk) || (v._pts && v._pts.some(q => q.side)));
+      if ((jam > 1.5 || held) && under < 0.3 && backT <= 0 && left > 3) { backT = 7; backs++; jam = 0; c.note('a boulder in the way: backing off to go round it'); }
+      if (backT > 0) {
+        backT -= dt;
+        v.ctrl.drive = sp < 0.8 ? -0.7 : 0; v.ctrl.brake = false;
+        if (block > 9 && backT < 5) backT = 0;
+      }
+      c.backs = backs;
       // hold the line it set out on, not just its direction: a rover pushed aside by every bump otherwise ends up
       // tens of metres from the ground it was sent across
       const xt = track ? here.dot(track.right) * v.body.radius : 0;
-      const course = heading - clamp(xt * 3, -20, 20);
-      v.ctrl.steer = clamp(2.2 * wrapPi(course * DEG - A.heading) + 0.4 * v.w.z, -1, 1) / (1 + sp / 12);
+      // (with a boulder close ahead, turn hard enough to be clear of it by the time it gets there)
+      const off = xt - dodge, sharp = block < Infinity ? Math.atan(Math.abs(off) / Math.max(block - 3, 1.5)) / DEG : 0;
+      const course = heading - Math.sign(off) * clamp(Math.max(Math.abs(off) * (dodge || block < Infinity ? 8 : 3), sharp), 0, block < Infinity ? 45 : 35);
+      v.ctrl.steer = backT > 0 ? 0 : clamp(2.2 * wrapPi(course * DEG - A.heading) + 0.4 * v.w.z, -1, 1) / (1 + sp / 12);
       v.ctrl.pitch = 0; v.ctrl.yaw = 0; v.ctrl.roll = 0;
       // thrown clear of the ground by a crest: the chassis' reaction wheels hold it level until the tyres are back
       v.ctrl.sas = !v.landed && v.wheelsOnGround < 2;
       if (sp < 0.15) stuck += dt; else stuck = 0;
       if (left <= 0) { c.phase = 'stop'; c.note(`drove ${c.driven.toFixed(0)} m`); }
-      else if (stuck > 40) return c.finish(false, `stuck after ${c.driven.toFixed(0)} m`);
+      else if (stuck > 40 || backs > 12) return c.finish(false, `stuck after ${c.driven.toFixed(0)} m`);
       else if (!(v.resources.elec && v.resources.elec.amount > 0.01)) return c.finish(false, `out of charge after ${c.driven.toFixed(0)} m`);
       else if (world.ut - t0 > (o.timeout || 60 + o.distance / Math.max(0.5, o.speed) * 6)) return c.finish(false, `too slow: ${c.driven.toFixed(0)} m`);
     } else if (c.phase === 'stop') {

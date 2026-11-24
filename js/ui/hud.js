@@ -448,12 +448,15 @@ export function createHud(app, act) {
   const mkMode = (mode, tip, glyph, cls = '') => {
     let inner;
     if (glyph) { inner = el('canvas', { attrs: { width: 36, height: 36 } }); drawGlyph(inner.getContext('2d'), glyph, 18, 18, 11.5); }
-    else inner = el('span', { text: 'HOLD' });
+    else inner = el('span', { text: mode === 'belly' ? 'BELLY' : 'HOLD' });
     const b = el('button', { class: 'fl-sasmode ' + cls, tip: 'SAS: ' + tip, attrs: { type: 'button', 'data-sas': mode }, on: { click: blurClick(() => act.setSasMode(mode)) } }, inner);
     modeBtns[mode] = b; return b;
   };
   const modes = el('div', { class: 'fl-modes', data: { hud: 'sasmodes' } }, SAS_BUTTONS.map(([m, tip, glyph]) => mkMode(m, tip, glyph)));
   const tmodes = el('div', { class: 'fl-tmodes', data: { hud: 'targetmodes' } }, TARGET_SAS_BUTTONS.map(([m, tip, glyph]) => mkMode(m, tip, glyph, 'tgt')));
+  // a ship with body flaps (it falls flat on its belly): the hold that lays it across the wind
+  const bellyBtn = mkMode('belly', 'Belly to the wind: fall flat on the flaps. Pitch keys then set the angle to the air', null, 'belly');
+  tmodes.append(bellyBtn);
   const sasPanel = el('div', { class: 'fl-sas' }, el('span', { class: 'sw-label', text: 'SAS' }), modes, tmodes);
   // throttle gauge (left edge of the ball)
   const thrFill = el('i'), thrKnob = el('b');
@@ -1163,6 +1166,7 @@ export function createHud(app, act) {
     const shown = c.sasMode === 'srfPrograde' ? 'prograde' : c.sasMode === 'srfRetrograde' ? 'retrograde' : c.sasMode;
     for (const m in modeBtns) { setCls(modeBtns[m], 'on', c.sas && shown === m); setCls(modeBtns[m], 'off', !c.sas || (m === 'maneuver' && !v.nodes.length) || (!ti && (m === 'target' || m === 'antiTarget' || m === 'relPrograde' || m === 'relRetrograde'))); }
     setCls(tmodes, 'sw-hidden', v.type === 'eva');
+    setCls(bellyBtn, 'sw-hidden', !(v.body.atmo && v.partList && v.partList.some(p => p.def.flap)));
     const pr = Math.round(state.pitch || 0), hd = state.heading !== undefined ? Math.round(state.heading) % 360 : 0;
     setText(nHdg, state.heading !== undefined ? String(hd).padStart(3, '0') + '°  ' + (pr > 0 ? '+' : pr < 0 ? '−' : '') + Math.abs(pr) + '°' : '');
     setText(nAttH, String(hd).padStart(3, '0') + '°'); setText(nAttP, (pr > 0 ? '+' : pr < 0 ? '−' : '') + Math.abs(pr) + '°');

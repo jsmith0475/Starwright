@@ -25,6 +25,7 @@ import { World } from './world.js';
 import { Craft, shearwaterShip, deepwell } from './craft.js';
 import { partDef } from './parts.js';
 import { surfaceAt } from './vessel.js';
+import { BOULDERS, bouldersNear } from './boulders.js';
 import { Career, SCENARIO_SAVE_KEY } from './career.js';
 
 export { SCENARIO_SAVE_KEY };
@@ -121,14 +122,30 @@ export function flatSpot(b, near, { reach = 30000, samples = 400, wide = 60 } = 
 /**
  * A place to drive: a start point and compass heading (degrees, 90 = east) from which the ground stays gentle for
  * `length` metres. Searches a fixed spiral of spots round `near` and eight headings from each, scoring a run by its
- * steepest stretch, so every call picks the same route. → { dir, heading, slope (worst rise / run on the way) }
+ * steepest stretch, so every call picks the same route. A route whose first `clear` metres (320) have a boulder on
+ * them is taken only when the clear ones are a tenth steeper. → { dir, heading, slope (worst rise / run on the way), blocked }
  */
 export function driveRoute(b, near, opts = {}) {
   // first among spots that are themselves level (a parked rover should stand square); any spot if there is none
   return routeSearch(b, near, { ...opts, startFlat: opts.startFlat ?? 0.08 }) || routeSearch(b, near, { ...opts, startFlat: 0.3 })
     || { dir: near.clone().normalize(), heading: 90, slope: slopeAt(b, near.clone().normalize(), 6) };
 }
-function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, step = 20, good = 0.05, startFlat = 0.08 } = {}) {
+/** Is there a boulder too tall to roll over on the strip `half` metres either side of the line from d along `along`, from 6 m behind to `length` m ahead? */
+const _rocks = [];
+function rocksOnRun(b, d, along, side, length, half = 2.2) {
+  const R = b.radius;
+  for (let x0 = 0; x0 <= length; x0 += 40) {
+    const c = d.clone().addScaledVector(along, (x0 + 14) / R);
+    for (const k of bouldersNear(b, c.x, c.y, c.z, 30, _rocks)) {
+      if (k.top < 0.15) continue;
+      const ex = k.ox - d.x * R, ey = k.oy - d.y * R, ez = k.oz - d.z * R;
+      const x = ex * along.x + ey * along.y + ez * along.z, y = ex * side.x + ey * side.y + ez * side.z, wide = Math.max(k.a, k.c);
+      if (x > -6 - wide && x < length + wide && Math.abs(y) < half + wide) return true;
+    }
+  }
+  return false;
+}
+function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, step = 20, good = 0.05, startFlat = 0.08, clear = 320 } = {}) {
   const base = near.clone().normalize();
   const frame = d => { const east = new Vector3().crossVectors(Y, d); if (east.lengthSq() < 1e-9) east.set(0, 0, -1); east.normalize(); return { east, north: new Vector3().crossVectors(d, east) }; };
   const f0 = frame(base);
@@ -142,7 +159,7 @@ function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, ste
     for (let h = 0; h < 360; h += 45) {
       const along = f.north.clone().multiplyScalar(Math.cos(h * Math.PI / 180)).addScaledVector(f.east, Math.sin(h * Math.PI / 180));
       let worst = 0;
-      const limit = () => (best ? best.slope : 1);
+      const limit = () => (best ? best.score : 1);
       for (let x = 0; x <= length + 40 && worst < limit(); x += step) {
         const q = d.clone().addScaledVector(along, x / b.radius).normalize();
         if (b.ocean && typeof b.isWater === 'function' && b.isWater(q)) { worst = 9; break; }
@@ -160,9 +177,13 @@ function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, ste
           }
         }
       }
-      if (!best || worst < best.slope) best = { dir: d, heading: h, slope: worst };
+      // and the first stretch free of boulders (core/boulders.js): the drive should not begin with a rock in the way
+      // (a route with one counts as a tenth steeper than it is: it is taken only when the clear ones are worse)
+      const blocked = worst < limit() && BOULDERS.solid && clear > 0 && rocksOnRun(b, d, along, new Vector3().crossVectors(d, along).normalize(), Math.min(length, clear));
+      const score = worst + (blocked ? 0.1 : 0);
+      if (!best || score < best.score) best = { dir: d, heading: h, slope: worst, blocked, score };
     }
-    if (best && best.slope <= good) break;
+    if (best && best.score <= good) break;
   }
   return best;
 }
@@ -678,6 +699,26 @@ const DEFS = [
     },
   },
   {
+    id: 'belly-first', name: 'Belly First', world: 'verda', situation: 'In orbit, cargo delivered', difficulty: 'Hard', start: 'flight',
+    goal: 'Bring Shearwater down from orbit on its four flaps and set it between the arms of the catch tower.',
+    brief: 'Shearwater circles Verda at 100 km with its bay empty and 26 tonnes of propellant left: enough for one braking burn and one landing burn, with little to spare. It has no legs. It falls flat on its belly, the four flaps holding it there and the tiles taking the heat, then swings upright in the last kilometres and comes down on its engines between the arms.',
+    tips: ['Open the Autopilot panel and pick Return to the tower. Watch one before you try it by hand: the fall takes about fifteen minutes and the last thirty seconds are the busy ones.', 'By hand: the Belly hold in the SAS row lays the ship flat to the wind. Pitching the nose down a little carries it farther along its path, and pitching up drops it short.', 'The ship cannot hover for long. The landing burn starts near 1.5 km up and there is propellant for one try.'],
+    objectives: [
+      { id: 'air', text: 'Fall belly first below 30 km', test: w => ships(w).some(v => v.body.id === 'verda' && v.crew.length && !v.landed && altOf(v) < 30000 && v.situation !== 'prelaunch') },
+      { id: 'catch', text: 'Be caught by the tower arms', test: w => ships(w).some(v => v.crew.length > 0 && v.landed && v.surface && v.surface.held === 'tower') },
+    ],
+    build(ctx) {
+      const b = body('verda'), w = ctx.world;
+      const st = orbitState(b, { pe: 100000, phase: 1.5 }, w.ut);
+      const pro = st.vel.clone().normalize(), out = st.pos.clone().normalize();
+      const v = w.spawn(shearwaterShip({ cargo: false }), { crew: ['Juno', 'Bram'], body: b, pos: st.pos, vel: st.vel.clone(), q: attitude(pro, out) });
+      setFuel(v, 0.16);
+      readyInSpace(v);
+      v.ctrl.rcs = true;
+      return v;
+    },
+  },
+  {
     id: 'pell-descent', name: 'Above Pell', world: 'pell', situation: 'In orbit of Pell', difficulty: 'Medium', start: 'flight',
     goal: 'Take the Pellfarer down from a 30 km orbit and land on Pell.',
     brief: 'The Pellfarer circles Pell at 30 km with its transfer stage still attached and a third full. The grey plains are below.',
@@ -810,7 +851,7 @@ const DEFS = [
     id: 'fire-and-silk', name: 'Fire and Silk', world: 'verda', situation: 'Falling back into the air', difficulty: 'Easy', start: 'flight',
     goal: 'Bring the Larkspur capsule through re-entry and down under its parachute.',
     brief: 'The engine is gone and the capsule is falling toward the air at well over two kilometres a second. Juno has a heat shield, a parachute, and about four minutes.',
-    tips: ['Point the heat shield into the wind: SAS is set to hold retrograde for you.', 'Do nothing while it glows. The air does the braking.', 'Below about 5 km and 250 m/s press Space to open the parachute.'],
+    tips: ['Point the heat shield into the wind: SAS is set to hold retrograde for you.', 'Do nothing while it glows. The air does the braking.', 'Once the glow fades press Space to arm the parachute. Its drogue comes out first, then the main below Mach 0.4.'],
     objectives: [
       { id: 'air', text: 'Survive the heat down to 20 km', test: w => ships(w).some(v => v.body.id === 'verda' && v.crew.length && !v.landed && altOf(v) < 20000) },
       { id: 'home', text: 'Land or splash down on Verda', test: T.home() },

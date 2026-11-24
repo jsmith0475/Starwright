@@ -35,6 +35,20 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'shearwater-close-up', date: '2026-11-24', title: 'Shearwater up close',
+    text: 'Under the booster and the ship the many small flames now merge into one long flame sized by the thrust being made. The tower service arm rests on the hull until the engines light, and two docked Flank Ports are joined by a collar with latches that frosts over while propellant flows.' },
+  { id: 'ship-belly-return', date: '2026-11-24', title: 'Shearwater comes home on its belly',
+    text: 'The ship now returns from orbit: it falls flat on its belly with four flaps steering, flips upright near 3 km and is caught by the tower arms. Try the new scenario Belly First, pick Return to the tower in the Autopilot panel, or hold it yourself with the new BELLY button in the SAS row.' },
+  { id: 'pad-mount-and-arms', date: '2026-11-24', title: 'A launch mount, hold-downs and arms that reach',
+    text: 'A rocket on the pad no longer rests on its engine bell. It stands on a launch mount fitted to it, held by clamps on the rim above the engine, with the bell hanging free over the flame opening. The tower\'s arms now end on the hull, with a white room at the capsule. The arms swing clear when the engines light and the clamps let go at lift-off. The pad\'s pipes are round, flanged and connected at both ends.' },
+  { id: 'parts-joined-up', date: '2026-11-24', title: 'Struts, hoses and solar wings that fit',
+    text: 'Brace Struts and Sip Fuel Lines are made to length to the booster they face, up to 4 m away, and a strut braces exactly what it is drawn touching. Folding solar wings and fans now turn on their booms to face the sun, and the rover and close-up rocks are sharper.' },
+  { id: 'solid-boulders', date: '2026-11-24', title: 'Boulders are solid',
+    text: 'Rovers, landers and Pips no longer pass through boulders. A wheel rolls over a low stone and is stopped by a tall one, a leg that comes down on a rock stands on it, and hitting one fast breaks things. The landing autopilot avoids ground with a boulder on it, and the rover cruise control steers round them.' },
+  { id: 'drogue-parachutes', date: '2026-11-24', title: 'Drogues, and parachutes with real limits',
+    text: 'Every main parachute pack now carries a small drogue. It comes out first, as fast as Mach 3, and slows the craft until the main can open below Mach 0.4, so Hopper I comes home at 4 g where it used to take 18. Lines are as strong as real ones, and a craft far too heavy for its parachute will tear it. After touchdown or splashdown the canopy no longer vanishes: it topples over and settles beside the craft.' },
+  { id: 'splashdown-spray-foam', date: '2026-11-24', title: 'A splashdown that looks like one',
+    text: 'A capsule that comes down in the sea now throws up a crown of spray that falls back, and a ring of foam runs out over the water and breaks up. Foam washes round the hull at the waterline for as long as it floats. Once it has settled it rides a slow swell, rising and tilting a little, instead of sitting as still as if it stood on rock.' },
   { id: 'reentry-glow', date: '2026-11-24', title: 'A re-entry glow without the hard edge',
     text: 'The glow of re-entry used to be a smooth cone with a hard-rimmed disc at its widest ring. It is now a hot layer on the face that meets the air and a streaked tail that thins and tears away, with no outline. The Entry box also had a row so long it pushed its numbers off the edge; that is now two rows, So far and Ablator lost.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',

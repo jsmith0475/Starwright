@@ -46,7 +46,7 @@ test('legacy parts keep their ids and numbers', () => {
   assert.deepEqual(PARTS.eng_goshawk.engine, { type: 'liquid', thrust: 220, ispVac: 305, ispAtm: 265, gimbal: 3.5 });
   assert.deepEqual(PARTS.tank_m200.res, { fuel: 1000 });
   assert.deepEqual(PARTS.legs.legs, { reach: 1.1, spread: 0.9, stroke: 0.32 });      // stroke: the suspension's travel (landing-leg suspension)
-  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxMach: 1.5, strength: 500 });
+  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxMach: 0.4, strength: 150, drogue: { area: 10, maxMach: 3, strength: 150, minPressure: 0.0002 } });
   assert.deepEqual(PARTS.solar.solar, { rate: 1.6, span: 2.4 });
 });
 
@@ -58,7 +58,7 @@ test('every part has a valid base schema', () => {
     assert.ok(typeof d.desc === 'string' && d.desc.length >= 10, id + ' desc');
     assert.ok(d.hidden ? d.cat === 'internal' : CAT_IDS.has(d.cat), id + ' cat ' + d.cat);
     assert.ok(typeof d.tech === 'string' && /^[a-z][a-z0-9_]*$/.test(d.tech), id + ' tech');
-    assert.ok(num(d.cost), id + ' cost'); assert.ok(pos(d.mass) && d.mass < 50, id + ' mass');
+    assert.ok(num(d.cost), id + ' cost'); assert.ok(pos(d.mass) && d.mass < 100, id + ' mass');      // (the heaviest is a loaded Shearwater cargo bay, 77 t)
     assert.ok(SHAPES.has(d.shape), id + ' shape ' + d.shape);
     assert.ok(pos(d.tolerance), id + ' tolerance'); assert.ok(d.maxTemp >= 800 && d.maxTemp <= 4000, id + ' maxTemp');
     assert.ok(d.variant === undefined || typeof d.variant === 'string', id + ' variant');

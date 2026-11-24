@@ -194,10 +194,64 @@ export function sideport(def, g, pb) {
   if (pb.med) for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + 0.39; pb.cyl(0.035, 0.035, 0.05, 0, P.gun, 'metal', 6, false, mul(M(x1 + 0.01, Math.cos(a) * R * 1.01, Math.sin(a) * R * 1.01), RX)); }
 }
 
+/**
+ * What joins two docked Flank Ports (drawn by the flight scene, not part of either port's mesh): a ribbed bellows
+ * collar over both latch rings, a clamp band at each end and six latch bars closed across the joint.
+ * → { object, set(a, b), flow(on, pumping, dt) }. `object` goes in the craft's frame. set(a, b): the two ports'
+ * centres there (Vector3); the collar is laid between them and made as long as the gap between their faces, which is
+ * measured from those two points (`gap`, metres). flow(on, pumping, dt): `on` while a transfer is set up across the
+ * line, `pumping` while propellant is moving: the bellows frosts over, and pulses slowly while it flows.
+ */
+export function flankLink(def) {
+  const R = Math.min(def.h, def.t) * 0.42, lap = 0.2, ribs = 7, pts = [];
+  for (let i = 0; i <= ribs * 4; i++) { const u = i / (ribs * 4); pts.push(new THREE.Vector2(R * (1.245 + 0.055 * Math.cos(u * ribs * TAU)), u - 0.5)); }
+  const turn = g => g.rotateZ(-Math.PI / 2);                    // +Y of a primitive along +X, the line from port to port
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x3b4047, roughness: 0.8, metalness: 0.05, emissive: 0x9fc4ff, emissiveIntensity: 0, side: THREE.DoubleSide });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8b949e, roughness: 0.45, metalness: 0.7 });
+  const amber = new THREE.MeshStandardMaterial({ color: 0xe59a2f, roughness: 0.6, metalness: 0.2 });
+  const object = new THREE.Group(); object.name = 'flankLink';
+  const bellows = new THREE.Mesh(turn(new THREE.LatheGeometry(pts, 28)), rubber);
+  const bandGeo = turn(new THREE.CylinderGeometry(R * 1.335, R * 1.335, 0.04, 28, 1, true)), bands = [-1, 1].map(() => new THREE.Mesh(bandGeo, metal));
+  bands.forEach(b => { b.material.side = THREE.DoubleSide; });
+  const barGeo = new THREE.BoxGeometry(1, 0.05, 0.07), hookGeo = new THREE.BoxGeometry(0.06, 0.09, 0.13), bars = [], hooks = [];
+  for (let i = 0; i < 6; i++) {
+    const an = (i + 0.5) * TAU / 6, grp = new THREE.Group(); grp.rotation.x = an;
+    const bar = new THREE.Mesh(barGeo, metal); bar.position.y = R * 1.36; grp.add(bar); bars.push(bar);
+    for (const sgn of [-1, 1]) { const h = new THREE.Mesh(hookGeo, amber); h.position.y = R * 1.36; h.userData.sgn = sgn; grp.add(h); hooks.push(h); }
+    object.add(grp);
+  }
+  object.add(bellows, ...bands);
+  const cold = new THREE.Color(0x3b4047), frost = new THREE.Color(0xe8f2fb), X = new THREE.Vector3(1, 0, 0), d = new THREE.Vector3();
+  let chill = 0, t = 0;
+  const api = {
+    object, gap: 0,
+    set(a, b) {
+      d.copy(b).sub(a);
+      const dist = d.length(), gap = api.gap = Math.max(0, dist - def.rw), len = gap + lap * 2;
+      object.position.copy(a).addScaledVector(d, 0.5);
+      if (dist > 1e-6) object.quaternion.setFromUnitVectors(X, d.multiplyScalar(1 / dist));
+      bellows.scale.x = len;
+      bands[0].position.x = -len / 2 + 0.03; bands[1].position.x = len / 2 - 0.03;
+      for (const bar of bars) bar.scale.x = len - 0.02;
+      for (const h of hooks) h.position.x = h.userData.sgn * (len / 2 - 0.05);
+    },
+    flow(on, pumping, dt) {
+      t += dt; chill += ((on ? 1 : 0) - chill) * Math.min(1, dt * 0.8);
+      rubber.color.copy(cold).lerp(frost, chill);
+      rubber.emissiveIntensity = chill * (pumping ? 0.1 + 0.1 * (0.5 + 0.5 * Math.sin(t * 2.6)) : 0.03);
+    },
+    dispose() { bellows.geometry.dispose(); bandGeo.dispose(); barGeo.dispose(); hookGeo.dispose(); rubber.dispose(); metal.dispose(); amber.dispose(); },
+  };
+  return api;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Flaps: a flat tapered slab hinged along its root. One face is steel, the other tiled, and which is which
 // depends on the side of the ship it hangs from, so both hands are built ('sideA': tiles on −Z, 'sideB': on +Z)
 // and partmesh shows the one whose tiles face the craft's belly.
+// The plate outboard of the hinge line is its own group in each hand ('bladeA' / 'bladeB', origin on the hinge
+// line), which partmesh turns about Y by the fold angle. The strip inboard of the hinge (it reaches into the hull),
+// the hinge fairing and the lugs stay with the hull.
 // ---------------------------------------------------------------------------------------------
 function flapOutline(def) {
   const { h, rw, variant } = def, x0 = -rw / 2 - 0.3, x1 = rw / 2, yb = -h / 2, yt = h / 2, fore = variant === 'fore';
@@ -209,25 +263,35 @@ function flapOutline(def) {
   pts.push(lead, [x0, yt]);
   return pts;
 }
+/** Where a flap's hinge line runs in the part's frame: parallel to Y at this x (z = 0). */
+export function flapHingeX(def) { return -def.rw / 2 + def.t * 0.5 * 0.55; }
 export function flap(def, g, pb) {
-  const { h, rw, t } = def, x0 = -rw / 2, th = Math.min(t * 0.5, 0.16), pts = flapOutline(def), hr = t * 0.5;
+  const { h, rw, t } = def, x0 = -rw / 2, th = Math.min(t * 0.5, 0.16), pts = flapOutline(def), hr = t * 0.5, xh = flapHingeX(def);
+  // the outline cut along the hinge line: the root strip (first and last point are its hull-side corners) and the blade,
+  // which is given from the hinge line
+  const n = pts.length, k = (xh - pts[0][0]) / (pts[1][0] - pts[0][0]), yh = pts[0][1] + (pts[1][1] - pts[0][1]) * k;
+  const root = [pts[0], [xh, yh], [xh, pts[n - 1][1]], pts[n - 1]];
+  const blade = [[0, yh], ...pts.slice(1, n - 1).map(p => [p[0] - xh, p[1]]), [0, pts[n - 1][1]]];
   for (const [name, s] of [['sideA', 1], ['sideB', -1]]) {
-    const grp = sub(g, name), sp = new PB(pb.q), steelT = th * 0.4, tileT = th - steelT;
+    const grp = sub(g, name), sp = new PB(pb.q), bp = new PB(pb.q), steelT = th * 0.4, tileT = th - steelT;
     // tiles take the belly face and wrap the edges; the steel skin lies on the lee face
-    sp.poly(pts, tileT, 0.02, TILE, M(0, 0, -s * (th / 2 - tileT / 2)), 'hextile');
-    sp.poly(pts, steelT, 0.015, STEEL, M(0, 0, s * (th / 2 - steelT / 2 + 0.004)), 'steel');
+    for (const [b, o] of [[sp, root], [bp, blade]]) {
+      b.poly(o, tileT, 0.02, TILE, M(0, 0, -s * (th / 2 - tileT / 2)), 'hextile');
+      b.poly(o, steelT, 0.015, STEEL, M(0, 0, s * (th / 2 - steelT / 2 + 0.004)), 'steel');
+    }
     // hinge fairing along the root, steel above and tiled below
     const hp = [[0.002, -h / 2 + 0.02], [hr * 0.8, -h / 2 + hr * 1.2], [hr, -h / 2 + hr * 2.6], [hr, h / 2 - hr * 3], [hr * 0.7, h / 2 - hr * 1.1], [0.002, h / 2 - 0.02]];
-    const mh = M(x0 + hr * 0.55, 0, 0), sg = Math.max(4, sp.seg(hr) / 2);
+    const mh = M(xh, 0, 0), sg = Math.max(4, sp.seg(hr) / 2);
     sp.rev(hp.map((p, i) => [p[0], p[1], i ? undefined : STEEL]), 'steel', { m: mh, seg: sg, a0: s > 0 ? 0 : Math.PI, a1: s > 0 ? Math.PI : TAU, crease: 0.7 });
     sp.rev(hp.map((p, i) => [p[0], p[1], i ? undefined : TILE]), 'hextile', { m: mh, seg: sg, a0: s > 0 ? Math.PI : 0, a1: s > 0 ? TAU : Math.PI, crease: 0.7, uRep: 1, vTile: 1 });
     if (sp.med) {
-      // stiffeners on the steel face and the hinge lugs
-      const xr = x0 + hr * 1.5;
-      for (const u of [0.22, 0.5, 0.74]) { const y = lerp(-h / 2, h / 2, u) * 0.8; sp.box(rw * 0.52, 0.05, 0.03, STEEL_DK, M(xr + rw * 0.27, y, s * (th / 2 + 0.012), 0, 0, -0.12), 'steel'); }
+      // stiffeners on the steel face (they turn with the blade) and the hinge lugs
+      const xr = x0 + hr * 1.5 - xh;
+      for (const u of [0.22, 0.5, 0.74]) { const y = lerp(-h / 2, h / 2, u) * 0.8; bp.box(rw * 0.52, 0.05, 0.03, STEEL_DK, M(xr + rw * 0.27, y, s * (th / 2 + 0.012), 0, 0, -0.12), 'steel'); }
       for (const u of [0.14, 0.5, 0.86]) sp.rbox(hr * 1.5, 0.3, hr * 2.25, 0.02, STEEL_DK, M(x0 + hr * 0.7, lerp(-h / 2, h / 2, u) * 0.86, 0), 'steel');
     }
     sp.build(grp);
+    bp.build(sub(grp, s > 0 ? 'bladeA' : 'bladeB', xh, 0, 0));
     if (s < 0) grp.visible = false;
   }
 }

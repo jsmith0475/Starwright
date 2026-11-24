@@ -1435,6 +1435,7 @@ function shearwater() {
   for (const a of [Math.PI / 2, Math.PI * 3 / 2]) if (c.attachRadial('pin_catch', top.id, topY - 3.4, a, 1).length !== 1) throw new Error('stock craft: catch pin');
   if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
   if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
+  if (c.attachRadial('pin_catch', s[0].id, s[0].pos.y, 0, 2).length !== 2) throw new Error('stock craft: ship catch pins');
   shearwaterDockingFit(c, ship);
   c.autoStage();                                   // [33 engines] [ship engines + hot-staging ring]
   return c;
@@ -1447,11 +1448,12 @@ function shearwaterDockingFit(c, tank) {
   for (const y of [top - 1.2, top - 13.5]) for (const a of [LEE - 1.0, LEE + 1.0]) if (c.attachRadial('rcs_xxl', tank.id, y, a, 1).length !== 1) throw new Error('stock craft: thruster pod');
 }
 /** The Shearwater ship on its own, as it is once in orbit (scenarios start with it there). */
-export function shearwaterShip() {
+export function shearwaterShip({ cargo = true } = {}) {
   const c = new Craft('Shearwater');
   const [pod] = c.setRoot('pod_shearwater');
-  const s = stackDown(c, pod, ['bay_shearwater', 'tank_xxl_ship', 'eng_peregrine6']);
+  const s = stackDown(c, pod, [cargo ? 'bay_shearwater' : 'bay_shearwater_empty', 'tank_xxl_ship', 'eng_peregrine6']);
   const ship = s[1];
+  if (c.attachRadial('pin_catch', s[0].id, s[0].pos.y, 0, 2).length !== 2) throw new Error('stock craft: ship catch pins');
   if (c.attachRadial('flap_aft', ship.id, ship.pos.y - 3.5, 0, 2).length !== 2) throw new Error('stock craft: aft flaps');
   if (c.attachRadial('flap_fore', pod.id, pod.pos.y - 1.6, 0, 2).length !== 2) throw new Error('stock craft: forward flaps');
   shearwaterDockingFit(c, ship);

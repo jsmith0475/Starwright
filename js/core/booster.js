@@ -139,7 +139,7 @@ export function groundDistance(body, a, b) {
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, thrustScale: 1, steerBurn: 0, ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target, site: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -149,6 +149,9 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const hold = m => { v.ctrl.sas = true; v.ctrl.sasMode = m; };
   const noseError = d => ax.set(0, 1, 0).applyQuaternion(v.q).angleTo(d);
   const cg = () => v.baseHeight || 0;
+  // opts.thrustScale: what the engines give low in the air as a share of what they give in space (Vessel.enginePower
+  // speaks for space). A booster's engines lose a few per cent; a ship lighting wide vacuum bells loses a third.
+  const enginePower = () => { const p = v.enginePower(); return o.thrustScale === 1 ? p : { ...p, thrust: p.thrust * o.thrustScale, ve: p.ve * o.thrustScale }; };
   // opts.floor (m): the height the stage is brought down to, above the ground. A stage that is to be caught is flown
   // to the arms, not to the ground (js/core/tower.js): every height below is measured from there.
   const ralt = () => v.radarAlt - o.floor;
@@ -158,7 +161,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const wy = TAU / body.rotPeriod;
   /** Unpowered prediction from now; fills c.miss and `miss` (inertial vector from the impact point to the target, level). */
   const predict = (free = false) => {
-    const pw = v.enginePower();
+    const pw = enginePower();
     // (the aim counts on half of the burn's reserve, entryExtra, being used: the burn can then end early or late to
     // land its fall on the target, whichever way it is off)
     const plan = st.plan && !st.entryDone && !free ? { flux: st.plan.flux, speed: st.plan.speed - 0.5 * o.entryExtra } : null;
@@ -193,7 +196,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
   const planEntry = () => {
     st.tPlan = world.ut;
     if (st.entryDone) return;
-    const pw = v.enginePower(), drag = v.axialDragTable(true);
+    const pw = enginePower(), drag = v.axialDragTable(true);
     const free = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag, floor: cg() });
     st.heat = v.axialHeatRatio(free.maxFlux, true, free.maxFluxRec);
     if (st.heat <= o.heatLimit || !(pw.thrust > 0)) { st.plan = null; return; }
@@ -210,7 +213,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
   };
   /** Where a burn against the fall at `throttle`, started now, would stop: metres above the ground, or −1 if it would not. */
   const stopAlt = throttle => {
-    const { thrust, ve } = v.enginePower();
+    const { thrust, ve } = enginePower();
     const pb = predictFall(body, v.pos, v.vel, v.mass, world.ut, { drag: v.axialDragTable(true), floor: cg(), thrust, ve, throttle, dryMass: v.mass * 0.3, maxT: 120 });
     st.stop = pb;
     return pb.stopped ? pb.alt - cg() - o.floor : -1;
@@ -240,7 +243,7 @@ export function boosterRecovery(world, vessel, opts = {}) {
     }
     srf.set(v.vel.x - wy * v.pos.z, v.vel.y, v.vel.z + wy * v.pos.x);
     const speed = srf.length(), vs = srf.dot(up);
-    const power = v.enginePower();
+    const power = enginePower();
     if (!(power.thrust > 0) && c.phase !== 'coast' && c.phase !== 'init') {
       if (c.phase === 'final' || c.phase === 'landing') { v.ctrl.throttle = 0; hold('srfRetrograde'); if (!st.dry) { st.dry = true; c.note('out of propellant'); } return; }
     }
@@ -392,6 +395,15 @@ export function boosterRecovery(world, vessel, opts = {}) {
         dir.copy(srf).negate();
         if (speed < 80) dir.addScaledVector(up, 15).addScaledVector(_t.copy(srf).addScaledVector(up, -vs), -1.5);   // and kill the drift
         dir.normalize();
+        if (o.steerBurn > 0 && speed > 12 && e.lengthSq() > 1) {
+          // opts.steerBurn (rad, off by default): lean the burn to stop over the target. Left alone the level speed
+          // dies away with the rest and carries the stage half of (level speed x time to stop) farther; the push that
+          // makes up the difference in the time left, as a share of the thrust, is the lean.
+          const aT = Math.max(need, 0.3) * acc, tgo = Math.max(3, speed / Math.max(aT - body.gm / (R * R), 2));
+          _t.copy(srf).addScaledVector(up, -vs).multiplyScalar(-0.5 * tgo).add(e).multiplyScalar(2 / (tgo * tgo * aT));
+          const m = _t.length(); if (m > o.steerBurn) _t.multiplyScalar(o.steerBurn / m);
+          dir.add(_t).normalize();
+        }
         point(dir);
         const err = noseError(dir);
         v.ctrl.throttle = err < 0.5 ? clamp(need, 0.05, 1) : 0.05;
