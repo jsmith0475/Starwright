@@ -133,7 +133,7 @@ test('the stock Shearwater flies to an 80 km orbit with enough left to need the 
   const st = c.stats(home);
   assert.ok(st[0].twr > 1.3 && st[0].twr < 1.6, 'lift-off thrust to weight ' + st[0].twr);
   const w = new World(), v = w.launch(c, { crew: ['Ada', 'Bo'] });
-  near(v.mass / 1000, 769, 3, 'lift-off mass, t');
+  near(v.mass / 1000, 772, 3, 'lift-off mass, t');
   const ctl = AP.ascentProgram(w, { targetAlt: 80000, useWarp: false, recover: { target: SYSTEM.sites.landing.dir } });
   AP.fly(w, ctl, { maxSim: 3000 });
   assert.ok(ctl.done && !ctl.failed, 'reaches orbit: ' + (ctl.log || []).slice(-1).map(l => l.msg));

@@ -5,11 +5,11 @@ A two-stage rocket on methane and liquid oxygen, modelled on SpaceX's Starship (
 its size to suit Starwright's small worlds. The names are our own: the ship is the
 **Shearwater**, the booster is the **Stalwart**, the engine is the **Peregrine**.
 
-It is being built in steps. **Two are in the game: the rocket, and the tower that launches and
-catches it.** The stack stands on the tower's mount, flies to orbit on its own two liquids and
-hot-stages, and the booster flies back and is caught by its two pins. The propellant depot, the
-transfer of propellant in orbit and the ship's belly-first return come next (see "What is not
-built yet").
+It is being built in steps. **Three are in the game: the rocket, the tower that launches and
+catches it, and refuelling in orbit.** The stack stands on the tower's mount, flies to orbit on
+its own two liquids and hot-stages, and the booster flies back and is caught by its two pins. In
+orbit the ship docks side by side with a propellant depot and is filled up through a propellant
+line. The ship's belly-first return comes next (see "What is not built yet").
 
 ## What is new in the game because of it
 
@@ -51,20 +51,20 @@ Flown by the ascent assist to an 80 km orbit of Verda with two crew and a loaded
 | | |
 |---|---|
 | Height | 75 m (ship 32 m, booster 43 m), 5.6 m across |
-| Lift-off mass | 769 t |
+| Lift-off mass | 772 t |
 | Lift-off thrust to weight | 1.43 |
 | Highest air pressure on the way up (max Q) | 19.9 kPa |
 | Highest acceleration | 3.1 g |
 | Staging | 104 s after lift-off, 29.5 km up, 1,110 m/s |
 | Propellant left in the booster at staging | 61 t of 400 t |
 | Orbit reached | 80.3 by 79.4 km |
-| Propellant left in the ship in orbit | 69 t of 160 t (43 %) |
-| Delta-v left in the ship in orbit | 1,480 m/s |
+| Propellant left in the ship in orbit | 67 t of 160 t (42 %) |
+| Delta-v left in the ship in orbit | 1,415 m/s |
 | Delta-v of the ship with full tanks | 2,800 m/s |
 
 The last three rows are the reason for the depot. Leaving low orbit for Pell, braking into
 orbit there, leaving again and keeping about 250 m/s for the landing burn at home costs about
-2,020 m/s. The ship arrives with 1,480. Filled up in orbit it has 2,800.
+2,020 m/s. The ship arrives with 1,415. Filled up in orbit it has 2,750.
 
 ## The tower and the catch
 
@@ -114,8 +114,8 @@ game says which limit it broke, and the stage goes on down onto the mount.
 | Landing burn lights | 1,920 m up, 334 m/s |
 | Off the mount when the fall is stopped | 2 m |
 | Caught | 324 s after lift-off, at 1.4 m/s, 2 cm from the mount's axis |
-| Propellant left in the booster | 3 t |
-| Ship in orbit | 44 % full, 1,495 m/s left |
+| Propellant left in the booster | 2.4 t |
+| Ship in orbit | 42 % full, 1,415 m/s left |
 
 **Honest limits of the catch.**
 
@@ -128,16 +128,76 @@ game says which limit it broke, and the stage goes on down onto the mount.
   pad from 33 engines.
 - A caught booster cannot be put back on the mount, refuelled or flown again yet.
 
+## Refuelling in orbit
+
+The ship reaches orbit 42 % full. To go anywhere it has to be filled up, and that is done at a
+**propellant depot**: *Deepwell*, an avionics nose on two long steel tanks holding 400 t of liquid
+oxygen and methane, with no engines. The scenario **Topping Up** starts with Shearwater 150 m
+from it, 100 km up.
+
+**Docking side by side.** Both carry a **Flank Port**: a docking port that looks straight out of
+the side of the hull. On the ship it is high on the steel side of the tank, opposite the tiles.
+Two Flank Ports latch when their faces meet within 25 cm, slower than 1.5 m/s, facing each
+other to within 15°, and with the two hulls parallel to within 15°, nose by nose or nose to
+tail. The ships end up 7 m apart, axis to axis. The docking assist (Dock panel) flies it: it
+turns the ship so the ports face each other with the hulls parallel, moves to a point 20 m out
+on the depot's port axis, and closes at about 0.4 m/s. From 150 m that takes a little over two
+minutes. The ship carries four **Squall Thruster Pods** for this, each with 600 kg of its own
+monopropellant.
+
+**The propellant line.** Liquid oxygen and methane cross only through a pair of docked Flank
+Ports, at 300 kg a second in all, in the proportion the source holds them (3.6 to 1). The old
+instant transfer between tanks does not move them.
+
+**Settling.** In free fall a liquid does not sit at the bottom of its tank; it floats about, and a
+pump at the outlet would draw gas. So the pump only draws while something pushes the stack
+along its axis toward the source tank's nose, at 2 mm/s² or more, which holds the liquid on the
+outlet at its aft end. Start the pump from the Fuel panel and it fires the thrusters to give 3
+mm/s² itself. Main engines do as well. With no push for 20 seconds the pump gives up and says
+why. If the two ships are docked nose to tail, the push has to suit the ship being emptied, and
+the pump works that out.
+
+The push is real thrust. Filling the ship moves 93 t in 5 minutes 10 seconds, costs about 260 kg
+of monopropellant between the two ships, and adds about 1 m/s to the orbit.
+
+**Measured** (`node tests/e2e/topping_up.mjs`, the scenario in the real game):
+
+| | |
+|---|---|
+| Docking assist, 150 m to latched | 132 s, about 900 kg of the ship's 3,000 kg of monopropellant |
+| Pumped | 93 t at 300 kg/s |
+| Push while pumping | 3.0 mm/s² |
+| Monopropellant spent settling | 260 kg |
+| Orbit afterwards | 100.8 by 99.9 km (from 100 by 100) |
+| Ship delta-v, before and after | 1,415 m/s, 2,750 m/s |
+
+**Honest limits of the refuelling.**
+
+- Nothing boils off. Real liquid oxygen and methane warm up and vent; a real depot needs sun
+  shields and loses propellant every day. Here a full depot stays full.
+- The depot is put in orbit full. The real plan needs something like ten tanker flights to fill
+  one; that is not flown here.
+- Settling is one number. Either the push is enough and the pump draws at full rate, or it is
+  not and nothing flows. There is no sloshing, no slow start, and the liquid does not shift the
+  centre of mass sideways.
+- A real transfer is planned to be driven by a pressure difference between the tanks, not a
+  pump. The effect in the game is the same: a rate, and a need for settled liquid.
+- The thrusters burn monopropellant. The real ship's are fed from its main tanks.
+- The two hulls cannot hit each other. Only the ports meet.
+- Docking snaps the pair exactly parallel, as nose docking snaps two rings into line.
+- A pump that is running when the game is saved is stopped when it is loaded.
+- Ship-to-ship transfer of this kind has not yet been done in space by anyone.
+
 ## Where this differs from the real thing
 
 - **Size.** Five-eighths scale: 5.6 m across where Starship is 9 m, 75 m tall where it is about
   124 m. Starwright's worlds are about a tenth the size of the real ones, and its other parts
   are near five-eighths of real hardware.
-- **Mass.** 769 t at lift-off where the real stack is over 5,000 t. Low orbit of Verda needs
+- **Mass.** 772 t at lift-off where the real stack is over 5,000 t. Low orbit of Verda needs
   about 3.8 km/s, not 9.4, so a rocket in real proportions would arrive almost full and the
   depot would have nothing to do.
 - **The booster does more of the work.** On Earth the booster gives roughly a quarter of the
-  speed to orbit. Here it gives nearer a third, and the ship arrives 43 % full where a real
+  speed to orbit. Here it gives nearer a third, and the ship arrives 42 % full where a real
   Starship arrives nearly empty. The cargo (49 t in the bay, on a 45 t forward section) is
   chosen so that the ship cannot fly on to Pell and back without refuelling and can when full.
 - **One refuelling, not ten or more.** For the same reason.
@@ -155,8 +215,8 @@ game says which limit it broke, and the stage goes on down onto the mount.
 |---|---|---|
 | 1 | The rocket: two liquids, ring engines, hot staging, flies to orbit | in the game |
 | 2 | A launch tower with catch arms, and the booster flying back to be caught by its two pins | in the game |
-| 3 | A propellant depot in low orbit, docking side by side, and a transfer that needs the tanks settled | next |
-| 4 | The ship's return: belly first on its four flaps, the flip, and the catch | planned, after the re-entry model (roadmap item 6) |
+| 3 | A propellant depot in low orbit, docking side by side, and a transfer that needs the tanks settled | in the game |
+| 4 | The ship's return: belly first on its four flaps, the flip, and the catch | next, after the re-entry model (roadmap item 6) |
 | 5 | The whole mission as one scenario, and a Science chapter on orbital refuelling | planned |
 
 The four flaps are fitted and weighed and do not steer yet.
@@ -175,6 +235,11 @@ The four flaps are fitted and weighed and do not steer yet.
   (`surface.held`) in `vessel.js`, the return in `boosterRecovery` (`js/core/booster.js`, options `floor`,
   `sets`, `aimBurn`), the drawing in `js/render/tower.js`.
 - The stock design: `shearwater()` in `js/core/craft.js`.
-- Checks: `tests/unit/shearwater.test.js`, `tests/unit/tower.test.js`, and group 2e of the independent verification
+- Side docking: `dock.side` in `parts.js`, `portLocal` / `portAxisLocal` and the side branch of `absorb` in
+  `vessel.js`, `_dockingStep` in `world.js`, the attitude for side ports in `dockingApproach` (`autopilot.js`).
+- The pump: `startPump`, `_stepPump`, `_pumpSettle`, `propellantLines` in `vessel.js`; `TUNING.SETTLE_ACCEL`.
+  The Fuel panel block is `lineRows` in `js/ui/hud.js`. The depot and the ship alone are `deepwell()` and
+  `shearwaterShip()` in `craft.js`; the scenario is `topping-up` in `scenarios.js`.
+- Checks: `tests/unit/shearwater.test.js`, `tests/unit/tower.test.js`, `tests/unit/sideport.test.js`, and group 2e of the independent verification
   (`tests/verify/checks_burns.mjs`): mass flow, mixture ratio and the rocket equation for each
   engine set.
