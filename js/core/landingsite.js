@@ -4,6 +4,7 @@
 // autopilot.js and booster.js decide what to do with the answer. Written up in docs/LANDING_SITES.md.
 import { Vector3 } from '../lib/three.module.min.js';
 import { surfaceAt, waterAt, deckUnder } from './vessel.js';
+import { boulderHazard } from './boulders.js';
 
 const Y_AXIS = new Vector3(0, 1, 0);
 const _d = new Vector3(), _e = new Vector3(), _n = new Vector3(), _p = new Vector3();
@@ -25,11 +26,12 @@ function tangents(d, east, north) {
  * middle, a ring at the radius and a ring at half of it), and how far the ground departs from that plane.
  * → { h (m above body.radius, at the middle), slope (rad, tilt of the fitted plane), gx, gy (rise / run to the east
  *     and north), rough (m, the largest departure of a sampled height from the plane), water (open water under any
- *     sample), deck (a built deck under the middle: level by construction) }
+ *     sample), deck (a built deck under the middle: level by construction), boulder (m: how high the tallest
+ *     boulder with any part inside the radius stands above the ground; 0 = clear. See core/boulders.js) }
  */
 export function assessSite(body, dir, radius = 4, out = {}) {
   const d = _d.copy(dir).normalize();
-  out.h = 0; out.slope = 0; out.gx = 0; out.gy = 0; out.rough = 0; out.water = false; out.deck = false;
+  out.h = 0; out.slope = 0; out.gx = 0; out.gy = 0; out.rough = 0; out.water = false; out.deck = false; out.boulder = 0;
   if (typeof body.terrainHeight !== 'function') { out.water = !!body.ocean && waterAt(body, d); return out; }
   const R = body.radius;
   tangents(d, _e, _n);
@@ -37,6 +39,7 @@ export function assessSite(body, dir, radius = 4, out = {}) {
   out.h = h0;
   out.water = waterAt(body, d) && !deckUnder(body, d);
   out.deck = deckUnder(body, d);
+  if (!out.deck) out.boulder = boulderHazard(body, d, radius);
   const hs = [];
   let sx = 0, sy = 0, sh = h0, sxx = 0;
   for (let ring = 0; ring < 2; ring++) {
@@ -71,6 +74,8 @@ export function slopeLimit(vessel) {
 /** Radius (m) of the ground a vessel's feet need, with room for a touchdown a couple of metres off. */
 export function footprint(vessel) { return clamp((vessel.baseRadius || 1) + 2, 3, 12); }
 
+/** A stone lower than this (m) inside the footprint is not counted against a landing site: a foot pad covers it. */
+export const BOULDER_OK = 0.1;
 const _site = {}, _wide = {};
 /** Is this ground fit to stand on? Fills `out` with the assessment (and `wide`, the slope of the ground round it). */
 function fit(body, dir, radius, limit, roughLimit, out) {
@@ -78,7 +83,7 @@ function fit(body, dir, radius, limit, roughLimit, out) {
   out.wide = 0; out.ok = false;
   if (out.deck) { out.ok = true; return out; }
   if (out.water) return out;
-  if (out.slope > limit || out.rough > roughLimit) return out;
+  if (out.slope > limit || out.rough > roughLimit || out.boulder > BOULDER_OK) return out;
   assessSite(body, dir, radius * 3, _wide);
   out.wide = _wide.slope;
   out.ok = !_wide.water && _wide.slope <= limit * 1.4 && _wide.rough <= roughLimit * 3;
@@ -87,7 +92,7 @@ function fit(body, dir, radius, limit, roughLimit, out) {
 
 /**
  * Looks for ground fit to stand on within `reach` metres of body-fixed direction `near`, on a fixed spiral (so the
- * same question always gets the same answer). Fit means dry, no steeper than `limit` (rad) over `radius` metres,
+ * same question always gets the same answer). Fit means dry, clear of boulders, no steeper than `limit` (rad) over `radius` metres,
  * no rougher than `roughLimit` (m off the fitted plane), and not on the lip of something steeper. Of the fit spots it
  * takes the one that is nearest, counting flatter ground as nearer.
  * → { ok, dir (body-fixed unit vector of the chosen spot), dist (m from `near`), slope, rough, wide, here (the
@@ -109,7 +114,7 @@ export function findSite(body, near, opts = {}) {
     d.copy(base).addScaledVector(east, Math.cos(ang) * rad / R).addScaledVector(north, Math.sin(ang) * rad / R).normalize();
     const s = fit(body, d, o.radius, o.limit, roughLimit, _site);
     res.tested++;
-    if (i === 0) res.here = { slope: s.slope, rough: s.rough, water: s.water, ok: s.ok, deck: s.deck };
+    if (i === 0) res.here = { slope: s.slope, rough: s.rough, water: s.water, ok: s.ok, deck: s.deck, boulder: s.boulder };
     if (s.ok) {
       res.fitCount++;
       const q = s.slope / o.limit;
@@ -117,7 +122,7 @@ export function findSite(body, near, opts = {}) {
       if (score < best) { best = score; res.ok = true; res.dir = d.clone(); res.dist = rad; res.slope = s.slope; res.rough = s.rough; res.wide = s.wide; }
       if (rad > best) break;              // nothing further out can beat it
     } else if (!res.ok && !s.water) {
-      const score = Math.max(s.slope, s.wide / 1.4) + (s.rough > roughLimit ? 0.05 : 0) + 0.02 * rad / o.reach;
+      const score = Math.max(s.slope, s.wide / 1.4) + (s.rough > roughLimit ? 0.05 : 0) + (s.boulder > BOULDER_OK ? 0.08 : 0) + 0.02 * rad / o.reach;
       if (score < fallback) { fallback = score; res.dir = d.clone(); res.dist = rad; res.slope = s.slope; res.rough = s.rough; res.wide = s.wide; }
     }
   }
