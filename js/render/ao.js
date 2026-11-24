@@ -11,7 +11,9 @@
 //   const ao = createAO(pass)            pass(material, target): the post chain's full-screen draw
 //   ao.setSize(w, h)                     size of the scene target; the occlusion target is half of it
 //   ao.render(depthTexture, camera)      → ao.texture (red channel)
-//   ao.params = { radius (m), intensity (m: the estimate is height over distance squared), maxDist (m), grow, growMax }
+//   ao.params = { radius (m), intensity (m: the estimate is height over distance squared), maxDist (m), grow, growMax,
+//                 soft (m²: added to the distance squared, so a neighbour a few centimetres away does not shade a
+//                 small part black; at 0.02 the rover's bevels and bolted plates were drawn as dark smudges) }
 //   ao.dispose()
 import * as THREE from '../lib/three.module.min.js';
 
@@ -27,7 +29,7 @@ float aoViewZ(vec2 uv){ return exp2(aoDepth(uv) * uLogK) - 1.0; }
 vec3 aoViewPos(vec2 uv, float z){ return vec3((uv * 2.0 - 1.0) * z / uP, -z); }
 `;
 const AO_FS = `${AO_DEPTH_GLSL}
-uniform vec2 uTexel, uGrow; uniform float uRadius, uIntensity, uMaxDist;
+uniform vec2 uTexel, uGrow; uniform float uRadius, uIntensity, uMaxDist, uSoft;
 varying vec2 vUv;
 // interleaved gradient noise: a different rotation of the sample pattern at every pixel, which the blur averages out
 float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
@@ -65,7 +67,7 @@ void main(){
     // more than something far (a pebble shades the ground it sits on, a wall shades a metre of floor). The height
     // has a floor of a few centimetres, growing with distance, so that depth rounding, the rebuilt normal's error
     // and the centimetre steps between terrain detail levels never count as occluders.
-    occ += max(0.0, dot(v, n) - hBias) / (l * l + 0.02) * (1.0 - smoothstep(radius * 0.5, radius, l));
+    occ += max(0.0, dot(v, n) - hBias) / (l * l + uSoft) * (1.0 - smoothstep(radius * 0.5, radius, l));
   }
   float ao = clamp(1.0 - uIntensity * occ / 12.0, 0.0, 1.0);
   ao = mix(ao, 1.0, smoothstep(uMaxDist * 0.6, uMaxDist, z));
@@ -89,10 +91,10 @@ void main(){
 export function createAO(pass) {
   // grow, growMax: the radius grows by `grow` of itself per metre of distance, up to (1 + growMax) times: 3 keeps it to
   // creases and contact (flight); a view that looks at buildings from a kilometre away wants far more
-  const params = { radius: 1.0, intensity: 2.5, maxDist: 400, grow: 0.03, growMax: 3 };
+  const params = { radius: 1.0, intensity: 2.5, maxDist: 400, grow: 0.03, growMax: 3, soft: 0.08 };
   const opts = { depthTest: false, depthWrite: false, toneMapped: false, vertexShader: VS };
   const depthU = () => ({ tDepth: { value: null }, uLogK: { value: 31 }, uP: { value: new THREE.Vector2(1, 1) }, uDepthSize: { value: new THREE.Vector2(1, 1) } });
-  const aoMat = new THREE.ShaderMaterial({ ...opts, fragmentShader: AO_FS, uniforms: { ...depthU(), uTexel: { value: new THREE.Vector2() }, uGrow: { value: new THREE.Vector2(0.03, 3) }, uRadius: { value: 1.0 }, uIntensity: { value: 2.5 }, uMaxDist: { value: 400 } } });
+  const aoMat = new THREE.ShaderMaterial({ ...opts, fragmentShader: AO_FS, uniforms: { ...depthU(), uTexel: { value: new THREE.Vector2() }, uGrow: { value: new THREE.Vector2(0.03, 3) }, uRadius: { value: 1.0 }, uSoft: { value: 0.08 }, uIntensity: { value: 2.5 }, uMaxDist: { value: 400 } } });
   const blurMat = new THREE.ShaderMaterial({ ...opts, fragmentShader: BLUR_FS, uniforms: { ...depthU(), tSrc: { value: null }, uSrcTexel: { value: new THREE.Vector2() } } });
   let raw = null, out = null, W = 0, H = 0;
   function free() { if (raw) raw.dispose(); if (out) out.dispose(); raw = out = null; }
@@ -110,7 +112,7 @@ export function createAO(pass) {
       const e = camera.projectionMatrix.elements, logK = Math.log2(camera.far + 1);
       for (const m of [aoMat, blurMat]) { const u = m.uniforms; u.tDepth.value = depthTexture; u.uLogK.value = logK; u.uP.value.set(e[0], e[5]); u.uDepthSize.value.set(W, H); }
       const u = aoMat.uniforms;
-      u.uTexel.value.set(1 / W, 1 / H); u.uGrow.value.set(params.grow, params.growMax); u.uRadius.value = params.radius; u.uIntensity.value = params.intensity; u.uMaxDist.value = params.maxDist;
+      u.uTexel.value.set(1 / W, 1 / H); u.uGrow.value.set(params.grow, params.growMax); u.uRadius.value = params.radius; u.uIntensity.value = params.intensity; u.uMaxDist.value = params.maxDist; u.uSoft.value = params.soft;
       pass(aoMat, raw);
       blurMat.uniforms.tSrc.value = raw.texture; blurMat.uniforms.uSrcTexel.value.set(1 / raw.width, 1 / raw.height);
       pass(blurMat, out);

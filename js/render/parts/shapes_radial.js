@@ -1,7 +1,7 @@
 // Starwright part models: radial structure, power, utility and science parts.
 // Radial convention: mount face at x = -rw/2, +X outward, h along Y, t along Z.
 import * as THREE from '../../lib/three.module.min.js';
-import { PB, P, TAU, M, Mrad, mul, sub, revolve } from './geo.js';
+import { PB, P, TAU, M, Mdir, Mrad, mul, sub, revolve } from './geo.js';
 
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -110,19 +110,67 @@ export function panel(def, g, pb) {
   pb.decalFlat('placard', M(rw * 0.455, h * 0.2, t * 0.2, 0, Math.PI / 2, 0), t * 0.18);
 }
 
+// Brace Strut and Sip Fuel Line: each is mounted by its near end (a plate on the host, built once) and spans to
+// wherever core/span.js says its far end is. The spanning piece is built to that length for each part (`buildSpan`,
+// called from partmesh.js when the far end is known or moves): `end` = { x, y, z, nx, ny, nz }, the far end and the
+// outward normal of the surface it meets, in the part's own axes; null = it reaches nothing, and is drawn at its made
+// length with a bare end and no foot.
 export function strut(def, g, pb) {
-  const { rw, t } = def, x0 = -rw / 2, x1 = rw / 2;
-  pb.rod([x0 + 0.03, 0, 0], [x1 - 0.03, 0, 0], t * 0.16, P.silver, 'chrome', 8);
-  for (const x of [x0, x1]) { const s = x < 0 ? 1 : -1; pb.rbox(0.024, t * 0.9, t * 0.9, 0.006, P.gun, M(x + s * 0.012, 0, 0), 'metal'); pb.cyl(t * 0.26, t * 0.2, 0.07, 0, P.iron, 'metal', 10, false, along(x + s * 0.055, 0, 0)); pb.sphere(t * 0.22, P.steel, M(x + s * 0.03, 0, 0), 'metal', 10, 8); }
-  if (pb.med) pb.cyl(t * 0.22, t * 0.22, 0.12, 0, P.amber, 'paint', 6, false, along(0, 0, 0));
+  const { rw, t } = def, x0 = -rw / 2;
+  pb.rbox(0.024, t * 0.9, t * 0.9, 0.006, P.gun, M(x0 + 0.012, 0, 0), 'metal');
+  pb.cyl(t * 0.26, t * 0.2, 0.07, 0, P.iron, 'metal', 10, false, along(x0 + 0.055, 0, 0));
+  pb.sphere(t * 0.22, P.steel, M(x0 + 0.03, 0, 0), 'metal', 10, 8);
+  buildSpan(def, sub(g, 'span'), pb.q, null);
 }
 
 export function fuelline(def, g, pb) {
-  const { rw, t } = def, x0 = -rw / 2, x1 = rw / 2, r = t * 0.22;
-  pb.tube([[x0 + 0.05, 0, 0], [x0 + rw * 0.3, -t * 0.25, 0], [x1 - rw * 0.3, -t * 0.25, 0], [x1 - 0.05, 0, 0]], r, P.yellow, 'paint', { seg: 8 });
-  if (pb.med) for (let i = 1; i < 8; i++) { const u = i / 8, x = lerp(x0 + 0.08, x1 - 0.08, u); pb.torus(r * 1.08, r * 0.2, P.brass, M(x, -t * 0.25 * Math.sin(Math.PI * u) ** 0.6, 0, 0, Math.PI / 2), 'metal', 10, 5); }
-  for (const x of [x0, x1]) { const s = x < 0 ? 1 : -1; pb.rbox(0.02, t, t, 0.005, P.gun, M(x + s * 0.01, 0, 0), 'metal'); pb.cyl(r * 1.6, r * 1.6, 0.05, 0, P.steel, 'metal', 6, false, along(x + s * 0.04, 0, 0)); }
-  pb.decalFlat('arrowUp', M(0, -t * 0.25, r + 0.004, 0, 0, -Math.PI / 2), r * 1.4);
+  const { rw, t } = def, x0 = -rw / 2, r = t * 0.22;
+  pb.rbox(0.02, t, t, 0.005, P.gun, M(x0 + 0.01, 0, 0), 'metal');
+  pb.cyl(r * 1.6, r * 1.6, 0.05, 0, P.steel, 'metal', 6, false, along(x0 + 0.04, 0, 0));
+  buildSpan(def, sub(g, 'span'), pb.q, null);
+}
+
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z), ZAX = V3(0, 0, 1);
+/** Fill `parent` with the spanning piece of a strut or a fuel line (see above). Returns parent. */
+export function buildSpan(def, parent, q, end) {
+  const { rw, t } = def, sp = new PB(q), A = V3(-rw / 2, 0, 0);
+  const E = end ? V3(end.x, end.y, end.z) : V3(rw / 2, 0, 0);
+  const dir = E.clone().sub(A), len = Math.max(dir.length(), 0.06); dir.normalize();
+  const n = end ? V3(end.nx, end.ny, end.nz).normalize() : dir.clone().negate();     // out of the far surface, toward us
+  if (def.shape === 'strut') {
+    // a tie rod between two ball ends, a turnbuckle sleeve at its middle, a round foot flat on the far surface
+    const a = A.clone().addScaledVector(dir, 0.03), b = E.clone().addScaledVector(n, end ? 0.034 : 0);
+    sp.rod(a.toArray(), b.toArray(), t * 0.16, P.silver, 'chrome', 8);
+    const mid = a.clone().add(b).multiplyScalar(0.5), ax = b.clone().sub(a).normalize();
+    if (sp.med) {
+      sp.cyl(t * 0.22, t * 0.22, Math.min(0.12, len * 0.3), 0, P.amber, 'paint', 6, false, Mdir(mid, ax));
+      if (len > 1.6) for (const u of [0.25, 0.75]) sp.cyl(t * 0.2, t * 0.2, 0.03, 0, P.steel, 'metal', 8, false, Mdir(a.clone().lerp(b, u), ax));
+    }
+    sp.sphere(t * 0.22, P.steel, new THREE.Matrix4().makeTranslation(b.x, b.y, b.z), 'metal', 10, 8);
+    if (end) {
+      sp.cyl(t * 0.2, t * 0.3, 0.03, 0, P.iron, 'metal', 10, false, Mdir(E.clone().addScaledVector(n, 0.019), n));
+      sp.cyl(t * 0.46, t * 0.46, 0.012, 0, P.gun, 'metal', 14, false, Mdir(E.clone().addScaledVector(n, 0.006), n));
+    }
+  } else {
+    // a braided hose that hangs a little toward the tail between two unions, a brass band every hand's breadth
+    const r = t * 0.22, sag = Math.min(0.16, 0.05 * len + 0.012), b = E.clone().addScaledVector(n, end ? 0.05 : 0);
+    const a = A.clone().addScaledVector(V3(1, 0, 0), 0.05);
+    const p1 = a.clone().addScaledVector(V3(1, 0, 0), Math.min(0.12, len * 0.2)), p2 = b.clone().addScaledVector(n, Math.min(0.12, len * 0.2));
+    const q1 = p1.clone().lerp(p2, 0.3), q2 = p1.clone().lerp(p2, 0.7); q1.y -= sag; q2.y -= sag; p1.y -= sag * 0.25; p2.y -= sag * 0.25;
+    const pts = [a, p1, q1, q2, p2, b];
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
+    if (sp.med) sp.add(new THREE.TubeGeometry(curve, Math.max(10, Math.round(len * (sp.hi ? 40 : 20))), r, sp.hi ? 10 : 7, false), P.yellow, null, 'paint');
+    else sp.rod(a.toArray(), b.toArray(), r, P.yellow, 'paint', 5);
+    if (sp.med) {
+      const nb = Math.max(3, Math.round(curve.getLength() / 0.085));
+      for (let i = 1; i < nb; i++) { const u = i / nb; sp.torus(r * 1.08, r * 0.2, P.brass, Mdir(curve.getPointAt(u), curve.getTangentAt(u), ZAX), 'metal', 10, 5); }
+      const m = curve.getPointAt(0.5), tg = curve.getTangentAt(0.5);
+      sp.decalFlat('arrowUp', M(m.x, m.y, m.z + r + 0.004, 0, 0, Math.atan2(tg.y, tg.x) - Math.PI / 2), r * 1.4);
+    }
+    sp.cyl(r * 1.6, r * 1.6, 0.05, 0, P.steel, 'metal', 6, false, Mdir(E.clone().addScaledVector(n, end ? 0.03 : 0), n));
+    if (end) sp.cyl(t * 0.52, t * 0.52, 0.012, 0, P.gun, 'metal', 14, false, Mdir(E.clone().addScaledVector(n, 0.006), n));
+  }
+  return sp.build(parent);
 }
 
 // Launch clamp: a braced tower on a base plate with an arm that grips the rocket.
@@ -169,9 +217,10 @@ export function solar(def, g, pb) {
     const arm = sub(g, 'fanArm', x0 + 0.1, -h / 2 + 0.08, 0), ap = new PB(pb.q);
     ap.rod([0, 0, 0], [aL, 0, 0], 0.028, P.silver, 'metal', 8); ap.cyl(0.07, 0.07, 0.08, 0, P.gun, 'metal', 14, false, M(aL, 0, 0, Math.PI / 2));
     ap.build(arm);
-    const da = TAU / gores;
+    // the fan turns on its arm to face the sun (partmesh.js: solarTrack)
+    const track = sub(arm, 'solarTrack'), da = TAU / gores;
     for (let i = 0; i < gores; i++) {
-      const go = sub(arm, 'fan' + i, aL, 0, (i - gores / 2) * 0.004), gp = new PB(pb.q), sh = new THREE.Shape();
+      const go = sub(track, 'fan' + i, aL, 0, (i - gores / 2) * 0.004), gp = new PB(pb.q), sh = new THREE.Shape();
       sh.moveTo(0.06, 0); sh.lineTo(R, 0); sh.absarc(0, 0, R, 0, da, false); sh.lineTo(0.06 * Math.cos(da), 0.06 * Math.sin(da)); sh.closePath();
       const sg = new THREE.ShapeGeometry(sh, 3); // uv = xy in metres
       gp.add(sg, 0xffffff, null, 'solar', 2, 2);     // one mesh per gore: the ribs are part of the cell print
@@ -184,7 +233,8 @@ export function solar(def, g, pb) {
   pb.rbox(0.04, h * 0.7, t * 0.6, 0.01, P.gun, M(x0 + 0.02, 0, 0), 'metal');
   pb.cyl(0.03, 0.03, h * 0.5, 0, P.iron, 'metal', 10, false, M(x0 + 0.06, 0, 0));
   bolts4(pb, x0 + 0.042, h * 0.3, t * 0.24);
-  let parent = g;
+  // the whole wing turns about its boom (the part's outward axis) to face the sun: a slip ring at the root
+  let parent = sub(g, 'solarTrack');
   for (let i = 0; i < n; i++) {
     const s = sub(parent, 'solarSeg' + i, i === 0 ? x0 + base - rw + 0.06 : segW, 0, 0), sp = new PB(pb.q);
     if (i === 0 && base > rw) { sp.rod([-(base - rw), 0, 0], [0, ph * 0.3, 0], 0.016, P.silver, 'metal', 6); sp.rod([-(base - rw), 0, 0], [0, -ph * 0.3, 0], 0.016, P.silver, 'metal', 6); if (grand) latt(sp, -(base - rw), 0, 0.09); }

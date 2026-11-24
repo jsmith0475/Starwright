@@ -278,10 +278,26 @@ export function rover_body(def, g, pb) {
   const { h, r } = def, y0 = -h / 2, y1 = h / 2, w = r * 1.78, zt = r * 0.3, zb = -r * 0.46, L = h - 0.1, bv = 0.03;   // bv: the tub's bevel stands this far proud of its outline
   const X = M(0, 0, 0, Math.PI / 2, 0, 0);                     // shapes drawn in (x, z) and extruded along Y
   const sec = k => [[-w * 0.43 * k, zt], [w * 0.43 * k, zt], [w * 0.5 * k, zt - r * 0.14], [w * 0.47 * k, zb + r * 0.2], [w * 0.3 * k, zb], [-w * 0.3 * k, zb], [-w * 0.47 * k, zb + r * 0.2], [-w * 0.5 * k, zt - r * 0.14]];
-  // tub (white, panelled), darker belly pan, stepped prow and stern
-  pb.poly(sec(1), L * 0.74, 0.03, P.hull, mul(M(0, -L * 0.03, 0), X), 'hull');
-  pb.poly(sec(0.9).map(p => [p[0], p[1] * 0.86 - r * 0.02]), L * 0.14, 0.03, P.shade, mul(M(0, y1 - 0.05 - L * 0.1, 0), X), 'hull');     // prow
-  pb.poly(sec(0.86).map(p => [p[0], p[1] * 0.8]), L * 0.1, 0.025, P.shade, mul(M(0, y0 + 0.05 + L * 0.06, 0), X), 'hull');             // stern
+  // tub (clean white paint: the hull plating print is drawn for tank skins metres across and smears on a body this
+  // small), darker belly pan, stepped prow and stern. Its panel breaks are modelled: a raised frame at each
+  // bulkhead, a rub strake along each shoulder, a bolted hatch on each flank, rivets along the deck edge.
+  pb.poly(sec(1), L * 0.74, 0.03, P.hull, mul(M(0, -L * 0.03, 0), X), 'paint');
+  pb.poly(sec(0.9).map(p => [p[0], p[1] * 0.86 - r * 0.02]), L * 0.14, 0.03, P.shade, mul(M(0, y1 - 0.05 - L * 0.1, 0), X), 'paint');     // prow
+  pb.poly(sec(0.86).map(p => [p[0], p[1] * 0.8]), L * 0.1, 0.025, P.shade, mul(M(0, y0 + 0.05 + L * 0.06, 0), X), 'paint');             // stern
+  if (pb.med) {
+    const grow = (k, d) => sec(k).map(p => [p[0] + Math.sign(p[0]) * d, p[1] + (p[1] > (zt + zb) / 2 ? d : -d)]);
+    for (const u of [-0.24, 0.0, 0.24]) pb.poly(grow(1, bv + 0.004), 0.022, 0.004, P.shade, mul(M(0, -L * 0.03 + u * L, 0), X), 'paint');     // bulkhead frames
+    for (const u of [-0.366, 0.366]) pb.poly(grow(1, bv + 0.006), 0.03, 0.005, P.teal, mul(M(0, -L * 0.03 + u * L, 0), X), 'paint');         // end frames, in the livery
+    for (const s of [-1, 1]) {
+      // flank hatch: a plate set on the lower flank between two frames, a bolt at each corner, a recessed pull
+      const hx = s * (w * 0.485 + bv), hz = (zt - r * 0.14 + zb + r * 0.2) / 2 - r * 0.07, tiltY = s * 0.11;
+      pb.rbox(0.012, L * 0.17, r * 0.19, 0.004, P.hullWarm, mul(M(hx, L * 0.09, hz), M(0, 0, 0, 0, tiltY, 0)), 'paint');
+      pb.rbox(0.016, L * 0.05, r * 0.03, 0.003, P.gun, mul(M(hx, L * 0.09, hz), M(0, 0, 0, 0, tiltY, 0)), 'metal');
+      if (pb.hi) for (const a of [-1, 1]) for (const b of [-1, 1]) pb.add(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6), P.steel, mul(M(hx, L * 0.09 + a * L * 0.072, hz + b * r * 0.078), M(0, 0, 0, 0, tiltY, Math.PI / 2)), 'metal');
+      // deck-edge rivets
+      if (pb.hi) for (let i = 0; i < 14; i++) pb.add(new THREE.CylinderGeometry(0.006, 0.006, 0.008, 6), P.steel, M(s * w * 0.4, -L * 0.03 + (i - 6.5) * L * 0.05, zt + bv + 0.002, Math.PI / 2), 'metal');
+    }
+  }
   pb.rbox(w * 0.62, L * 0.8, 0.03, 0.01, P.graphite, M(0, 0, zb - bv - 0.008), 'metal');                                                      // skid plate
   // stack faces: machined pads where things bolt on fore and aft
   for (const y of [y1 - 0.025, y0 + 0.025]) { pb.rbox(w * 0.5, 0.05, r * 0.5, 0.012, P.gun, M(0, y, -r * 0.06), 'metal'); if (pb.hi) for (const sx of [-1, 1]) for (const sz of [-1, 1]) pb.add(new THREE.CylinderGeometry(0.016, 0.016, 0.02, 6), P.steel, M(sx * w * 0.2, y + Math.sign(y) * 0.026, -r * 0.06 + sz * r * 0.18), 'metal'); }
@@ -305,7 +321,7 @@ export function rover_body(def, g, pb) {
   const dz = zt + bv + 0.002;
   pb.rbox(w * 0.76, L * 0.42, 0.024, 0.006, P.gun, M(0, -L * 0.17, dz + 0.008), 'metal');
   pb.add(new THREE.PlaneGeometry(w * 0.7, L * 0.38), 0xffffff, M(0, -L * 0.17, dz + 0.022), 'solar', w * 0.7 / 0.5, L * 0.38 / 0.5);
-  pb.rbox(w * 0.36, L * 0.17, r * 0.16, 0.02, P.hull, M(-w * 0.17, L * 0.2, dz + r * 0.08), 'hull');
+  pb.rbox(w * 0.36, L * 0.17, r * 0.16, 0.02, P.hull, M(-w * 0.17, L * 0.2, dz + r * 0.08), 'paint');
   pb.rbox(w * 0.3, L * 0.012, r * 0.02, 0.003, P.teal, M(-w * 0.17, L * 0.2 - L * 0.07, dz + r * 0.165), 'paint');
   if (pb.med) for (let i = 0; i < 6; i++) pb.rbox(w * 0.24, 0.012, r * 0.09, 0.003, P.silver, mul(M(w * 0.2, L * 0.13 + i * L * 0.024, dz + r * 0.04), M(0, 0, 0, 0.5, 0, 0)), 'metal');   // radiator louvres
   pb.rbox(w * 0.28, L * 0.17, 0.016, 0.004, P.gun, M(w * 0.2, L * 0.19, dz + 0.006), 'metal');

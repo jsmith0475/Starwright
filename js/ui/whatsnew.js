@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'parts-joined-up', date: '2026-11-24', title: 'Struts, hoses and solar wings that fit',
+    text: 'Brace Struts and Sip Fuel Lines are made to length to the booster they face, up to 4 m away, and a strut braces exactly what it is drawn touching. Folding solar wings and fans now turn on their booms to face the sun, and the rover and close-up rocks are sharper.' },
   { id: 'solid-boulders', date: '2026-11-24', title: 'Boulders are solid',
     text: 'Rovers, landers and Pips no longer pass through boulders. A wheel rolls over a low stone and is stopped by a tall one, a leg that comes down on a rock stands on it, and hitting one fast breaks things. The landing autopilot avoids ground with a boulder on it, and the rover cruise control steers round them.' },
   { id: 'drogue-parachutes', date: '2026-11-24', title: 'Drogues, and parachutes with real limits',

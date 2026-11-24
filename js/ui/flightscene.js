@@ -42,6 +42,7 @@ import { createPostChain } from '../render/post.js';
 import { createBarge } from '../render/barge.js';
 import { createTower } from '../render/tower.js';
 import { towerClient } from '../core/tower.js';
+import { isSpan, vesselSpan } from '../core/span.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
 import { createGovernor } from './governor.js';
@@ -487,6 +488,13 @@ export function createFlightScene(app) {
     }
     // docking re-expresses parts in a new craft frame (and undocking may turn the frame over): refresh them all
     for (const e of view.parts.values()) orient(e);
+    // struts and fuel lines are drawn to the part the core says they reach (core/span.js: the same rule braces a joint)
+    for (const e of view.parts.values()) {
+      if (!isSpan(e.part.def)) continue;
+      let sp = null;
+      try { sp = vesselSpan(v, e.part); } catch { sp = null; }
+      setPartState(e.mesh, { span: PM.spanState(sp, e.part.pos, e.q0) });
+    }
     view.stamp = v.structureStamp;
     view.dirty = false;
     view.kind = v.type;
@@ -520,7 +528,7 @@ export function createFlightScene(app) {
     }
   }
 
-  const fxP = new THREE.Vector3(), fxR = new THREE.Vector3(), fxQ = new THREE.Quaternion();
+  const fxP = new THREE.Vector3(), fxR = new THREE.Vector3(), fxQ = new THREE.Quaternion(), sunL = new THREE.Vector3();
   function updateView(view, dt, simDt, isActive, world) {
     const v = view.vessel, body = v.body;
     if (view.dirty || (view.kind !== v.type && (view.kind === 'debris' || v.type === 'debris'))) syncParts(view, true);
@@ -574,7 +582,7 @@ export function createFlightScene(app) {
       const level = loaded && p.ignited && !p.flameout ? (Number.isFinite(p.level) ? p.level : 0) : 0;
       const st = pstate;
       st.deployed = p.deployed; st.throttle = level; st.ignited = p.ignited && level > 0; st.flameout = p.flameout; st.temp = p.temp;
-      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = undefined;
+      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.sun = undefined;
       if (def.engine && def.engine.gimbal > 0 && act) {
         // the bell swings so the exhaust pushes the tail the way the torque command asks (pitch, roll, −yaw)
         const g = def.engine.gimbal * Math.PI / 180 * (live && level > 0.01 ? 1 : 0) * (p.pos.y < com.y ? 1 : -1);
@@ -603,6 +611,12 @@ export function createFlightScene(app) {
         e.comp = (e.comp || 0) + (comp - (e.comp || 0)) * Math.min(1, dt * 18);
         if (e.comp < 1e-4) e.comp = 0;
         st.compress = e.comp;
+      }
+      if (def.solar && !def.solar.fixed) {
+        // folding arrays turn to the sun, as the power they are paid assumes (core/vessel.js). In moving air they
+        // stand edge-on along the craft instead, which is the plate the drag model flies (vessel.js _pA).
+        if (p.deployed && v.sunDir && v.sunlit && !(v.dynamicPressure > 20)) st.sun = sunL.copy(v.sunDir).applyQuaternion(q2.copy(mesh.quaternion).premultiply(v.q).invert());
+        else st.sun = null;
       }
       if (def.light) {
         st.light = p.deployed ? 1 : 0;
