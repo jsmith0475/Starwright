@@ -619,7 +619,7 @@ export const CHAPTERS = [
         if (v.stageIndex < v.stages.length) flight.actions.stage();
         await d.waitFrames(3, 0.3);
       }, { title: false, settle: 0.5 });
-      d.caption('Parachute', 'The parachute streams half-open in the fast air, then opens fully a kilometre up.', { pos: 'flight' });
+      d.caption('Parachute', 'The parachute comes out reefed, a narrow sock in the fast air, then opens fully 900 metres up.', { pos: 'flight' });
       const chuteFull = () => (v.chuteParts || []).some(p => p.deployed === 'full');
       lapse(d, sim, 4); d.badge(null);
       const full = await d.untilSim(world, () => chuteFull() || v.landed, 60);

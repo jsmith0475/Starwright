@@ -570,15 +570,16 @@ export function createFlightScene(app) {
         st.light = p.deployed ? 1 : 0;
         if (p.deployed && isActive) { lampN++; lampAcc.x += p.pos.x - com.x; lampAcc.y += p.pos.y - com.y; lampAcc.z += p.pos.z - com.z; lampDir.x += Math.cos(p.rot || 0); lampDir.z -= Math.sin(p.rot || 0); }
       }
-      setPartState(mesh, st);
       const canopy = mesh.userData.canopy;
-      if (canopy && (p.deployed === 'semi' || p.deployed === 'full')) {
-        { const cd = mesh.userData.chuteDim; view.canopyOpen = Math.max(view.canopyOpen || 0, cd ? cd.hgt + cd.dome * 0.8 : 12); }
-        // the canopy trails downstream: align its +Y with the airflow, in the part's own frame (with a slow sway)
-        v2.copy(v1).applyQuaternion(q2.copy(mesh.quaternion).invert());
-        v2.x += Math.sin(clock * 1.3 + p.id) * 0.05; v2.z += Math.cos(clock * 1.1 + p.id * 2) * 0.05;
-        q2.setFromUnitVectors(Y_AXIS, v2.normalize());
-        if (!e.canopyQ) { e.canopyQ = true; canopy.quaternion.copy(q2); } else canopy.quaternion.slerp(q2, Math.min(1, dt * 3));
+      const cv = canopy && (p.deployed === 'semi' || p.deployed === 'full') ? v.chuteView(p, e.cv || (e.cv = {})) : null;
+      if (canopy) st.chute = cv;
+      setPartState(mesh, st);
+      if (cv) {
+        view.canopyOpen = Math.max(view.canopyOpen || 0, mesh.userData.canopyTop || 12);
+        // the canopy stands where the physics has it: along its lines, in the part's own frame
+        v2.set(cv.x, cv.y, cv.z).applyQuaternion(q2.copy(mesh.quaternion).invert());
+        canopy.quaternion.setFromUnitVectors(Y_AXIS, v2.normalize());
+        e.canopyQ = true;
       } else if (canopy && e.canopyQ) { e.canopyQ = null; canopy.quaternion.identity(); }
 
       // ---- engines: plume, smoke, ground wash, light
@@ -1029,11 +1030,11 @@ export function createFlightScene(app) {
       // aim between them; the pilot's own zoom is put back when the canopy is gone (unless they changed it meanwhile)
       const av = a ? views.get(a) : null, open = av && av.canopyOpen ? av.canopyOpen : 0;
       if (open > 0 && typeof cam.setDist === 'function') {
-        const need = open * 1.75 + 6;
+        const need = open * 2.9 + 8;
         if (!canopyZoom) { canopyZoom = { prev: cam.goal, set: Math.max(cam.goal, need) }; cam.setDist(canopyZoom.set); }
         else if (need > canopyZoom.set + 0.5 && Math.abs(cam.goal - canopyZoom.set) < 0.5) { canopyZoom.set = need; cam.setDist(need); }
       } else if (canopyZoom) { if (Math.abs(cam.goal - canopyZoom.set) < 0.5 && typeof cam.setDist === 'function') cam.setDist(canopyZoom.prev); canopyZoom = null; }
-      const want = open ? Math.min(cam.dist * 0.4, open * 0.5) : 0; cam.lift = (cam.lift || 0) + (want - (cam.lift || 0)) * Math.min(1, dt * 1.5); }
+      const want = open ? Math.min(cam.dist * 0.4, open * 0.36) : 0; cam.lift = (cam.lift || 0) + (want - (cam.lift || 0)) * Math.min(1, dt * 1.5); }
     cam.update(dt, anchor);
     // A clear first look. The opening view of a craft on the pad or the runway is a fixed bearing at a distance set by
     // its size; for the biggest stock rocket that put the camera 5 m behind a lightning mast. Once for each vessel
