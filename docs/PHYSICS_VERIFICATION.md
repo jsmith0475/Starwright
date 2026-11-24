@@ -153,6 +153,36 @@ still land inside their targets. The checks of chapters 4, 7 and 9 that restated
 law now use the independent aerodynamics, and the booster fall predictor is compared with the
 drag measured in the flight at every Mach number flown (worst difference 1.2 %).
 
+### Entry: trim, bank and the path through the air (chapter 11 of the checks)
+
+`tests/verify/checks_entry.mjs`, step C of the re-entry work ([ENTRY.md](ENTRY.md)). 107 checks
+pass, 0 fail.
+
+- **The trim.** The game moves a capsule's centre of mass so that it rests at 18 degrees to the
+  air. The reference takes that centre of mass and finds, from its own triangle meshes, the angle
+  at which the Newtonian moment about it is zero: 18 degrees within 0.5 for both capsules. The
+  centre of mass and the moment of inertia are checked against the shifted masses, and a
+  spherical cap is worked by hand (force angle $\arctan(C_N / C_A)$, no moment about the centre
+  of curvature) against the meshes.
+- **Bank hold.** Flown at Mach 6.5 at four bank angles, the lift is taken from the vessel's
+  own acceleration, not from anything the hold reports: it points within 1 degree of the
+  commanded bank, at 18 degrees within 0.5 to the air, with the lift over drag of the meshes
+  within 2 %.
+- **The predictor.** `tests/verify/ref_entry.mjs` flies the same point mass with the adaptive
+  extrapolation integrator of the reference (order 16, tolerance 1e-10) and the reference's own
+  atmosphere. On seven entries with a drag table, lift and bank the game's fixed-step
+  Runge-Kutta predictor gives the same ending, the time within 0.02 s, the place within 5 m and
+  the peaks within 0.3 %. A steep fast ballistic entry meets its peak deceleration and peak
+  heating at Allen and Eggers' $e^{-1/2}$ and $e^{-1/6}$ of the entry speed, within 0.02.
+- **Predicted against flown.** Six entries flown in the game's own flight model, each against
+  the prediction made at the top of the air: the same ending (one of them a skip back out to
+  space), peak g within 6 %, peak heat flux within 5 %, the landing point within 3 % of the
+  path length.
+
+One thing the specification had wrong was found here: its formula for the offset (C2) was too
+large by a factor of about ten. The game solves the offset from the Newtonian force, and the
+check above is what shows the result is right.
+
 ## 4. Model honesty: patched conics against n-body gravity
 
 "n-body" here means the ship feels every body, and Verda recoils from its moons as real gravity requires.

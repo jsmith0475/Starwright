@@ -143,17 +143,21 @@ export const TUNING = {
   JET_ALT_EXP: 0.7,
   LADDER_REACH: 1.6,         // m: how close a Pip must be to grab a ladder
   LADDER_SPEED: 0.9,         // m/s climbing
+  TRIM_ANGLE: 18 * Math.PI / 180,   // Entry trim: the angle to the airflow a capsule rests at (docs/ENTRY.md)
+  TRIM_MAX_SHIFT: 0.5,       // ... and the furthest its ballast can move, in capsule radii
+  BANK_RATE: 20 * Math.PI / 180,    // Bank hold: how fast a held roll key turns the commanded bank, rad/s
   STRUCT_FAIL: true,         // joints break when overloaded (docs/STRUCTURE.md); false = loads are still worked out and shown
   AERO_FAIL: true,           // parts over their air rating are torn off (docs/AERO_BREAKUP.md); needs STRUCT_FAIL too
 };
 
 export const SAS_MODES = ['hold', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut',
   'maneuver', 'target', 'srfPrograde', 'srfRetrograde', 'up', 'direction',
-  'antiTarget', 'relPrograde', 'relRetrograde'];
+  'antiTarget', 'relPrograde', 'relRetrograde', 'bankHold'];
 
 const _a = new Vector3(), _b = new Vector3(), _c = new Vector3(), _d = new Vector3(), _e = new Vector3();
 const _up = new Vector3(), _ul = new Vector3(), _dir = new Vector3();
-const _qa = new Quaternion(), _qb = new Quaternion(), _qi = new Quaternion();
+const _qa = new Quaternion(), _qb = new Quaternion(), _qi = new Quaternion(), _qt = new Quaternion();
+const _tw = [0, 0, 0];
 const Y_AXIS = new Vector3(0, 1, 0);
 
 const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
@@ -346,8 +350,10 @@ const ACTION_LABELS = {
   toggleEngine: 'Toggle engine', activateEngine: 'Start engine', shutdownEngine: 'Shut down engine', deployChute: 'Deploy parachute',
   cutChute: 'Cut parachute', decouple: 'Decouple', toggleLegs: 'Toggle leg', toggleGear: 'Toggle landing gear', toggleSolar: 'Toggle panel',
   toggleLight: 'Toggle light', toggleAirbrake: 'Toggle air brake', runExperiment: 'Run experiment', undock: 'Undock',
-  engineMode: 'Next engine set',
+  engineMode: 'Next engine set', entryTrim: 'Entry trim',
 };
+/** Can this part shift its centre of mass for a lifting entry? Crewed or probe capsules with a wide base (docs/ENTRY.md). */
+export function hasEntryTrim(def) { return !!(def && def.command && def.shape === 'capsule' && def.rBottom > def.rTop * 1.05); }
 /** Actions a part of this definition offers to action groups: [{id, label}] (empty for inert parts). */
 export function partActions(def) {
   const out = [];
@@ -363,6 +369,7 @@ export function partActions(def) {
   if (def.airbrake) add('toggleAirbrake');
   if (def.experiment) add('runExperiment');
   if (def.dock) add('undock');
+  if (hasEntryTrim(def)) add('entryTrim');
   return out;
 }
 function cloneGroups(g) {
@@ -431,6 +438,9 @@ export class Vessel {
     this.ctrl = defaultCtrl();
     this.sasTarget = null;        // Quaternion held by SAS 'hold'
     this.sasDir = new Vector3(0, 1, 0);   // inertial direction for sasMode 'direction'
+    this.bank = 0;                        // commanded bank (rad) for sasMode 'bankHold': 0 = lift up, positive = lift to the right
+    this._trim = null;                    // set by _updateMass while a capsule's Entry trim is on
+    this.aeroLocal = new Vector3();       // the air force of the last step (N), parachutes apart, in the vessel's own axes
     this.targetId = null;         // body id (string) or vessel id (number); set it with world.setTarget()
     this.targetInfo = null;       // {name, kind, distance, relSpeed, closing, relVel, dir, relPos} refreshed by the World each step
     this.nodes = [];
@@ -906,6 +916,144 @@ export class Vessel {
     this._baseH = com.y - this._minY;
   }
 
+  /**
+   * Entry trim for the capsule `cap`: where the centre of mass must sit, sideways along the vessel's +x, for the
+   * vessel to rest at TUNING.TRIM_ANGLE to the airflow with its wide end leading, the centre of mass being at height
+   * `cy`. Worked from the Newtonian tables of the stack parts on the capsule's axis (Mach 4 and above), with the
+   * shadow rule. Returns { e, ux, uy, lx, ly, angle }: the offset (m), the direction of motion in the vessel's own
+   * axes at trim, and the unit direction of the lift there. Null when the air cannot hold it (no force).
+   */
+  _solveTrim(cap, cy) {
+    const lead = cap._rB >= cap._rT ? -1 : 1;                    // which end of the capsule meets the air
+    const a = lead < 0 ? Math.PI - TUNING.TRIM_ANGLE : TUNING.TRIM_ANGLE;
+    const ux = Math.sin(a), uy = Math.cos(a);
+    let Fx = 0, Fy = 0, M = 0;
+    for (const p of this._list) {
+      if (!p._stack || !p._nt || Math.abs(p.pos.x - cap.pos.x) > 1e-3 || Math.abs(p.pos.z - cap.pos.z) > 1e-3) continue;
+      const keep = 1 - this._shadeAt(p, ux, uy, 0);
+      newtonAt(p._nt, uy, _tw);
+      const fy = _tw[0] * keep, fx = _tw[1] * keep;
+      Fx += fx; Fy += fy; M += _tw[2] * keep - (p.pos.y - cy) * fx;
+    }
+    if (!(Math.abs(Fy) > 1e-9)) return null;
+    // the same parts head on, for how much less drag the vessel shows at its trim angle
+    let F0 = 0;
+    for (const p of this._list) {
+      if (!p._stack || !p._nt || Math.abs(p.pos.x - cap.pos.x) > 1e-3 || Math.abs(p.pos.z - cap.pos.z) > 1e-3) continue;
+      F0 += newtonAt(p._nt, lead, _tw)[0] * (1 - this._shadeAt(p, 0, lead, 0));
+    }
+    const along = Fx * ux + Fy * uy;
+    let lx = Fx - along * ux, ly = Fy - along * uy;
+    const ll = Math.hypot(lx, ly);
+    if (ll > 1e-12) { lx /= ll; ly /= ll; } else { lx = uy; ly = -ux; }
+    return { e: cap.pos.x + M / Fy, ux, uy, lx, ly, angle: TUNING.TRIM_ANGLE, ld: ll / Math.abs(along), kd: Math.abs(F0) > 1e-9 ? Math.abs(along / F0) : 1 };
+  }
+  /** How far the part `p` stands in the wake of a wider stack part, 0 to SHADOW share lost, for motion along (ux, uy, uz) in vessel axes: the shadow rule of _stepFlight at full strength. */
+  _shadeAt(p, ux, uy, uz) {
+    let shade = 0;
+    const sh = p._sh, rp = p._rM;
+    if (sh) for (let j = 0; j < sh.length; j++) {
+      const c = sh[j], dx = p.pos.x - c.pos.x, dy = p.pos.y - c.pos.y, dz = p.pos.z - c.pos.z;
+      const along = -(dx * ux + dy * uy + dz * uz);
+      if (along <= 0) continue;
+      const far = along / (2 * c._rM);
+      if (far >= SHADOW_FAR) continue;
+      const perp = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - along * along));
+      let sIn = 1 + (c._rM - perp - rp) / (0.5 * rp);
+      if (sIn <= 0) continue;
+      if (sIn > 1) sIn = 1;
+      if (far > SHADOW_NEAR) sIn *= (SHADOW_FAR - far) / (SHADOW_FAR - SHADOW_NEAR);
+      if (sIn > shade) shade = sIn;
+    }
+    return shade * (1 - SHADOW_KEEP);
+  }
+  /** Capsules that can take Entry trim. */
+  get trimParts() { return this._list.filter(p => hasEntryTrim(p.def)); }
+  get entryTrimOn() { return !!this._trim; }
+  /** Switch Entry trim on or off on every capsule that has it. Returns the new state, or null when there is none. */
+  setEntryTrim(on) {
+    const ps = this.trimParts;
+    if (!ps.length) return null;
+    for (const p of ps) p.trim = !!on;
+    this._updateMass(true);
+    return !!on;
+  }
+  toggleEntryTrim() { return this.setEntryTrim(!this.trimParts.some(p => p.trim)); }
+  /** Unit velocity through the air (the body turning under it), or null when nearly still. */
+  airDirection(out) {
+    const wy = TAU / this.body.rotPeriod, pos = this.pos, vel = this.vel;
+    out.set(vel.x - wy * pos.z, vel.y, vel.z + wy * pos.x);
+    return out.lengthSq() > 0.01 ? out.normalize() : null;
+  }
+  /**
+   * The attitude Bank hold steers to: the trim attitude (wide end first at the trim angle with Entry trim on, the
+   * present end first at no angle without), turned about the velocity so that the lift points `bank` from straight
+   * up. Null when there is no airflow direction to hold to.
+   */
+  bankAttitude(out) {
+    const u = this.airDirection(_c);
+    if (!u) return null;
+    _up.copy(this.pos).normalize();
+    const h = _a.copy(_up).addScaledVector(u, -_up.dot(u));        // straight up, seen across the flow
+    if (h.lengthSq() < 1e-8) return null;
+    h.normalize();
+    const side = _b.crossVectors(u, h);                              // to the right of the path, looking along it
+    const cb = Math.cos(this.bank), sb = Math.sin(this.bank);
+    const L = _d.copy(h).multiplyScalar(cb).addScaledVector(side, sb);
+    const tr = this._trim;
+    let bux = 0, buy, blx = 1, bly = 0;
+    if (tr) { bux = tr.ux; buy = tr.uy; blx = tr.lx; bly = tr.ly; }
+    else buy = _e.set(0, 1, 0).applyQuaternion(this.q).dot(u) >= 0 ? 1 : -1;
+    out.setFromUnitVectors(_e.set(bux, buy, 0), u);
+    const l1 = _e.set(blx, bly, 0).applyQuaternion(out);
+    const ang = Math.atan2(_a.crossVectors(l1, L).dot(u), l1.dot(L));
+    return out.premultiply(_qt.setFromAxisAngle(u, ang));
+  }
+  /**
+   * What the entry predictor (js/core/entry.js) needs to know about this vessel as it flies now: its mass, its drag
+   * area against Mach number for the end that leads, and, with Entry trim on, the lift-to-drag ratio and the bank.
+   * The bank is the commanded one under Bank hold, else the bank it has now.
+   */
+  entryModel() {
+    const tr = this._trim, u = this.airDirection(_c);
+    let tail = true;
+    if (tr) tail = tr.uy < 0;
+    else if (u) { const a = _e.set(0, 1, 0).applyQuaternion(this.q).dot(u); if (Math.abs(a) > 0.3) tail = a < 0; }
+    let bank = 0;
+    if (tr) { if (this.ctrl.sas && this.ctrl.sasMode === 'bankHold') bank = this.bank; else { const b = this.bankNow(); bank = b === null ? this.bank : b; } }
+    return { mass: this.mass, drag: this.axialDragTable(tail), dragScale: tr ? tr.kd : 1, ld: tr ? tr.ld : 0, ldMach: [0.7, 1.5], bank };
+  }
+  /**
+   * The air force of the last step split along and across the airflow: { drag, lift (N), ld, dir (unit lift direction in
+   * the inertial frame, written to `outDir` when given) }. Null with no air force to speak of.
+   */
+  liftDrag(outDir = null) {
+    const u = this.airDirection(_c);
+    const F = _d.copy(this.aeroLocal).applyQuaternion(this.q);
+    if (!u || F.lengthSq() < 1e-6) return null;
+    const drag = -F.dot(u);
+    F.addScaledVector(u, drag);
+    const lift = F.length();
+    if (!(drag > 0)) return null;
+    if (outDir) { if (lift > 1e-9) outDir.copy(F).multiplyScalar(1 / lift); else outDir.set(0, 0, 0); }
+    return { drag, lift, ld: lift / drag };
+  }
+  /** Bank now (rad): the angle of the body's lift direction from straight up, about the velocity. Null with no airflow. */
+  bankNow() {
+    const u = this.airDirection(_c);
+    if (!u) return null;
+    _up.copy(this.pos).normalize();
+    const h = _a.copy(_up).addScaledVector(u, -_up.dot(u));
+    if (h.lengthSq() < 1e-8) return null;
+    h.normalize();
+    // the lift the air is making now, when there is some; else the side the trim would lift to
+    const tr = this._trim, ldv = this.liftDrag(_ul);
+    const l = ldv && ldv.ld > 0.03 ? _e.copy(_ul) : _e.set(tr ? tr.lx : 1, tr ? tr.ly : 0, 0).applyQuaternion(this.q);
+    l.addScaledVector(u, -l.dot(u));
+    if (l.lengthSq() < 1e-8) return null;
+    return Math.atan2(_b.crossVectors(h, l).dot(u), h.dot(l));
+  }
+
   /** Recompute mass, centre of mass and inertia. With `shift`, `pos` follows the CoM so parts do not jump. */
   _updateMass(shift = true) {
     let m = 0, cx = 0, cy = 0, cz = 0;
@@ -927,13 +1075,27 @@ export class Vessel {
     }
     if (!(m > 0)) { this.mass = 0; return; }
     cx /= m; cy /= m; cz /= m;
+    // Entry trim (docs/ENTRY.md): ballast inside the capsule moves sideways, along the vessel's +x, far enough that
+    // the Newtonian air force at the trim angle passes through the centre of mass.
+    this._trim = null;
+    for (const p of this._list) {
+      if (!p.trim || !p._stack || !p._nt || !(p.mass > 0)) continue;
+      const tr = this._solveTrim(p, cy);
+      if (!tr) continue;
+      const lim = TUNING.TRIM_MAX_SHIFT * Math.max(p._rT, p._rB);
+      let dx = (tr.e - cx) * m / p.mass;
+      if (dx > lim) dx = lim; else if (dx < -lim) dx = -lim;
+      p._mx += dx; cx += dx * p.mass / m;
+      tr.e = cx; this._trim = tr;
+      break;
+    }
     let ix = 0, iy = 0, iz = 0;
     for (const p of this._list) {
       const d = p.def, pm = p.mass;
       // NOTE (found by tests/verify chapter 7): this takes the part's geometric centre, not its mass point (_mx, _my,
       // _mz), so a capsule's ballast offset is missing here: up to 9 % too much inertia for a capsule on a short stack.
       // Left as it is in this pass because correcting it changes how every landing is flown; see docs/STRUCTURE.md.
-      const dx = p.pos.x - cx, dy = p.pos.y - cy, dz = p.pos.z - cz;
+      const dx = (p.trim && this._trim ? p._mx : p.pos.x) - cx, dy = p.pos.y - cy, dz = p.pos.z - cz;
       const r = p._stack ? Math.max(d.rTop, d.rBottom) : (d.rw || 0.2) / 2;
       const own = pm * (3 * r * r + d.h * d.h) / 12;
       ix += pm * (dy * dy + dz * dz) + own;
@@ -1685,6 +1847,7 @@ export class Vessel {
         return true;
       case 'toggleSolar': if (!d.solar || d.solar.fixed) return false; p.deployed = !p.deployed; return true;
       case 'toggleLight': if (!d.light) return false; p.deployed = !p.deployed; return true;
+      case 'entryTrim': if (!hasEntryTrim(d)) return false; p.trim = !p.trim; this._updateMass(true); return true;
       case 'toggleAirbrake': if (!d.airbrake) return false; p.deployed = !p.deployed; return true;
       case 'runExperiment': if (!d.experiment) return false; ev.push({ type: 'action', vessel: this, part: p, action }); return true;
       case 'undock':
@@ -2156,8 +2319,19 @@ export class Vessel {
         const T = Math.max(TUNING.SAS_T, 2.5 * dt);
         const alx = ax / I.x, aly = ay / I.y, alz = az / I.z;
         let ex = 0, ey = 0, ez = 0, track = true;
-        const dir = this._sasDirection(c.sasMode, _dir);
-        if (dir) {
+        const bankQ = c.sasMode === 'bankHold' ? this.bankAttitude(_qb) : null;
+        if (bankQ) {
+          // roll keys turn the commanded bank; the hold does the flying on all three axes
+          if (Math.abs(my) > 0.01) { this.bank += my * TUNING.BANK_RATE * dt; if (this.bank > Math.PI) this.bank -= TAU; else if (this.bank < -Math.PI) this.bank += TAU; cy = 0; }
+        }
+        const dir = bankQ ? null : this._sasDirection(c.sasMode, _dir);
+        if (bankQ) {
+          _qi.copy(this.q).invert().multiply(bankQ);
+          if (_qi.w < 0) { _qi.x = -_qi.x; _qi.y = -_qi.y; _qi.z = -_qi.z; _qi.w = -_qi.w; }
+          const s = Math.hypot(_qi.x, _qi.y, _qi.z);
+          if (s > 1e-12) { const ang = 2 * Math.atan2(s, _qi.w) / s; ex = _qi.x * ang; ey = _qi.y * ang; ez = _qi.z * ang; }
+          this.sasTarget = null;
+        } else if (dir) {
           _qi.copy(this.q).invert();
           dir.applyQuaternion(_qi);
           const s = Math.hypot(dir.x, dir.z), ang = Math.atan2(s, dir.y);
@@ -2177,7 +2351,7 @@ export class Vessel {
         }
         if (!track) { ex = ey = ez = 0; }
         if (Math.abs(mx) <= 0.01) cx = sasAxis(ex, w.x, alx, T);
-        if (Math.abs(my) <= 0.01) cy = sasAxis(ey, w.y, aly, T);
+        if (Math.abs(my) <= 0.01 || bankQ) cy = sasAxis(ey, w.y, aly, T);
         if (Math.abs(mz) <= 0.01) cz = sasAxis(ez, w.z, alz, T);
       } else this.sasTarget = null;
     }
@@ -2290,6 +2464,7 @@ export class Vessel {
 
     // --- aerodynamics and heating
     let Ax = 0, Ay = 0, Az = 0, ATx = 0, ATy = 0, ATz = 0;
+    this.aeroLocal.set(0, 0, 0);
     const flux = rho > 0 ? TUNING.HEAT_FLUX_K * Math.sqrt(rho) * speed2 * speed : 0;
     this.heatFlux = flux;
     const heating = flux > TUNING.HEAT_MIN_FLUX;
@@ -2466,6 +2641,7 @@ export class Vessel {
       const fm = Math.sqrt(Ax * Ax + Ay * Ay + Az * Az);
       if (fm * dt > 0.5 * m * speed) { const s = 0.5 * m * speed / (fm * dt); Ax *= s; Ay *= s; Az *= s; ATx *= s; ATy *= s; ATz *= s; if (SW) for (let k = 0; k < SW.length; k++) SW[k] *= s; }
       Fx += Ax; Fy += Ay; Fz += Az; Tx += ATx; Ty += ATy; Tz += ATz;
+      this.aeroLocal.set(Ax, Ay, Az);
     }
     // --- open parachutes: each canopy is a second body on the end of its lines (after the clamp above: this is implicit)
     if (this._chuteOpen) {
@@ -3733,7 +3909,7 @@ export class Vessel {
     for (const p of this.parts.values()) {
       parts.push({
         id: p.id, type: p.type, pos: j3(p.pos), rot: p.rot, links: p.links.slice(), res: { ...p.res },
-        ignited: p.ignited, flameout: p.flameout, mode: p.mode || undefined, deployed: p.deployed, deployT: p.deployT, comp: p._comp > 0.001 ? +p._comp.toFixed(4) : undefined, temp: p.temp,
+        ignited: p.ignited, flameout: p.flameout, mode: p.mode || undefined, trim: p.trim || undefined, deployed: p.deployed, deployT: p.deployT, comp: p._comp > 0.001 ? +p._comp.toFixed(4) : undefined, temp: p.temp,
         crew: p.crew.slice(), sym: p.sym,
         flip: p.flip || undefined, pitch: p.pitch || undefined, roll: p.roll || undefined, dockedTo: p.dockedTo ?? undefined, dockName: p.dockName, dockType: p.dockType,
         truss: p.truss && p.truss.length ? p.truss.map(t => ({ ...t })) : undefined,
@@ -3756,7 +3932,7 @@ export class Vessel {
       ringDue: this.ringDue ? { ...this.ringDue } : undefined,
       hotDue: this.hotDue ? { ...this.hotDue } : undefined,
       onRails: this.onRails, orbit: this.onRails && this.orbit ? this.orbit.toJSON() : null,
-      ctrl: { ...this.ctrl }, sasTarget: this.sasTarget ? this.sasTarget.toArray() : null, sasDir: j3(this.sasDir),
+      ctrl: { ...this.ctrl }, sasTarget: this.sasTarget ? this.sasTarget.toArray() : null, sasDir: j3(this.sasDir), bank: this.bank || undefined,
       sasCoast: this._sasCoast, targetId: this.targetId,
       nodes: this.nodes.map(n => ({ t: n.t, dv: { ...n.dv }, rem: n.rem ? { ...n.rem } : undefined })),
       science: this.science.map(r => ({ ...r })), launched: this.launched, launchUt: this.launchUt,
@@ -3772,7 +3948,7 @@ export class Vessel {
     for (const j of o.parts) {
       const p = makePart(j.id, currentPartId(j.type), j.pos, j.rot, j.sym);
       p.links = j.links.slice(); p.res = { ...j.res };
-      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.mode = j.mode | 0; p.deployed = j.deployed; p.deployT = j.deployT || 0; if (j.comp > 0) p._comp = j.comp;
+      p.ignited = !!j.ignited; p.flameout = !!j.flameout; p.mode = j.mode | 0; p.trim = !!j.trim; p.deployed = j.deployed; p.deployT = j.deployT || 0; if (j.comp > 0) p._comp = j.comp;
       p.temp = j.temp ?? TUNING.AMBIENT_T; p.crew = (j.crew || []).slice();
       p.flip = !!j.flip; p.pitch = +j.pitch || 0; p.roll = +j.roll || 0; p.dockedTo = j.dockedTo ?? null;
       if (j.dockName !== undefined) p.dockName = j.dockName;
@@ -3808,6 +3984,7 @@ export class Vessel {
     v.ctrl = { ...defaultCtrl(), ...o.ctrl };
     v.sasTarget = o.sasTarget ? new Quaternion().fromArray(o.sasTarget) : null;
     if (o.sasDir) v.sasDir.copy(v3(o.sasDir));
+    v.bank = +o.bank || 0;
     v._sasCoast = !!o.sasCoast;
     v.targetId = o.targetId ?? null;
     v.nodes = (o.nodes || []).map(n => { const r = { t: n.t, dv: { ...n.dv } }; if (n.rem) r.rem = { ...n.rem }; return r; });
