@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'reentry-glow', date: '2026-11-24', title: 'A re-entry glow without the hard edge',
+    text: 'The glow of re-entry used to be a smooth cone with a hard-rimmed disc at its widest ring. It is now a hot layer on the face that meets the air and a streaked tail that thins and tears away, with no outline. The Entry box also had a row so long it pushed its numbers off the edge; that is now two rows, So far and Ablator lost.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',
     text: 'The landing autopilot now gives itself time. A lander with a strong engine over a small world used to start braking six seconds before the hover; the burn now lasts 20 seconds where the engine allows, with more than half the thrust in hand. Every guidance burn also now waits until the ship has turned to face the right way before the engine lights.' },
   { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',
