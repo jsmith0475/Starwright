@@ -46,7 +46,7 @@ test('legacy parts keep their ids and numbers', () => {
   assert.deepEqual(PARTS.eng_goshawk.engine, { type: 'liquid', thrust: 220, ispVac: 305, ispAtm: 265, gimbal: 3.5 });
   assert.deepEqual(PARTS.tank_m200.res, { fuel: 1000 });
   assert.deepEqual(PARTS.legs.legs, { reach: 1.1, spread: 0.9, stroke: 0.32 });      // stroke: the suspension's travel (landing-leg suspension)
-  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxSpeed: 420 });
+  assert.deepEqual(PARTS.chute.chute, { area: 420, semiArea: 12, fullAlt: 900, maxMach: 1.5, strength: 500 });
   assert.deepEqual(PARTS.solar.solar, { rate: 1.6, span: 2.4 });
 });
 
@@ -137,7 +137,7 @@ test('wings, wheels and other second-pass fields', () => {
     } else assert.equal(d.wheel, undefined, id);
     if (d.shape === 'light') assert.ok(d.light && pos(d.light.range), id); else assert.equal(d.light, undefined, id);
     if (d.legs) assert.ok(d.shape === 'leg' && pos(d.legs.reach) && pos(d.legs.spread), id);
-    if (d.chute) assert.ok(pos(d.chute.area) && pos(d.chute.semiArea) && d.chute.semiArea < d.chute.area && pos(d.chute.fullAlt) && pos(d.chute.maxSpeed), id);
+    if (d.chute) assert.ok(pos(d.chute.area) && pos(d.chute.semiArea) && d.chute.semiArea < d.chute.area && pos(d.chute.fullAlt) && pos(d.chute.maxMach) && pos(d.chute.strength), id);
     if (d.solar) assert.ok(pos(d.solar.rate) && num(d.solar.span) && (d.solar.fixed ? d.solar.span === 0 : d.solar.span > 0), id);
     if (d.decoupler) assert.ok(num(d.decoupler.force), id);
     if (d.dock) assert.ok(d.dock.size === d.size && d.shape === 'dock', id);

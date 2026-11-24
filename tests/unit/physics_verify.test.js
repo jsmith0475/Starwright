@@ -23,6 +23,7 @@ for (const [title, only, skip] of [
   ['atmosphere and surface: density, drag, heating, gravity, ballistic hops', ['4'], null],
   ['structure: joint loads against an independent multibody solver, closed forms, thin-ring strength, live closure, failure', ['7'], null],
   ['aerodynamic breakup: thin roots, air ratings against the vessel state, open panels, tear-off law, conservation, stock flights', ['8'], null],
+  ['parachutes: canopy geometry, lines on the skirt, steady descent, limits and tearing, two canopies (openings against the reference run in `npm run verify`)', ['11'], null],
 ]) {
   test(`physics verification, ${title}`, async () => {
     const S = await runAll({ fast: true, only, skip });

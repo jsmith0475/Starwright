@@ -260,7 +260,7 @@ export function createFlightScreen(app) {
       case 'chute':
         if (mine) {
           if (p.state === 'semi' || p.state === 'full') app.audio.play('chute');
-          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'semi' ? 'Parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? 'Parachute torn away!' : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
+          toast(p.state === 'armed' ? 'Parachute armed' : p.state === 'semi' ? 'Parachute out (reefed)' : p.state === 'full' ? 'Parachute fully open' : p.state === 'cut' ? (p.load ? `Parachute lines failed at ${Math.round(p.load / 1000)} kN (they hold ${Math.round(p.rated / 1000)})` : 'Parachute torn away!') : 'Parachute ' + p.state, p.state === 'cut' ? 'bad' : 'info');
         }
         break;
       case 'warp':
@@ -380,6 +380,11 @@ export function createFlightScreen(app) {
     // falling through air with a parachute still packed
     if (atmoH && falling && v.altitude < Math.min(atmoH * 0.45, 30000) && chuteWaiting && !(v.thrust > 0)) {
       return { id: 'chute', items: [['Space', v.hasEngineStagesLeft() ? 'Falling: press Space until the parachute is armed' : 'Falling: press Space to arm the parachute']] };
+    }
+    // armed and still packed: say what it is waiting for
+    if (atmoH && falling && !chuteWaiting) {
+      const wait = (v.chuteParts || []).find(p => p.deployed === 'armed' && p.chuteWait && p.chuteWait !== 'thin');
+      if (wait) return { id: 'chutewait', items: [[null, wait.chuteWait === 'mach' ? `Parachute armed: it opens below Mach ${wait.def.chute.maxMach}` : 'Parachute armed: too fast and too heavy to open yet, its lines would not hold']] };
     }
     // dry tanks with more rocket below the next separator
     if (lit.length && !alive && v.hasEngineStagesLeft() && (c.throttle > 0 || v.situation === 'flying' || v.situation === 'suborbital')) {

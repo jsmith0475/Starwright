@@ -7,6 +7,7 @@ import * as CRAFT_MOD from '../../core/craft.js';
 const { Craft, stockCrafts } = CRAFT_MOD;
 import { SYSTEM } from '../../core/bodies.js';
 import { airRatingText } from '../stress.js';
+import { chuteSpec } from '../../core/parachute.js';
 
 const { PART_LIST, partDef, engineThrust } = PARTS_MOD;
 const AUTOSAVE = '__autosave';
@@ -119,7 +120,11 @@ export function partStatRows(d) {
     let kg = 0; try { kg = PARTS_MOD.interstageMass(d.h, d.r, d.r); } catch { kg = 0; }
     rows.push(['Interstage', `Automatic: stack a stage under this engine and an open lattice ring${kg ? ` (about ${Math.round(kg)} kg)` : ''} wraps the bell and carries the load rim to rim`]);
   } else if (d.decoupler && d.attach.stack) rows.push(['Interstage', 'Under an engine it carries a lattice ring up around the bell, and takes it along when it separates']);
-  if (d.chute) rows.push(['Parachute', `opens fully below ${d.chute.fullAlt} m · safe under ${d.chute.maxSpeed} m/s`]);
+  if (d.chute) {
+    const cs = chuteSpec(d), n = cs.count > 1 ? `${cs.count} canopies, each ` : '';
+    rows.push(['Parachute', `${n}${(2 * cs.rmFull).toFixed(0)} m across on ${cs.line.toFixed(0)} m lines · opens fully below ${d.chute.fullAlt} m`]);
+    rows.push(['Limits', `opens under Mach ${d.chute.maxMach} · lines hold ${d.chute.strength} kN`]);
+  }
   if (d.wing) rows.push(['Lifting area', `${d.wing.area} m²` + (d.wing.control ? ` · control: ${d.wing.control === true ? 'yes' : d.wing.control}` : '')]);
   if (d.fin) rows.push(['Fin', `${d.fin.area} m²` + (d.fin.control ? ' · steerable' : '')]);
   if (d.wheel) {
