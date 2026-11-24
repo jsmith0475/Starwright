@@ -94,10 +94,14 @@ export function ogivePod(def, g, pb) {
   const rAt = y => { const t = clamp((y - y0) / L, 0, 1); return rT + (rB - rT) * (og(t) - e1) / (rB - e1); };
   const slope = y => (rAt(y + 0.05) - rAt(y - 0.05)) / 0.1;
   const n = pb.hi ? 22 : pb.med ? 12 : 6, ys = []; for (let i = 1; i < n; i++) ys.push(a + (b - a) * (1 - Math.pow(1 - i / n, 1.25)));
-  steelWall(pb, rAt, a, b, { tiled: true, ys });
-  pb.rev([[rB + END_LIFT, y0, TILE], [rB + END_LIFT, a]], 'hextile', { seg: pb.seg(rB) / 2, a0: Math.PI, a1: TAU, uRep: Math.round(TAU * rB), vTile: 1 });
+  // a crewless nose (the depot's) never comes home: bare steel all round, and no windows or hatch
+  const crewed = (def.crew || 0) > 0;
+  steelWall(pb, rAt, a, b, { tiled: crewed, ys });
+  if (crewed) pb.rev([[rB + END_LIFT, y0, TILE], [rB + END_LIFT, a]], 'hextile', { seg: pb.seg(rB) / 2, a0: Math.PI, a1: TAU, uRep: Math.round(TAU * rB), vTile: 1 });
   // nose ring and cap
   pb.rev([[rT + 0.004, b - 0.02, STEEL_DK], [rT + 0.004, b], [rT * 0.8, y1 - tip * 0.25], [0.002, y1]], 'steel', { crease: 0.9, seg: pb.seg(rT) });
+  const dy = y0 + h * 0.3;
+  if (!crewed) { pb.decal('flag', rAt(dy), dy, LEE - 0.72, 0.9, { slope: slope(dy) }); endCap(pb, rB - 0.02, y0 + 0.004, -1); return; }
   // flight deck windows in a row, a porthole deck below them and the side hatch
   const wy = y0 + h * 0.66, wh = h * 0.05;
   for (let i = 0; i < 4; i++) windowPane(pb, rAt(wy - wh / 2), rAt(wy + wh / 2), wy - wh / 2, wy + wh / 2, LEE + (i - 1.5) * 0.4, clamp(rAt(wy) * 0.3, 0.2, 0.6), { th: 0.02 });
@@ -107,7 +111,6 @@ export function ogivePod(def, g, pb) {
   pb.patch(rAt(hy0 + 0.04) + 0.012, rAt(hy1 - 0.04) + 0.012, hy0 + 0.04, hy1 - 0.04, LEE, 0.84, 0.012, STEEL, 'steel');
   porthole(pb, rAt(hm + 0.2) + 0.028, hm + 0.2, LEE, 0.1, { slope: slope(hm) });
   if (pb.med) for (const s of [-1, 1]) pb.box(0.05, 0.16, 0.08, STEEL_DK, Mrad(LEE + 0.19, rAt(hm + s * 0.4) + 0.03, hm + s * 0.4, -Math.atan(slope(hm))), 'steel');
-  const dy = y0 + h * 0.3;
   pb.decal('flag', rAt(dy), dy, LEE - 0.72, 0.9, { slope: slope(dy) }); pb.decal('rescue', rAt(hy1 + 0.25), hy1 + 0.25, LEE, 0.7, { slope: slope(hy1) });
   endCap(pb, rB - 0.02, y0 + 0.004, -1);
 }
