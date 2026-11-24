@@ -197,3 +197,44 @@ test('booster return: a stage that cannot reach its pad looks at the ground it c
   assert.ok(r.c.site && r.c.site.ok && r.touch < 0.045 && r.touch < old.touch, `with it: ${(r.touch * DEG).toFixed(1)}° under the feet`);
   assert.ok(r.c.done && r.v.landed && tiltOf(r.v) < 4, r.log);
 });
+
+test('pointingError: measures the nose against the direction it is given, whichever vector that is in', () => {
+  const b = SYSTEM.byId.dray, { w, v } = inOrbit('dray', 0.1);
+  const nose = new Vector3(0, 1, 0).applyQuaternion(v.q), side = new Vector3(1, 0, 0).applyQuaternion(v.q);
+  assert.ok(AP.pointingError(v, nose) < 1e-6, 'along the nose: zero');
+  assert.ok(Math.abs(AP.pointingError(v, side) - Math.PI / 2) < 1e-6, 'across it: a right angle');
+  assert.ok(Math.abs(AP.pointingError(v, nose.clone().negate()) - Math.PI) < 1e-6, 'backwards: half a turn');
+  assert.ok(b && w);
+});
+
+test('landing autopilot: no engine lights in the braking burn until the lander faces against its motion', () => {
+  // start the braking phase with the lander pointing sideways: the throttle must stay at idle until it has turned
+  const { w, v } = inOrbit('pell', 0.4);
+  const c = AP.hoverslamLanding(w, v, { useWarp: true, survey: false });
+  let worst = 0, seen = 0;
+  AP.fly(w, c, { dt: 0.05, maxSim: 8000, onStep: () => {
+    if (c.phase !== 'brake' || v.airspeed < 20) return;
+    const err = AP.pointingError(v, v.surfaceVel.clone().normalize().negate());
+    seen++;
+    if (v.ctrl.throttle > 0.06) worst = Math.max(worst, err);
+  } });
+  assert.ok(seen > 100, 'a braking burn was flown');
+  assert.ok(worst < 0.35, `never more than idle while more than 20 degrees off (worst ${(worst * DEG).toFixed(1)} degrees)`);
+});
+
+test('landing autopilot: a strong lander over a small world brakes for 15 s or more with thrust in hand', () => {
+  const b = SYSTEM.byId.dray, { w, v } = inOrbit('dray', 0.1);
+  const c = AP.hoverslamLanding(w, v, { useWarp: true });
+  let t0 = NaN, t1 = NaN, most = 0, low = Infinity;
+  AP.fly(w, c, { dt: 0.05, maxSim: 8000, onStep: () => {
+    if (c.phase !== 'brake') return;
+    if (!(t0 >= 0)) t0 = w.ut;
+    t1 = w.ut; most = Math.max(most, v.ctrl.throttle);
+    if (v.airspeed > 10) low = Math.min(low, v.radarAlt);
+  } });
+  for (let i = 0; i < 200; i++) w.step(0.1);
+  assert.ok(t1 - t0 >= 15, `the burn lasts ${(t1 - t0).toFixed(1)} s`);
+  assert.ok(most < 0.7, `most throttle used ${most.toFixed(2)}: a third of the engine in hand`);
+  assert.ok(low > 30, `never lower than ${low.toFixed(0)} m while still moving fast`);
+  assert.ok(v.landed && !v.dead && tiltOf(v) < 15 && b, 'and it stands');
+});
