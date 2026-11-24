@@ -321,60 +321,92 @@ export function strikeTower(world, v, ev, pose = null) {
   const body = v.body, site = towerSite(body);
   if (!site || v.dead || v.type === 'eva' || (v.landed && v.surface && v.surface.held === 'tower')) return false;
   if (!pose) { const a = armState(world); pose = armPose(a.k, a.h, a.x, a.z, _pose); }
-  const ut = world.ut;
-  mountFrame(body, site, ut);
+  mountFrame(body, site, world.ut);
   // quick test: the whole vessel against a cylinder 40 m round the column, as tall as the tower
   _d.copy(v.pos).sub(_o);
   const bound = v._bound || 1, up = _d.dot(_a);
   if (up > TOWER.height + bound + 5 || up < -bound - 5) return false;
   if (Math.hypot(_d.dot(_pe) + TOWER.offset, _d.dot(_ps)) > 40 + bound) return false;
-  // the velocity over the ground, in the mount's frame (the tower turns with the ground)
-  const wy = TAU / body.rotPeriod;
-  _sv.set(v.vel.x - wy * v.pos.z, v.vel.y, v.vel.z + wy * v.pos.x);
-  const vx = _sv.dot(_pe), vy = _sv.dot(_a), vz = _sv.dot(_ps);
   // A stage with pins coming down within the arms' reach is what they are built to close round: they guide its body
   // in (the real ones squeeze the stage to centre it), so its body meets only the column; what sticks out of it
   // still meets the arms.
   const cs = catchPins(v) >= 2 ? catchState(world, v, _st2) : null;
   const guided = !!(cs && cs.offset < TOWER.reach + 2.5 && cs.clearance < TOWER.hang + 12);
-  let worst = 0, hit = null, depth = 0, nx = 0, ny = 0, nz = 0;
+  _towerHit.pose = pose; _towerHit.guided = guided;
+  return strikeSteel(world, v, ev, _towerHit);
+}
+const _towerHit = {
+  type: 'towerStrike', reason: 'tower', pose: null, guided: false,
+  distance(p, x, y, z) { const d = steelDistance(x, y, z, this.pose, !(this.guided && p._stack)); STEEL_N.copy(_n); return d; },
+  what(ny) { return ny > 0.7 ? 'the top of a tower arm' : 'the tower'; },
+};
+
+/** Where steel pushes back: the outward direction (in the site's frame) that a `distance` function leaves. */
+export const STEEL_N = new Vector3();
+/** Sets the frame of `site` on `body` at `ut` for eachBall and strikeSteel (origin on the ground at the site, x east,
+ *  y up, z south). → { o, east, up, south } (shared vectors, inertial). */
+export function siteFrame(body, site, ut) { mountFrame(body, site, ut); return { o: _o, east: _pe, up: _a, south: _ps }; }
+export { eachBall };
+
+/** Any fixed steel or concrete against a vessel, by the ground's rules (Vessel._groundContact): every part is tried
+ *  as balls (eachBall), in the frame siteFrame set last. `hit.distance(part, x, y, z, r)` gives the distance from a
+ *  ball's centre to the solid (m; less than r is a touch) and leaves the solid's outward direction in STEEL_N. If the
+ *  body part (a stack part: what hangs on the side only breaks off) pressed deepest meets it faster than
+ *  TUNING.CRASH_ALL times its crash tolerance, the whole vessel is lost
+ *  (reason `hit.reason`); otherwise every touching part met faster than its own tolerance breaks off, soaking up some
+ *  of the speed as on the ground, and the rest is stopped against the solid. Emits `hit.type` events { vessel, part,
+ *  what, lost, broken }, `what` from hit.what(upward part of the normal, part). → true when anything touched. */
+export function strikeSteel(world, v, ev, hit) {
+  const body = v.body, ut = world.ut;
+  // the velocity over the ground, in the site's frame (the ground turns with the body)
+  const wy = TAU / body.rotPeriod;
+  _sv.set(v.vel.x - wy * v.pos.z, v.vel.y, v.vel.z + wy * v.pos.x);
+  const vx = _sv.dot(_pe), vy = _sv.dot(_a), vz = _sv.dot(_ps);
+  let first = null, depth = 0, nx = 0, ny = 0, nz = 0, lead = null, leadPen = 0, leadInto = 0, absorb = 0;
   const broken = [];
   let cur = null, pen = -1, px = 0, py = 0, pz = 0;
   const settle = () => {
-    // how fast the part met the steel: its speed into the face it touched
+    // how fast the part met the solid: its speed into the face it touched
     const p = cur, d = p.def;
-    if (pen < 0) return false;
+    if (pen < 0) return;
     const into = -(vx * px + vy * py + vz * pz), tol = d.tolerance || 6;
-    if (!hit || pen > depth) { hit = hit || p; depth = Math.max(depth, pen); nx = px; ny = py; nz = pz; }
-    if (into > tol * TUNING.CRASH_ALL) { worst = 2; hit = p; return true; }
-    if (into > tol) { broken.push(p.id); worst = Math.max(worst, 1); }
-    return false;
+    if (!first || pen > depth) { first = p; depth = pen; nx = px; ny = py; nz = pz; }
+    // whether the whole vessel goes is up to its body (what hangs on its side, a fin, a flap, a leg, only breaks off)
+    if (p._stack && (!lead || pen > leadPen)) { lead = p; leadPen = pen; leadInto = into; }
+    if (into > tol) { broken.push(p.id); absorb = Math.max(absorb, tol); }
   };
   eachBall(v, (p, x, y, z, r) => {
-    if (p !== cur) { if (cur && settle()) return 'stop'; cur = p; pen = -1; }
-    const dist = steelDistance(x, y, z, pose, !(guided && p._stack));
-    if (dist < r && r - dist > pen) { pen = r - dist; px = _n.x; py = _n.y; pz = _n.z; }
+    if (p !== cur) { if (cur) settle(); cur = p; pen = -1; }
+    const dist = hit.distance(p, x, y, z, r);
+    if (dist < r && r - dist > pen) { pen = r - dist; px = STEEL_N.x; py = STEEL_N.y; pz = STEEL_N.z; }
     return false;
   });
-  if (cur && worst < 2) settle();
-  if (!hit) return false;
-  const what = ny > 0.7 ? 'the top of a tower arm' : 'the tower';
+  if (cur) settle();
+  if (!first) return false;
+  const worst = lead && leadInto > (lead.def.tolerance || 6) * TUNING.CRASH_ALL ? 2 : broken.length ? 1 : 0;
+  const what = hit.what(ny, first);
   if (worst === 2) {
-    ev.push({ type: 'towerStrike', vessel: v, part: hit.def.name, what, lost: true, broken: v.parts.size });
-    v.destroyParts([...v.parts.keys()], ev, 'tower');
+    ev.push({ type: hit.type, vessel: v, part: lead.def.name, what, lost: true, broken: v.parts.size });
+    v.destroyParts([...v.parts.keys()], ev, hit.reason);
     return true;
   }
-  if (broken.length) {
-    ev.push({ type: 'towerStrike', vessel: v, part: hit.def.name, what, lost: false, broken: broken.length });
-    v.destroyParts(broken, ev, 'tower');
-    if (v.dead) return true;
-  }
-  // stopped against the steel, and set back out of it
   _n.set(0, 0, 0).addScaledVector(_pe, nx).addScaledVector(_a, ny).addScaledVector(_ps, nz);
   const vin = _sv.dot(_n);
+  if (broken.length) {
+    const name = v.parts.get(broken[0]) ? v.parts.get(broken[0]).def.name : first.def.name;
+    ev.push({ type: hit.type, vessel: v, part: name, what, lost: false, broken: broken.length });
+    v.destroyParts(broken, ev, hit.reason);
+    if (v.dead) return true;
+    // the broken parts soak up some of the speed into the solid, as on the ground; what is left of the vessel goes on
+    // and meets the solid with whatever touches next
+    if (vin < 0) v.vel.addScaledVector(_n, -vin * Math.min(1, absorb / -vin));
+    return true;
+  }
+  // stopped against the solid, and set back out of it
   if (vin < 0) v.vel.addScaledVector(_n, -vin * 1.2);
   v.pos.addScaledVector(_n, Math.min(depth, 0.2));
-  if (!broken.length && (!v._towerTouch || ut - v._towerTouch > 2)) ev.push({ type: 'towerStrike', vessel: v, part: hit.def.name, what, lost: false, broken: 0 });
-  v._towerTouch = ut;
+  const key = '_touch_' + hit.type;
+  if (!broken.length && (!v[key] || ut - v[key] > 2)) ev.push({ type: hit.type, vessel: v, part: first.def.name, what, lost: false, broken: 0 });
+  v[key] = ut;
   return true;
 }

@@ -253,7 +253,8 @@ export function createFlightScreen(app) {
         }
         break;
       case 'towerStrike':
-        // steel on steel: once for a touch, once for what broke
+      case 'structureStrike':
+        // steel on steel (or concrete): once for a touch, once for what broke
         if (mine && !p.lost) {
           if (p.broken) toast('Struck ' + p.what + ': the ' + (p.part || 'part') + (p.broken > 1 ? ' and ' + (p.broken - 1) + ' more broke off' : ' broke off'), 'bad');
           else toast('Scraped ' + p.what + ' with the ' + (p.part || 'hull'), 'warn');
