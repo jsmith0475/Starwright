@@ -1030,11 +1030,11 @@ export function createFlightScene(app) {
       // aim between them; the pilot's own zoom is put back when the canopy is gone (unless they changed it meanwhile)
       const av = a ? views.get(a) : null, open = av && av.canopyOpen ? av.canopyOpen : 0;
       if (open > 0 && typeof cam.setDist === 'function') {
-        const need = open * 2.0 + 6;
+        const need = open * 2.9 + 8;
         if (!canopyZoom) { canopyZoom = { prev: cam.goal, set: Math.max(cam.goal, need) }; cam.setDist(canopyZoom.set); }
         else if (need > canopyZoom.set + 0.5 && Math.abs(cam.goal - canopyZoom.set) < 0.5) { canopyZoom.set = need; cam.setDist(need); }
       } else if (canopyZoom) { if (Math.abs(cam.goal - canopyZoom.set) < 0.5 && typeof cam.setDist === 'function') cam.setDist(canopyZoom.prev); canopyZoom = null; }
-      const want = open ? Math.min(cam.dist * 0.4, open * 0.42) : 0; cam.lift = (cam.lift || 0) + (want - (cam.lift || 0)) * Math.min(1, dt * 1.5); }
+      const want = open ? Math.min(cam.dist * 0.4, open * 0.36) : 0; cam.lift = (cam.lift || 0) + (want - (cam.lift || 0)) * Math.min(1, dt * 1.5); }
     cam.update(dt, anchor);
     // A clear first look. The opening view of a craft on the pad or the runway is a fixed bearing at a distance set by
     // its size; for the biggest stock rocket that put the camera 5 m behind a lightning mast. Once for each vessel

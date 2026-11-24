@@ -57,7 +57,7 @@ async function shot(name) {
   await page.waitForTimeout(700);
   const file = path.join(OUT, `preview-chute-${name}.png`);
   await page.screenshot({ path: file, timeout: 120000 });
-  const info = await E(() => { const v = window.__sw.world.active; return v.chuteParts.map(p => { const c = v.chuteView(p); return c ? `${p.def.id} ${c.stage} fill ${c.fill.toFixed(2)}: ${(c.shape.rm * 2).toFixed(1)} m wide, top ${c.shape.top.toFixed(1)} m up, load ${(c.load * 100).toFixed(0)}%` : p.def.id + ' ' + p.deployed; }).join('; ') + ` | ${v.airspeed.toFixed(1)} m/s at ${v.radarAlt.toFixed(0)} m`; });
+  const info = await E(() => { const v = window.__sw.world.active, cm = window.__sw.app.flight.cam; return `cam ${cm.dist.toFixed(0)} m, lift ${(cm.lift || 0).toFixed(1)}; ` + v.chuteParts.map(p => { const c = v.chuteView(p); return c ? `${p.def.id} ${c.stage} fill ${c.fill.toFixed(2)}: ${(c.shape.rm * 2).toFixed(1)} m wide, top ${c.shape.top.toFixed(1)} m up, load ${(c.load * 100).toFixed(0)}%` : p.def.id + ' ' + p.deployed; }).join('; ') + ` | ${v.airspeed.toFixed(1)} m/s at ${v.radarAlt.toFixed(0)} m`; });
   console.log('  captured ' + name + '  (' + info + ')');
 }
 async function boot() {
