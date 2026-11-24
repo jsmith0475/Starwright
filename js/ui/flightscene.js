@@ -623,8 +623,8 @@ export function createFlightScene(app) {
         if (p.deployed && isActive) { lampN++; lampAcc.x += p.pos.x - com.x; lampAcc.y += p.pos.y - com.y; lampAcc.z += p.pos.z - com.z; lampDir.x += Math.cos(p.rot || 0); lampDir.z -= Math.sin(p.rot || 0); }
       }
       const canopy = mesh.userData.canopy;
-      const cv = canopy && (p.deployed === 'semi' || p.deployed === 'full') ? v.chuteView(p, e.cv || (e.cv = {})) : null;
-      if (canopy) st.chute = cv;
+      const cv = canopy && (p.deployed === 'drogue' || p.deployed === 'semi' || p.deployed === 'full') ? v.chuteView(p, e.cv || (e.cv = {})) : null;
+      if (canopy) { st.chute = cv; st.chuteDown = !!(v.landed || v.splashed || v._touched); }
       setPartState(mesh, st);
       if (cv) {
         view.canopyOpen = Math.max(view.canopyOpen || 0, mesh.userData.canopyTop || 12);
@@ -632,7 +632,7 @@ export function createFlightScene(app) {
         v2.set(cv.x, cv.y, cv.z).applyQuaternion(q2.copy(mesh.quaternion).invert());
         canopy.quaternion.setFromUnitVectors(Y_AXIS, v2.normalize());
         e.canopyQ = true;
-      } else if (canopy && e.canopyQ) { e.canopyQ = null; canopy.quaternion.identity(); }
+      } else if (canopy && e.canopyQ && mesh.userData.chuteDown === undefined) { e.canopyQ = null; canopy.quaternion.identity(); }
 
       // ---- engines: plume, smoke, ground wash, light
       if (e.plume) {
@@ -1400,7 +1400,7 @@ export function createFlightScene(app) {
       });
       return;
     }
-    if (type === 'chute' && p.vessel && p.part && (p.state === 'semi' || p.state === 'full') && p.vessel.body === body) {
+    if (type === 'chute' && p.vessel && p.part && (p.state === 'drogue' || p.state === 'semi' || p.state === 'full') && p.vessel.body === body) {
       const view = views.get(p.vessel); if (!view) return;
       const e = view.parts.get(p.part.id); if (!e) return;
       e.mesh.getWorldPosition(v1);
