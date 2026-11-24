@@ -107,7 +107,11 @@ export const TUNING = {
   WING_STALL: 0.28,          // rad (16°): stall angle of a `wing`
   FIN_STALL: 0.45,           // rad: low-aspect fins stall late
   WING_CD0: 0.012,           // profile drag coefficient
-  WING_K: 0.07,              // induced drag factor: CD = CD0 + K·CL²
+  WING_K: 0.07,              // induced drag factor: CD = CD0 + K·CL² (above Mach 1 the larger of this and sqrt(Ma²-1)/4)
+  SUPER_SLOPE: 4,            // linear supersonic theory: the lift-curve slope cannot exceed SUPER_SLOPE / sqrt(Ma²-1)
+  GRID_FROM: 0.8, GRID_PEAK: 1.0, GRID_TO: 1.3,   // a lattice vane chokes through the speed of sound: between these Mach numbers
+  GRID_LIFT_LOSS: 0.4,       //   its lift slope falls by up to this fraction, and
+  GRID_DRAG_GAIN: 1.0,       //   its drag rises by up to this fraction, both greatest at GRID_PEAK (a game model of a real effect)
   WING_PLATE: 0.9,           // post-stall flat-plate lift factor: CL = PLATE·sin 2α
   WING_PLATE_CD: 1.8,        // post-stall drag: CD = PLATE_CD·sin²α
   FLAP_MAX: 1.4,             // rad (80°): how far a body flap folds up toward the lee side from flat
@@ -277,10 +281,37 @@ const _bp = { d: 0, nx: 0, ny: 0, nz: 0 }, _bh = { d: 0, nx: 0, ny: 0, nz: 0, b:
 const _rl1 = new Vector3(), _rl2 = new Vector3();   // relief under the contact points (_contact)
 const WHEEL_DOWN = new Vector3(0, 0, -1);   // craft axis that points at the ground for wheeled vehicles
 
-/** Lift and drag coefficients of a wing at angle of attack `a` (rad, any value). Returns [CL, CD]. */
-export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WING_STALL, out = [0, 0]) {
+/** The lift-curve slope (per rad) a surface keeps at a Mach number: its own below Mach 1, at most 4 / sqrt(Ma² - 1) above. */
+export function machSlope(slope, mach) {
+  if (!(mach > 1)) return slope;
+  const cap = TUNING.SUPER_SLOPE / Math.sqrt(mach * mach - 1);
+  return cap < slope ? cap : slope;
+}
+/** The induced-drag factor K at a Mach number: WING_K, or sqrt(Ma² - 1) / 4 where that is larger (drag due to lift = CL·α). */
+export function machInduced(mach) {
+  if (!(mach > 1)) return TUNING.WING_K;
+  const k = Math.sqrt(mach * mach - 1) / TUNING.SUPER_SLOPE;
+  return k > TUNING.WING_K ? k : TUNING.WING_K;
+}
+/** How far a lattice vane is into its transonic choke: 0 outside Mach 0.8 to 1.3, 1 at Mach 1.0. */
+export function gridChoke(mach) {
+  const T = TUNING;
+  return mach <= T.GRID_FROM || mach >= T.GRID_TO ? 0 : mach <= T.GRID_PEAK ? (mach - T.GRID_FROM) / (T.GRID_PEAK - T.GRID_FROM) : (T.GRID_TO - mach) / (T.GRID_TO - T.GRID_PEAK);
+}
+
+/**
+ * Lift and drag coefficients of a wing at angle of attack `a` (rad, any value). Returns [CL, CD].
+ * `mach` brings in the supersonic slope cap and drag due to lift, `rise` is the profile-drag multiplier at that Mach
+ * number (the slender curve of aero.js), `choke` the lattice vane's transonic choke (gridChoke). The defaults are
+ * the low-speed wing.
+ */
+export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WING_STALL, out = [0, 0], mach = 0, rise = 1, choke = 0) {
   const sa = Math.sin(a), ca = Math.cos(a);
-  const plateL = TUNING.WING_PLATE * 2 * sa * ca, plateD = TUNING.WING_CD0 + TUNING.WING_PLATE_CD * sa * sa;
+  const cd0 = TUNING.WING_CD0 * rise;
+  const plateL = TUNING.WING_PLATE * 2 * sa * ca, plateD = cd0 + TUNING.WING_PLATE_CD * sa * sa;
+  let K = TUNING.WING_K;
+  if (mach > 1) { slope = machSlope(slope, mach); K = machInduced(mach); }
+  if (choke > 0) slope *= 1 - TUNING.GRID_LIFT_LOSS * choke;
   // attached flow only near α = 0 (or 180° for a wing flying backwards, at half the efficiency)
   let al = a, eff = 1;
   if (ca < 0) { al = a > 0 ? a - Math.PI : a + Math.PI; eff = 0.5; }
@@ -289,9 +320,10 @@ export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WI
   let w = x <= 0.85 ? 1 : x >= 1.35 ? 0 : 1 - (x - 0.85) / 0.5;
   w = w * w * (3 - 2 * w);
   const cl = slope * eff * al;
-  const cd = TUNING.WING_CD0 + TUNING.WING_K * cl * cl;
+  const cd = cd0 + K * cl * cl;
   out[0] = w * cl + (1 - w) * plateL;
   out[1] = w * cd + (1 - w) * plateD;
+  if (choke > 0) out[1] *= 1 + TUNING.GRID_DRAG_GAIN * choke;
   return out;
 }
 const _cf = [0, 0];
@@ -695,6 +727,7 @@ export class Vessel {
         p._wCtl = c === true ? 'auto' : (c === 'pitch' || c === 'roll' || c === 'yaw' || c === 'auto') ? c : null;
         p._wTau = d.wing ? (wg.allMoving ? 1 : TUNING.CTRL_TAU) : 1;
         p._defl = 0; p._kp = 0; p._kr = 0; p._ky = 0;
+        p._grid = d.variant === 'grid' || !!wg.grid;
         this._wings.push(p);
       }
       p._stack = !!d.attach.stack;
@@ -1238,7 +1271,8 @@ export class Vessel {
       if (c === 'auto' || c === 'roll') p._kr = c === 'roll' ? Math.sign(p._ty) || 0 : gain(p._ty, Ly);
       if (c === 'auto' || c === 'yaw') p._ky = c === 'yaw' ? Math.sign(p._tz) || 0 : gain(p._tz, Lz);
       const f = p._wArea * p._wSlope * p._wTau * TUNING.CTRL_DEFLECT;
-      ca.x += f * Math.abs(p._tx * p._kp); ca.y += f * Math.abs(p._ty * p._kr); ca.z += f * Math.abs(p._tz * p._ky);
+      p._cax = f * Math.abs(p._tx * p._kp); p._cay = f * Math.abs(p._ty * p._kr); p._caz = f * Math.abs(p._tz * p._ky);
+      ca.x += p._cax; ca.y += p._cay; ca.z += p._caz;
     }
     const ra = this._rcsAuth.set(0, 0, 0);
     let rt = 0;
@@ -2034,7 +2068,7 @@ export class Vessel {
    */
   axialDragAt(mach, tailFirst = true) {
     const riseB = dragRise(mach, 1), riseS = dragRise(mach, 0), wake = wakeFraction(mach), wN = newtonWeight(mach), wC = 1 - wN;
-    const wS = shadowWeight(mach) * (1 - SHADOW_KEEP), mf = machDrag(mach);
+    const wS = shadowWeight(mach) * (1 - SHADOW_KEEP), mf = machDrag(mach), choke = gridChoke(mach);
     const cpN = wN > 0 ? pitotCp(mach, this.body.atmo ? this.body.atmo.gamma : 1.4) : 0, uy = tailFirst ? -1 : 1;
     let a = 0;
     for (const p of this._list) {
@@ -2060,7 +2094,7 @@ export class Vessel {
         let f = wC * (tailFirst ? p._aDown * mD + wake * p._aUp * mU : p._aUp * mU + wake * p._aDown * mD);
         if (wN > 0) f += wN * cpN * Math.abs(p._nt[tailFirst ? (NEWTON_ROWS - 1) * 3 : 0]);
         a += f * keep;
-      } else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf)[1] * mf;
+      } else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf, mach, riseS, p._grid ? choke : 0)[1] * keep;
       else { let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area; a += aR * riseB * keep; }
     }
     return a;
@@ -2396,8 +2430,16 @@ export class Vessel {
     if (rover) { ax = 0; az = 0; }
     let fx = 0, fy = 0, fz = 0;        // aerodynamic control authority: delivered by the surfaces themselves
     if (qdyn > 1 && this._wings.length) {
-      const k = qdyn * axial * axial;
-      fx = this._ctlAuth.x * k; fy = this._ctlAuth.y * k; fz = this._ctlAuth.z * k;
+      const k = qdyn * axial * axial, mach = this._envMach || 0;
+      if (mach > TUNING.GRID_FROM) {
+        // above the speed of sound each surface keeps the slope linear theory leaves it; a lattice vane chokes near Mach 1
+        const choke = gridChoke(mach);
+        for (const p of this._wings) {
+          if (!p._wCtl) continue;
+          const g = (machSlope(p._wSlope, mach) / p._wSlope) * (p._grid ? 1 - TUNING.GRID_LIFT_LOSS * choke : 1) * k;
+          fx += p._cax * g; fy += p._cay * g; fz += p._caz * g;
+        }
+      } else { fx = this._ctlAuth.x * k; fy = this._ctlAuth.y * k; fz = this._ctlAuth.z * k; }
       ax += fx; ay += fy; az += fz;
     }
     const rcsOn = c.rcs && this._rcsThrust > 0 && this._total('mono') > 0;
@@ -2428,7 +2470,12 @@ export class Vessel {
       else if (c.sas) {
         const w = this.w;
         const T = Math.max(TUNING.SAS_T, 2.5 * dt);
-        const alx = ax / I.x, aly = ay / I.y, alz = az / I.z;
+        // The hold's gain comes from what a full command really does: the direct torque within the limit plus what the
+        // control surfaces give in this air (ctrlAccel). Before, it was told the limit alone (MAX_ANG_ACC) while the
+        // surfaces gave whatever the air gave them: a falling booster's Lattice Vanes gave about forty times that in
+        // roll, and the hold slammed them from stop to stop every step between Mach 2.9 and 1.2, the stage shaking
+        // ±0.4 rad/s about its axis and the vanes dragging hard over.
+        const alx = this.ctrlAccel.x, aly = this.ctrlAccel.y, alz = this.ctrlAccel.z;
         let ex = 0, ey = 0, ez = 0, track = true;
         const bankQ = c.sasMode === 'bankHold' ? this.bankAttitude(_qb) : c.sasMode === 'belly' ? this.bellyAttitude(_qb) : null;
         if (bankQ) {
@@ -2615,7 +2662,9 @@ export class Vessel {
       const cxm = com.x, cym = com.y, czm = com.z;
       const uAx = uy / speed;
       const mach = this._envMach;
-      // wings and open panels keep the single drag-rise curve (they are part D of the re-entry work)
+      // open panels keep the single drag-rise curve; wings and fins take the slender curve on their profile drag, the
+      // supersonic slope cap and drag due to lift, and the shadow of the body (part D of the re-entry work)
+      const choke = gridChoke(mach);
       const mf = mach <= 0.7 ? 1 : mach < 1.1 ? 1 + (mach - 0.7) * 2.5 * (TUNING.MACH_PEAK - 1)
         : mach < 2.5 ? TUNING.MACH_PEAK + (mach - 1.1) / 1.4 * (TUNING.MACH_HIGH - TUNING.MACH_PEAK) : TUNING.MACH_HIGH;
       // bodies: a blunt and a slender curve, a wake that fades, a Newtonian force that takes over, and shadow
@@ -2695,11 +2744,11 @@ export class Vessel {
               const vp = Math.sqrt(v2);
               let alpha = Math.atan2(-vnt, vc);
               if (p._defl) alpha += p._wTau * TUNING.CTRL_DEFLECT * p._defl;
-              wingCoefficients(alpha, p._wSlope, p._wStall, _cf);
-              const qS = 0.5 * rho * v2 * p._wArea;
-              const L = qS * _cf[0], D = qS * _cf[1] * mf;
+              wingCoefficients(alpha, p._wSlope, p._wStall, _cf, mach, riseS, p._grid ? choke : 0);
+              const qS = 0.5 * rho * v2 * p._wArea * keep;
+              const L = qS * _cf[0], D = qS * _cf[1];
               const fn = (L * vc - D * vnt) / vp, fc = (-L * vnt - D * vc) / vp;
-              const vs = vx * p._sx + vy * p._sy + vz * p._sz, ks = qd * p._wArea * 0.01 / sp * vs;
+              const vs = vx * p._sx + vy * p._sy + vz * p._sz, ks = qd * p._wArea * 0.01 / sp * vs * keep;
               fx = fn * p._nx + fc * p._ax - ks * p._sx; fy = fn * p._ny + fc * p._ay - ks * p._sy; fz = fn * p._nz + fc * p._az - ks * p._sz;
               p._aoa = alpha; p._lift = L;
               Ax += fx; Ay += fy; Az += fz;
@@ -2709,12 +2758,12 @@ export class Vessel {
             const vpl = Math.sqrt(vpl2);
             let alpha = Math.atan2(-vn, vy);
             if (p._defl) alpha += p._wTau * TUNING.CTRL_DEFLECT * p._defl;
-            wingCoefficients(alpha, p._wSlope, p._wStall, _cf);
-            const qS = 0.5 * rho * vpl2 * p._wArea;
-            const L = qS * _cf[0], D = qS * _cf[1] * mf;
+            wingCoefficients(alpha, p._wSlope, p._wStall, _cf, mach, riseS, p._grid ? choke : 0);
+            const qS = 0.5 * rho * vpl2 * p._wArea * keep;
+            const L = qS * _cf[0], D = qS * _cf[1];
             const fn = (L * vy - D * vn) / vpl;
             fy = (-L * vn - D * vy) / vpl;
-            const vs = vx * p._ox + vz * p._oz, ks = qd * p._wArea * 0.01 / sp * vs;   // a little skin friction along the span
+            const vs = vx * p._ox + vz * p._oz, ks = qd * p._wArea * 0.01 / sp * vs * keep;   // a little skin friction along the span
             fx = fn * nx - ks * p._ox; fz = fn * nz - ks * p._oz;
             p._aoa = alpha; p._lift = L;
             Ax += fx; Ay += fy; Az += fz;

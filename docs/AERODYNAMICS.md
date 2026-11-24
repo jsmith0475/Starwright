@@ -7,7 +7,7 @@ gave every world its own gas, temperature and speed of sound, so the Mach number
 one. This step makes the force on a body depend on its shape and attitude at that Mach
 number.
 
-Below Mach 0.7 nothing changes. Wings, fins and open panels are not touched here (step D).
+Below Mach 0.7 nothing changes. Open panels are not touched here. Wings and fins above the speed of sound are step D ([WINGS.md](WINGS.md)).
 Heating by shape is step E ([HEATING.md](HEATING.md)).
 
 The code is `js/core/aero.js` (curves and tables) and the per-part loop of

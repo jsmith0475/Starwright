@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'wings-at-speed', date: '2026-11-24', title: 'Wings and fins feel the speed of sound',
+    text: 'Above Mach 1 a wing or fin now loses lift and pays more drag for what it keeps, as supersonic theory says: at Mach 5 a fin has half its low-speed grip. The Lattice Vane chokes for a moment as it passes Mach 1. A fin hidden behind the hull at a steep angle loses its bite. Slower than Mach 0.7 nothing has changed. Science chapter 10 has the formulas.' },
   { id: 'shearwater-close-up', date: '2026-11-24', title: 'Shearwater up close',
     text: 'Under the booster and the ship the many small flames now merge into one long flame sized by the thrust being made. The tower service arm rests on the hull until the engines light, and two docked Flank Ports are joined by a collar with latches that frosts over while propellant flows.' },
   { id: 'ship-belly-return', date: '2026-11-24', title: 'Shearwater comes home on its belly',

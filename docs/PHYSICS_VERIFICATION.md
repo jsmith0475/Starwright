@@ -210,6 +210,26 @@ reference's own.
   A tiled side holds at 250 K over the steel's limit with its belly to the wind, and fails
   with its back to it.
 
+### Wings and fins above the speed of sound (chapter 15 of the checks)
+
+`tests/verify/checks_wings.mjs`, step D of the re-entry work ([WINGS.md](WINGS.md)). 60 checks pass,
+0 fail.
+
+- **The coefficients.** The slope table of the specification is worked again from
+  $4 / \sqrt{\mathrm{Ma}^2 - 1}$. The cap takes hold at Mach 1.49 on a wing and 2.69 on a fin with no
+  jump. With the capped slope the drag due to lift equals $C_L \alpha$ to twelve places. The whole
+  function is compared with a second copy at 1,452 angles and Mach numbers for a wing, a fin and a
+  lattice vane. Up to Mach 0.7 it is the function it always was.
+- **Forces in the game.** Four Tail Fins, four Lattice Vanes and two Stub Wings on a tank are held
+  at seven Mach numbers, four angles and two rolls. The force the game puts on the surfaces (the
+  craft with them less the craft without) is compared with the reference's, in the reference's own
+  air: worst difference 0.2 % of a twentieth of $q S$. The lift slope of a fin measured from the
+  game's force is 1.598 at Mach 0.5 and 0.816 at Mach 5.
+- **Shadow.** With the hull at 70 degrees to a Mach 3 flow, the fin in the lee keeps a tenth of
+  the force of the fin to windward.
+- **Steering.** The torque a full command gives per unit of dynamic pressure, against Mach 0.5:
+  0.60 at Mach 1 for a Lattice Vane (its choke), 0.88 at Mach 3 and 0.51 at Mach 5.
+
 The specification's law, built as written, burned antennas and solar panels off eight stock
 rockets on the climb. The wall factor $(1 - T/T_0)$ of Sutton and Graves' full law removes
 that: air at 1,000 m/s cannot heat anything past about 700 K. With it the declared scale came
@@ -387,7 +407,7 @@ No existing test encoded wrong physics; none was changed.
 - **Body forces above Mach 1.5** are Newtonian impact pressure on each part's own surface, blended in from the
   face-and-side law between Mach 1.5 and 4. Shock waves from one part do not strike another, there is no skin
   friction or separation, the gas is ideal at any temperature, and a part behind a wider one keeps a flat 10 %.
-  Wings, fins and panels still use the single drag-rise curve.
+  Wings and fins take the supersonic slope cap and drag due to lift (chapter 15); open panels still use the single drag-rise curve.
 - **Drag integration** is first order in the speed-dependent force at 20 ms: 0.9 m over a 5.4 km fall.
 - **Physics warp** uses 100 ms steps when coasting in vacuum: 1.5 m of along-track error per 10 low orbits,
   with energy conserved to 5e-8 m of semi-major axis.
