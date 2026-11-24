@@ -28,9 +28,15 @@ function base(world, vessel, name) {
 }
 
 /** Angle (rad) between the vessel's nose and an inertial direction. */
+const _nose = new Vector3();
+/**
+ * Angle (rad) between the vessel's nose and `dir`. It works in a vector of its own: it used to work in `_a`, and five
+ * callers passed their direction in `_a`, so they measured the nose against itself, got zero, and lit the engine
+ * however the vessel was pointing.
+ */
 export function pointingError(vessel, dir) {
-  _a.set(0, 1, 0).applyQuaternion(vessel.q);
-  return _a.angleTo(dir);
+  _nose.set(0, 1, 0).applyQuaternion(vessel.q);
+  return _nose.angleTo(dir);
 }
 function point(vessel, dir) {
   vessel.ctrl.sas = true;
@@ -436,7 +442,7 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
   const v = vessel;
   const body = v.body;
   const o = { stopAlt: 40, touchdownSpeed: 1.5, useWarp: true, deorbitPeriapsis: -0.08 * body.radius,
-    terrain: true, reach: 400, siteBudget: 0.1, pullUpAt: 12, cruiseAlt: 25, cruiseSpeed: 12, ...opts };
+    terrain: true, reach: 400, siteBudget: 0.1, brakeTime: 20, pullUpAt: 12, cruiseAlt: 25, cruiseSpeed: 12, ...opts };
   // (waiting in orbit for better ground is only offered when it may warp through the wait)
   if (o.survey === undefined) o.survey = o.terrain && o.useWarp;
   const c = base(world, v, 'hoverslam');
@@ -487,6 +493,13 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
       call(c.warning + (s.dist < 1 ? ': coming down here' : `: going ${s.dist.toFixed(0)} m to it`), 'warn');
     }
   };
+  /**
+   * The throttle the braking burn is planned at. Nine tenths of full, so that there is a tenth in hand; and less on a
+   * lander with a strong engine over a small world, so that the burn lasts opts.brakeTime (20 s) or more. Without
+   * that, such a lander began braking from 90 m/s with 98 m of height left and six seconds to run: correct on paper,
+   * and no time to do anything about it if the engine was late.
+   */
+  const brakeThrottle = (speed, thrust, mass) => clamp(speed / o.brakeTime / Math.max(1e-6, thrust / mass), 0.3, 0.9);
   const needThrottle = () => {
     const { thrust, ve } = v.enginePower();
     if (!(thrust > 0)) return 2;
@@ -529,7 +542,7 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
     const tb = t - ut;
     m = Math.max(m, v.mass * 0.2);
     const target = o.stopAlt + (v._baseH || 0);
-    const at = tt => { const s = down.stateAt(tt); return stopAltitude(body, s.r, s.v, m, thrust, ve, 0.9, tt); };
+    const at = tt => { const s = down.stateAt(tt); return stopAltitude(body, s.r, s.v, m, thrust, ve, brakeThrottle(s.v.length(), thrust, m), tt); };
     let t0 = ut + tb, t1 = t0, hit = null;
     const span = Math.min(down.period, 4 * Math.PI * Math.sqrt(r1 * r1 * r1 / body.gm)), step = span / 240;
     for (let i = 1; i <= 240; i++) {
@@ -610,8 +623,7 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
       }
       case 'deorbit': {
         mode(v, 'retrograde');
-        // (pointingError works in _a: the direction has to be in another vector, or the answer is always zero and
-        // the burn starts while the lander is still turning round, which is what it did until this was found)
+        // (the burn waits until the lander has turned round)
         _b.copy(v.vel).normalize().negate();
         const err = pointingError(v, _b);
         const acc = Math.max(0.05, v.maxThrust / v.mass);
@@ -624,14 +636,14 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
         mode(v, 'srfRetrograde');
         v.ctrl.throttle = 0;
         const need = needThrottle();
-        if (need >= 0.9) { c.phase = 'brake'; c.note(`braking burn at ${(v.radarAlt / 1000).toFixed(1)} km, ${v.airspeed.toFixed(0)} m/s`); break; }
+        if (need >= brakeThrottle(v.airspeed, v.enginePower().thrust, v.mass)) { c.phase = 'brake'; c.note(`braking burn at ${(v.radarAlt / 1000).toFixed(1)} km, ${v.airspeed.toFixed(0)} m/s`); break; }
         if (o.useWarp && world.warpTarget === null && st.warped !== world.ut) {
           // warp towards the burn: the burn takes about speed/acc, so stop that long (plus slack) before impact
           const orbit = v.getOrbit(ut);
           const patch = predictPatches(orbit, body, ut, 1)[0];
           if (patch.endType === 'impact') {
             const { thrust } = v.enginePower();
-            const tBurn = v.airspeed / (thrust / v.mass);
+            const tBurn = Math.max(v.airspeed / (thrust / v.mass), o.brakeTime);
             // the ground may stand well above the reference sphere: find when the path meets the terrain height there
             let tHit = patch.tEnd;
             const sI = orbit.stateAt(tHit);

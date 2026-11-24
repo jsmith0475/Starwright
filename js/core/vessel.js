@@ -14,6 +14,13 @@ import { Structure, STRUCT } from './structure.js';
 import { CHUTE, chuteSpec, chuteDragArea, chuteShape, chuteAddedMass, chuteFillDistance, chuteGate, chuteReach, chuteReefProgress, chuteDisreefLoad } from './parachute.js';
 import { dragRise, bluntness, wakeFraction, newtonWeight, shadowWeight, pitotCp, newtonTable, newtonAt, SHADOW_KEEP, SHADOW_NEAR, SHADOW_FAR, NEWTON_ROWS } from './aero.js';
 
+const SIGMA = 5.670374419e-8;   // W/(m² K⁴), Stefan-Boltzmann
+/** Heat capacity of a part's skin per area (J/(m² K)): a share of its dry mass spread over its surface. */
+function skinCapacity(d, area, share = TUNING.HEAT_SKIN) {
+  const c = share * TUNING.HEAT_CP * d.mass * 1000 / Math.max(area, 1e-3);
+  return c < TUNING.HEAT_C_MIN ? TUNING.HEAT_C_MIN : c > TUNING.HEAT_C_MAX ? TUNING.HEAT_C_MAX : c;
+}
+
 const TAU = Math.PI * 2;
 
 /** Tuning constants of the flight model (exported so the UI / tests can read them). */
@@ -37,6 +44,8 @@ function solveDense(A, b, n) {
   for (let r = n - 1; r >= 0; r--) { let v = b[r]; for (let k = r + 1; k < n; k++) v -= A[r * n + k] * b[k]; b[r] = v / A[r * n + r]; }
 }
 
+/** The heating scale the game ships with (TUNING.HEAT_SCALE; Settings can set it to 1, the physical flux). */
+export const HEAT_SCALE_GAME = 20;
 export const TUNING = {
   DT_MAX: 0.02,              // physics sub-step under thrust / in atmosphere (s)
   DT_COAST: 0.1,             // sub-step while coasting in vacuum under physics warp (s)
@@ -47,16 +56,26 @@ export const TUNING = {
   HOT_STAGE_DELAY: 0.8,      // s a hot-staging ring holds on after the stage above has lit its engines through its vents
   RING_DELAY: 0.5,           // s between a stack separator's two planes: the ring leaves the dropped stage this long after staging
   RING_KICK: 20, RING_LIFT: 1, // m/s the ring is thrown sideways, and off the end of the stage, relative to the two together
-  HEAT_FLUX_K: 1.83e-4,      // Sutton-Graves-like: flux = K·sqrt(rho)·v³  (W/m²)
-  HEAT_K: 0.30,              // equilibrium skin temperature rise = HEAT_K·(flux·exposure)^HEAT_EXP  (K)
-  HEAT_EXP: 0.75,
-  HEAT_TAU: 22,              // s, time constant while heating up
-  COOL_TAU: 30,              // s, time constant while cooling down
-  HEAT_MIN_FLUX: 1500,       // W/m²: below this nothing heats
-  SIDE_EXPOSURE: 0.35,       // exposure of a part's flank at 90° angle of attack
-  RADIAL_EXPOSURE: 0.6,      // exposure of radially mounted parts
-  SHIELD_FACTOR: 0.3,        // temperature-rise multiplier of a heat shield that still has ablator
-  ABLATE_RATE: 6e-6,         // kg of ablator per J/m² of heat load on the shield face
+  // Heating (docs/HEATING.md). The reference flux is Sutton and Graves' stagnation-point law on a nose of 1 m radius,
+  // q_ref = k·sqrt(rho)·v³ with k the constant of the world's gas (body.atmo.heatK). A part meets
+  // HEAT_SCALE · q_ref / sqrt(R) · attitude factor · shadow exposure, R its own effective nose radius.
+  HEAT_FLUX_K: 1.7415e-4,    // air; other gases in GASES (bodies.js)
+  HEAT_SCALE: HEAT_SCALE_GAME,          // the model's one declared departure from physics: heating is this many times the physical flux
+  HEAT_MIN_FLUX: 1500,       // W/m² of scaled reference flux: below this nothing heats
+  HEAT_FACE_EXP: 1.5,        // a leading face: cos(angle between its normal and the wind) to this power
+  HEAT_SIDE: Math.SQRT1_2, HEAT_SIDE_EXP: 1.2,   // a flank or an edge: the swept-cylinder factor (1/sqrt 2)·sin(alpha)^1.2
+  HEAT_RADIAL_AX: 0.25,      // a part on the hull's side, with the air running along the hull: it stands in the hull's own layer of slowed air
+  HEAT_LEE: 0.03,            // a lee face, and the floor under the shadow exposure
+  HEAT_FLAT_R: 3,            // a flat face heats like a nose of this many face radii
+  HEAT_TIP_R: 0.3,           // a nose cone's tip radius, as a fraction of its base radius, unless the part states tipR
+  HEAT_EDGE_MIN: 0.02,       // m: the smallest effective radius (half the thickness of thin parts and edges)
+  HEAT_EMIS: 0.85,           // emissivity of every skin
+  HEAT_CP: 900, HEAT_SKIN: 0.2,                  // J/(kg K) and the share of a part's dry mass that is its skin
+  HEAT_C_MIN: 4000, HEAT_C_MAX: 40000,           // J/(m² K): limits on a skin's heat capacity per area
+  HEAT_AIR_H: 40,            // W/(m² K) at 1 kg/m³: still-air cooling, times sqrt(density)
+  ABLATE_TEMP: 2000,         // K: a shield with ablator left holds its face at this
+  ABLATE_Q: 1.35e6,          // J/kg: scaled heat carried off per kg of ablator (Q*)
+  TILE_TEMP: 2400, TILE_ARC: 120,                // a tiled side (def.tiles): its limit (K) and the arc it covers (degrees)
   AMBIENT_T: 290,
   CAP_PHI: 25,               // a heat shield or capsule base is a spherical cap of this half-angle (degrees) unless the part states capPhi
   BASE_DRAG: 0.25,           // leeward (wake-side) faces add this fraction of their drag area
@@ -469,6 +488,9 @@ export class Vessel {
     this.verticalSpeed = 0; this.horizontalSpeed = 0; this.orbitalSpeed = 0;
     this.pump = null; this.lastPump = null; this.axialAccel = 0;
     this.dynamicPressure = 0; this.mach = 0; this.gForce = 0; this.heatFlux = 0; this.maxTempRatio = 0;
+    // the record of the heating in progress, or of the last: peak reference flux (W/m²), the hottest part against its
+    // limit, the heat taken by the hottest part (J/m²), ablator lost (kg), and the hottest part now
+    this.peakHeatFlux = 0; this.peakTempRatio = 0; this.heatLoad = 0; this.ablated = 0; this.hotPart = null;
     this.situation = 'prelaunch';
     this.apoapsis = 0; this.periapsis = 0; this.period = 0;   // altitudes above the surface (m), s
     this.deltaV = 0; this.stageDeltaV = 0; this.stageInfo = [];
@@ -736,7 +758,21 @@ export class Vessel {
         p._rM = rM;
         const ref = 0.5 * Math.PI * rM * rM;
         p._eUp = Math.min(1, aUp / ref); p._eDown = Math.min(1, aDown / ref);
+        // heating: the effective nose radius of each end (a cap's radius of curvature, a cone's tip, a flat face as
+        // a nose of three face radii), the flank's own radius, and the heat capacity of the skin per area
+        const capT = p.flip ? cap : 0, capB = p.flip ? 0 : cap;
+        const tip = d.tipR !== undefined ? d.tipR : TUNING.HEAT_TIP_R;
+        p._hRu = Math.max(TUNING.HEAT_EDGE_MIN, capT > 0 && !hasTop ? rT / Math.sin(capT) : Math.max(TUNING.HEAT_FLAT_R * rT, rT < rB ? tip * rB : 0));
+        p._hRd = Math.max(TUNING.HEAT_EDGE_MIN, capB > 0 && !hasBot ? rB / Math.sin(capB) : Math.max(TUNING.HEAT_FLAT_R * rB, rB < rT ? tip * rT : 0));
+        p._hRs = Math.max(TUNING.HEAT_EDGE_MIN, 0.5 * (rT + rB));
+        p._hA = Math.PI * rM * rM;
+        p._hc = skinCapacity(d, Math.PI * ((rT + rB) * Math.hypot(d.h, rT - rB) + rT * rT + rB * rB));
       } else {
+        // heating of a radial part: a small body or an edge in the open stream
+        const thick = d.rw > 0 ? d.rw : d.t > 0 ? d.t : 0.1;
+        p._hRs = Math.max(TUNING.HEAT_EDGE_MIN, d.heatR !== undefined ? d.heatR : d.r > 0 ? d.r : 0.5 * thick);
+        p._hA = d.r > 0 ? Math.PI * d.r * d.r : d.h * thick;
+        p._hc = skinCapacity(d, d.r > 0 ? 2 * Math.PI * d.r * (d.h + d.r) : 2 * d.h * Math.max(d.t || 0.1, 0.1), d.r > 0 ? TUNING.HEAT_SKIN : 1);   // a small fitting is solid: all of it takes the heat
         // (a part that lies flat against the hull, the folding leg, states its own area: its box is long, what it shows the air is not)
         p._aRad = (d.wing || d.fin || d.flap) ? 0 : d.aRad !== undefined ? d.aRad : d.h * Math.max(d.t || 0.1, 0.1) * 0.8;
         // a solar array is a flat package against the hull: h tall, t wide, rw thick. It shows the air its big face
@@ -1074,7 +1110,14 @@ export class Vessel {
     else if (u) { const a = _e.set(0, 1, 0).applyQuaternion(this.q).dot(u); if (Math.abs(a) > 0.3) tail = a < 0; }
     let bank = 0;
     if (tr) { if (this.ctrl.sas && this.ctrl.sasMode === 'bankHold') bank = this.bank; else { const b = this.bankNow(); bank = b === null ? this.bank : b; } }
-    return { mass: this.mass, drag: this.axialDragTable(tail), dragScale: tr ? tr.kd : 1, ld: tr ? tr.ld : 0, ldMach: [0.7, 1.5], bank };
+    // a heat shield that leads the way down loses ablator, and the prediction lets it
+    let ablate = null;
+    for (const p of this._list) {
+      if (!p._stack || !p.def.heatshield || !(p.res.ablator > 0)) continue;
+      const e = tail ? p._eDown : p._eUp;
+      if (e > 0.5) ablate = { k: e / Math.sqrt(tail ? p._hRd : p._hRu), area: p._hA, left: p.res.ablator };
+    }
+    return { mass: this.mass, drag: this.axialDragTable(tail), dragScale: tr ? tr.kd : 1, ld: tr ? tr.ld : 0, ldMach: [0.7, 1.5], bank, ablate };
   }
   /**
    * The air force of the last step split along and across the airflow: { drag, lift (N), ld, dir (unit lift direction in
@@ -1958,12 +2001,25 @@ export class Vessel {
    * Highest skin temperature, as a fraction of the part's limit, that a steady heating flux (W/m²) would bring any
    * part to with the vessel flying along its own axis, tail first or nose first: _stepFlight's equilibrium rule.
    */
-  axialHeatRatio(flux, tailFirst = true) {
-    if (!(flux > TUNING.HEAT_MIN_FLUX)) return 0;
+  axialHeatRatio(flux, tailFirst = true, tRec = Infinity) {
+    const qs = flux * TUNING.HEAT_SCALE;
+    if (!(qs > TUNING.HEAT_MIN_FLUX)) return 0;
     let worst = 0;
+    const es = TUNING.HEAT_EMIS * SIGMA, t4 = TUNING.AMBIENT_T ** 4;
     for (const p of this._list) {
-      const ex = p._stack ? (tailFirst ? p._eDown : p._eUp) : TUNING.RADIAL_EXPOSURE;
-      const r = (TUNING.AMBIENT_T + TUNING.HEAT_K * Math.pow(flux * ex, TUNING.HEAT_EXP)) / p.def.maxTemp;
+      const ex = Math.max(TUNING.HEAT_LEE, 1 - this._shadeAt(p, 0, tailFirst ? -1 : 1, 0) / (1 - SHADOW_KEEP));
+      let q;
+      if (p._stack) q = Math.max((tailFirst ? p._eDown / Math.sqrt(p._hRd) : p._eUp / Math.sqrt(p._hRu)), TUNING.HEAT_LEE / Math.sqrt(p._hRs));
+      else q = TUNING.HEAT_RADIAL_AX / Math.sqrt(p._hRs);
+      const qj = qs * q * ex;
+      let T = Math.sqrt(Math.sqrt(t4 + qj / es));
+      if (tRec < Infinity) {
+        // with the wall factor: es (T^4 - t4) = qj (1 - T / tRec), by Newton's method from the cold-wall answer
+        if (T > tRec) T = tRec;
+        for (let k = 0; k < 6; k++) { const T3 = T * T * T; T -= (es * (T3 * T - t4) - qj * (1 - T / tRec)) / (4 * es * T3 + qj / tRec); }
+      }
+      if (p.def.heatshield && p.res.ablator > 0 && T > TUNING.ABLATE_TEMP) T = TUNING.ABLATE_TEMP;
+      const r = T / p.def.maxTemp;
       if (r > worst) worst = r;
     }
     return worst;
@@ -2535,10 +2591,16 @@ export class Vessel {
     // --- aerodynamics and heating
     let Ax = 0, Ay = 0, Az = 0, ATx = 0, ATy = 0, ATz = 0;
     this.aeroLocal.set(0, 0, 0);
-    const flux = rho > 0 ? TUNING.HEAT_FLUX_K * Math.sqrt(rho) * speed2 * speed : 0;
+    const flux = rho > 0 ? body.atmo.heatK * Math.sqrt(rho) * speed2 * speed : 0;
     this.heatFlux = flux;
-    const heating = flux > TUNING.HEAT_MIN_FLUX;
-    let overheated = null, maxRatio = 0;
+    const qs = flux * TUNING.HEAT_SCALE;
+    const heating = qs > TUNING.HEAT_MIN_FLUX;
+    const tEnv = rho > 0 ? body.temperature(alt) : TUNING.AMBIENT_T, tEnv4 = tEnv * tEnv * tEnv * tEnv;
+    const emis = TUNING.HEAT_EMIS * SIGMA, hAir = rho > 0 ? TUNING.HEAT_AIR_H * Math.sqrt(rho) : 0;
+    // the air can warm a skin no further than its own total temperature: the flux falls as the wall nears it
+    const tRec = rho > 0 ? tEnv + speed2 / (2 * body.atmo.cp) : tEnv;
+    this.recoveryTemp = tRec;
+    let overheated = null, maxRatio = 0, hotFlux = 0, hotP = null;
     let airU = 0, airWorst = null, torn = null;
     if (!(rho > 1e-10 && speed2 > 0.01) && this._airSeen) {      // out of the air: nothing presses, and what was strained recovers
       let any = false;
@@ -2560,6 +2622,9 @@ export class Vessel {
       const cpN = wN > 0 ? pitotCp(mach, body.atmo.gamma) : 0;
       const wux = ux / speed, wuy = uy / speed, wuz = uz / speed;
       const lat0 = Math.sqrt(Math.max(0, 1 - uAx * uAx));
+      const hFace = heating ? Math.pow(Math.abs(uAx), TUNING.HEAT_FACE_EXP) : 0;
+      const hSide = heating ? Math.max(TUNING.HEAT_LEE, TUNING.HEAT_SIDE * Math.pow(lat0, TUNING.HEAT_SIDE_EXP)) : 0;
+      const tileCos = Math.cos(TUNING.TILE_ARC * Math.PI / 360);
       for (let i = 0; i < n; i++) {
         const p = list[i], d = p.def;
         const rx = p.pos.x - cxm, ry = p.pos.y - cym, rz = p.pos.z - czm;
@@ -2702,22 +2767,36 @@ export class Vessel {
         }
         if (SW) { const k = i * 6; SW[k] = Ax - Ax0; SW[k + 1] = Ay - Ay0; SW[k + 2] = Az - Az0; SW[k + 3] = ATx - ATx0; SW[k + 4] = ATy - ATy0; SW[k + 5] = ATz - ATz0; }
         if (heating) {
-          let ex;
+          // the hottest of the leading face, the flank and the lee floor, each on its own effective nose radius
+          let q, limit = d.maxTemp;
           if (p._stack) {
-            ex = TUNING.SIDE_EXPOSURE * lat0;
-            const f = uAx > 0 ? p._eUp * uAx : -p._eDown * uAx;
-            if (f > ex) ex = f;
-          } else ex = TUNING.RADIAL_EXPOSURE;
-          let rise = TUNING.HEAT_K * Math.pow(flux * ex, TUNING.HEAT_EXP);
+            const face = uAx > 0 ? p._eUp * hFace / Math.sqrt(p._hRu) : p._eDown * hFace / Math.sqrt(p._hRd);
+            const side = hSide / Math.sqrt(p._hRs);
+            q = face > side ? face : side;
+            // a tiled side: when the wind falls on it, the flank answers to the tiles' limit
+            if (d.tiles && side >= face && lat0 > 0.05 && -wuz / lat0 > tileCos) limit = d.tiles.maxTemp || TUNING.TILE_TEMP;
+          } else {
+            // a part on the hull's side meets the stream when its side is to the wind, and less of it along the hull
+            const wind = wux * p._ox + wuz * p._oz;
+            let f = TUNING.HEAT_RADIAL_AX * hFace;
+            if (wind > 0) { const fw = Math.pow(wind, TUNING.HEAT_SIDE_EXP); if (fw > f) f = fw; }
+            q = (f > TUNING.HEAT_LEE ? f : TUNING.HEAT_LEE) / Math.sqrt(p._hRs);
+          }
+          q *= qs * (p._ex > TUNING.HEAT_LEE ? p._ex : TUNING.HEAT_LEE);
+          p._hq = q;
+          let T = p.temp;
+          const T3 = T * T * T;
+          const qw = q * (1 - T / tRec);   // what the wall takes at its own temperature
+          T += dt * (qw - emis * (T3 * T - tEnv4) - hAir * (T - tEnv)) / (p._hc + dt * (4 * emis * T3 + hAir + q / tRec));
           if (d.heatshield && p.res.ablator > 0) {
-            p.res.ablator = Math.max(0, p.res.ablator - TUNING.ABLATE_RATE * flux * ex * dt);
-            rise *= TUNING.SHIELD_FACTOR;
+            // an ablating shield carries the heat off with its char: mass leaves in proportion to heat times area
+            if (qw > 0) { const dm = Math.min(p.res.ablator, qw * p._hA * dt / TUNING.ABLATE_Q); p.res.ablator -= dm; this.ablated += dm; }
+            if (T > TUNING.ABLATE_TEMP) T = TUNING.ABLATE_TEMP;
             this._massDirty = true;
           }
-          const target = TUNING.AMBIENT_T + rise;
-          p.temp += (target - p.temp) * Math.min(1, dt / (target > p.temp ? TUNING.HEAT_TAU : TUNING.COOL_TAU));
-          const ratio = p.temp / d.maxTemp;
-          if (ratio > maxRatio) maxRatio = ratio;
+          p.temp = T;
+          const ratio = T / limit;
+          if (ratio > maxRatio) { maxRatio = ratio; hotFlux = qw > 0 ? qw : 0; hotP = p; }
           if (ratio > 1) (overheated || (overheated = [])).push(p.id);
         }
       }
@@ -2733,17 +2812,25 @@ export class Vessel {
         Fx += _pcf[0]; Fy += _pcf[1]; Fz += _pcf[2]; Tx += _pcf[3]; Ty += _pcf[4]; Tz += _pcf[5];
       } else { this.chuteTension = 0; this.chuteLoad = 0; }
     }
-    if (heating) { this._hot = true; this.maxTempRatio = maxRatio; }
-    else if (this._hot) {
+    if (heating) {
+      if (!this._hot) { this.peakHeatFlux = 0; this.peakTempRatio = 0; this.heatLoad = 0; this.ablated = 0; }   // a new heating starts a new record
+      this._hot = true; this.maxTempRatio = maxRatio; this.hotPart = hotP;
+      if (maxRatio > this.peakTempRatio) this.peakTempRatio = maxRatio;
+      if (flux > this.peakHeatFlux) this.peakHeatFlux = flux;
+      this.heatLoad += hotFlux * dt;
+    } else if (this._hot) {
+      // nothing heats: every skin radiates to its surroundings and, in air, is cooled by it
       let any = false;
-      const k = Math.min(1, dt / TUNING.COOL_TAU);
       maxRatio = 0;
       for (const p of this._list) {
-        p.temp += (TUNING.AMBIENT_T - p.temp) * k;
-        if (p.temp > TUNING.AMBIENT_T + 2) any = true;
-        maxRatio = Math.max(maxRatio, p.temp / p.def.maxTemp);
+        let T = p.temp;
+        const T3 = T * T * T;
+        T += dt * (-emis * (T3 * T - tEnv4) - hAir * (T - tEnv)) / (p._hc + dt * (4 * emis * T3 + hAir));
+        p.temp = T; p._hq = 0;
+        if (T > tEnv + 40 && T > TUNING.AMBIENT_T + 40) any = true;
+        maxRatio = Math.max(maxRatio, T / p.def.maxTemp);
       }
-      this._hot = any; this.maxTempRatio = maxRatio;
+      this._hot = any; this.maxTempRatio = maxRatio; this.hotPart = null;
     }
 
     // --- ground and water contact (penalty springs, friction, wheels, buoyancy)
@@ -4021,6 +4108,7 @@ export class Vessel {
       nodes: this.nodes.map(n => ({ t: n.t, dv: { ...n.dv }, rem: n.rem ? { ...n.rem } : undefined })),
       science: this.science.map(r => ({ ...r })), launched: this.launched, launchUt: this.launchUt,
       situation: this.situation, sunlit: this.sunlit, hot: this._hot,
+      heatRec: this.peakTempRatio > 0 ? [Math.round(this.peakHeatFlux), +this.peakTempRatio.toFixed(4), Math.round(this.heatLoad), +this.ablated.toFixed(2)] : undefined,
       role: this.role || undefined,   // player-chosen map / tracking-station type (see js/ui/map/glyphs.js)
     };
   }
@@ -4076,6 +4164,7 @@ export class Vessel {
     v.launched = !!o.launched; v.launchUt = o.launchUt || 0;
     v.situation = o.situation || 'flying';
     v.sunlit = o.sunlit !== false; v._hot = !!o.hot;
+    if (Array.isArray(o.heatRec)) { v.peakHeatFlux = +o.heatRec[0] || 0; v.peakTempRatio = +o.heatRec[1] || 0; v.heatLoad = +o.heatRec[2] || 0; v.ablated = +o.heatRec[3] || 0; }
     if (typeof o.role === 'string') v.role = o.role;
     v._rebuild();
     if (o.com) v.com.copy(v3(o.com));

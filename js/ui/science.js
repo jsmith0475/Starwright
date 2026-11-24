@@ -175,7 +175,7 @@ const CALCS = {
       oMach.textContent = 'Mach ' + mach.toFixed(2) + ', drag × ' + A.machRise(mach).toFixed(2);
       oQ.textContent = kpa(q);
       oCross.textContent = kpa(cross);
-      oHeat.textContent = flux >= T.HEAT_MIN_FLUX ? (flux / 1000).toFixed(1) + ' kW/m²' : 'too low to heat anything';
+      oHeat.textContent = flux * T.HEAT_SCALE >= T.HEAT_MIN_FLUX ? (flux / 1000).toFixed(1) + ' kW/m²' : 'too low to heat anything';
       // which rated parts go, soonest first; otherwise the one nearest its limit
       const judged = A.rated.map(r => ({ r, q: r.open ? q : cross })).map(x => ({ ...x, util: x.q / x.r.q, t: A.tearTime(x.q, x.r.q) }));
       const over = judged.filter(x => x.util > 1).sort((a, b) => a.t - b.t), top = judged.slice().sort((a, b) => b.util - a.util)[0];
