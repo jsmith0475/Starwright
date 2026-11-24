@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'parts-joined-up', date: '2026-11-24', title: 'Struts, hoses and solar wings that fit',
+    text: 'Brace Struts and Sip Fuel Lines are made to length to the booster they face, up to 4 m away, and a strut braces exactly what it is drawn touching. Folding solar wings and fans now turn on their booms to face the sun, and the rover and close-up rocks are sharper.' },
   { id: 'reentry-glow', date: '2026-11-24', title: 'A re-entry glow without the hard edge',
     text: 'The glow of re-entry used to be a smooth cone with a hard-rimmed disc at its widest ring. It is now a hot layer on the face that meets the air and a streaked tail that thins and tears away, with no outline. The Entry box also had a row so long it pushed its numbers off the edge; that is now two rows, So far and Ablator lost.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',

@@ -72,12 +72,13 @@ export const setPartEnvironment = setEnv;
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = x => x * x * (3 - 2 * x);
+const SOLAR_SLEW = 0.35;      // rad/s: how fast a solar array turns on its boom
 function approach(cur, target, maxStep) { return cur < target ? Math.min(target, cur + maxStep) : Math.max(target, cur - maxStep); }
 
 // ---------------------------------------------------------------------------------------------
 // Shape table
 // ---------------------------------------------------------------------------------------------
-const { clamp_: clampShape, solarLayout, ...radialRest } = radialShapes;
+const { clamp_: clampShape, solarLayout, buildSpan, ...radialRest } = radialShapes;
 const { legGeometry, foldLegGeometry, wheelGeometry, ...aeroRest } = aeroShapes;
 const { DORSAL: _d, ...stackRest } = stackShapes;
 const shapes = {
@@ -364,7 +365,9 @@ function applyAnim(g, def, initial = false) {
     const { n, segW } = solarLayout(def), k = smooth(u.deployK || 0), th = (1 - k) * 1.52;
     r.solarSeg0.rotation.y = th; r.solarSeg0.position.z = Math.sin(th) * segW * 0.5;
     for (let i = 1; i < n; i++) r['solarSeg' + i].rotation.y = (i % 2 ? -2 : 2) * th;
+    if (r.solarTrack) r.solarTrack.rotation.x = u.trackA || 0;
   } else if (s === 'solar' && r.fanArm) {
+    if (r.solarTrack) r.solarTrack.rotation.x = u.trackA || 0;
     const { gores } = solarLayout(def), k = u.deployK || 0, ka = smooth(clamp(k * 2, 0, 1)), kf = smooth(clamp(k * 2 - 1, 0, 1));
     r.fanArm.rotation.z = (1 - ka) * Math.PI / 2;
     for (let i = 0; i < gores; i++) r['fan' + i].rotation.z = Math.PI + kf * i * TAU / gores;
@@ -423,6 +426,39 @@ function applyTint(g) {
   });
 }
 
+const _sq = new THREE.Quaternion(), _sv = new THREE.Vector3();
+/**
+ * The `span` state of a strut or fuel line from what core/span.js found for it (craft coordinates) → the part's own
+ * axes. sp = spanTarget(...) or null; pos = the part's centre and quat its attitude in the craft frame.
+ */
+export function spanState(sp, pos, quat) {
+  if (!sp) return null;
+  _sq.copy(quat).invert();
+  _sv.set(sp.x - pos.x, sp.y - pos.y, sp.z - pos.z).applyQuaternion(_sq);
+  const out = { x: _sv.x, y: _sv.y, z: _sv.z, nx: 0, ny: 0, nz: 0 };
+  _sv.set(sp.nx, sp.ny, sp.nz).applyQuaternion(_sq);
+  out.nx = _sv.x; out.ny = _sv.y; out.nz = _sv.z;
+  return out;
+}
+/** The far end of a strut or a fuel line (see parts/shapes_radial.js buildSpan): rebuilt only when it moves. */
+function setSpan(group, end) {
+  const u = group.userData, holder = u.refs.span;
+  const key = end ? [end.x, end.y, end.z, end.nx, end.ny, end.nz].map(x => Math.round(x * 500)).join() : '';
+  if ((u.spanKey || '') === key) return;
+  u.spanKey = key;
+  let cast = true, recv = true;
+  for (const o of [...holder.children]) {
+    cast = o.castShadow; recv = o.receiveShadow;
+    if (o.userData.tintMat) o.userData.tintMat.dispose();
+    if (u.spanOwn && o.geometry) o.geometry.dispose();      // (the first set came with the prototype and is shared)
+    holder.remove(o);
+  }
+  buildSpan(u.def, holder, Q[u.quality] ?? 2, end);
+  for (const o of holder.children) { if (o.name !== 'b_decal') { o.castShadow = cast; o.receiveShadow = recv; } }
+  u.spanOwn = true; u.tintKey = undefined;
+  applyTint(group);
+}
+
 /**
  * Update the visual state of a part. Call it every frame for parts that animate (legs, gear, solar panels,
  * air brakes and parachutes ease toward their target using wall-clock time between calls; the first call snaps).
@@ -433,6 +469,8 @@ function applyTint(g) {
  *   throttle: 0..1, ignited: bool, flameout: bool → engine inner glow
  *   temp: skin temperature in K; above 800 K the part ramps to a red-hot emissive tint
  *   gimbal: {x, z} radians | number; control: -1..1; steer: radians; spin: radians; compress: 0..1; light: bool | 0..1
+ *   sun: for folding solar arrays, the direction to the sun in the part's own axes ({x, y, z}), or null to stand still
+ *   span: far end of a strut or fuel line { x, y, z, nx, ny, nz } in the part's own axes, or null (reaches nothing)
  *   instant: true to skip the easing
  */
 export function setPartState(group, state = {}) {
@@ -458,11 +496,29 @@ export function setPartState(group, state = {}) {
     if (open) { u.chuteShape = live && live.shape ? live.shape : restShape(def, st, u.chuteRest || (u.chuteRest = {})); u.chuteFill = live ? live.fill : 1; }
     dirty = true;
   }
+  // a sun-tracking array turns about its boom until its cells face the sun as squarely as one axis allows
+  // (state.sun: the direction to the sun in the part's own axes; null = stand as unfolded). Folded, it comes back.
+  if (state.sun !== undefined && dep && u.refs && u.refs.solarTrack) {
+    const sn = state.sun, open = (u.deployK || 0) > 0.97 && (u.deployTarget ?? 0) >= 1;
+    let tgt = u.trackTarget || 0;
+    if (!open || !sn) tgt = 0;
+    else if (sn.y * sn.y + sn.z * sn.z > 0.01) tgt = Math.atan2(-sn.y, sn.z);      // (sun along the boom: no better angle, stay)
+    u.trackTarget = tgt;
+    const cur = u.trackA || 0;
+    let d = tgt - cur; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+    if (Math.abs(d) > 1e-4) {
+      const step = snap ? Math.abs(d) : dt * (open ? SOLAR_SLEW : SOLAR_SLEW * 4);
+      let a = cur + Math.sign(d) * Math.min(Math.abs(d), step);
+      a -= Math.round(a / (2 * Math.PI)) * 2 * Math.PI;
+      u.trackA = a; dirty = true;
+    }
+  }
   if (state.gimbal !== undefined) { const gm = state.gimbal; u.gimbal = typeof gm === 'number' ? { x: 0, z: gm } : { x: gm.x || 0, z: gm.z || 0 }; dirty = true; }
   if (state.control !== undefined && state.control !== u.control) { u.control = clamp(state.control, -1, 1); dirty = true; }
   if (state.steer !== undefined && state.steer !== u.steer) { u.steer = state.steer; dirty = true; }
   if (state.spin !== undefined && state.spin !== u.spin) { u.spin = state.spin; dirty = true; }
   if (state.compress !== undefined && state.compress !== u.compress) { u.compress = clamp(state.compress, 0, 3); dirty = true; }     // in units of the nominal travel (0.3 R); a loaded strut goes past 1
+  if (state.span !== undefined && u.refs && u.refs.span && !u.ghost) setSpan(group, state.span);
   if (dirty) applyAnim(group, def);
 
   if (def.engine && u.glow && u.glow.length && !u.ghost) {
@@ -514,6 +570,8 @@ export function disposePartMesh(group) {
     if (o.userData.tintMat) { o.userData.tintMat.dispose(); o.userData.tintMat = null; }
     if (o.userData.own) o.material.dispose();
   });
+  const u = group.userData;
+  if (u && u.spanOwn && u.refs && u.refs.span) for (const o of u.refs.span.children) if (o.geometry) o.geometry.dispose();
   const rig = group.userData && group.userData.rig;
   if (rig) { for (const geo of rig.own) geo.dispose(); group.userData.rig = null; }
 }

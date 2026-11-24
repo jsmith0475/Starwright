@@ -270,7 +270,7 @@ function tyre(sp, R, w, { knobbly = false, hubColor = P.silver, mesh = false } =
   // the profile is revolved about Y, then laid over so the axle is Z
   const lay = M(0, 0, 0, Math.PI / 2);
   const prof = [[rIn, -sh, 0xffffff], [R * k, -sh], [R, -sh * 0.62], [R, sh * 0.62], [R * k, sh], [rIn, sh]];
-  sp.rev(prof, 'rubber', { m: lay, seg: n, uRep: Math.max(3, Math.round(TAU * R / 0.42)), vTile: w * 1.4, crease: 0.9, vOff: 0.12 });
+  sp.rev(prof, 'rubber', { m: lay, seg: n, uRep: Math.max(6, Math.round(TAU * R / 0.2)), vTile: w * 1.4, crease: 0.9, vOff: 0.12 });
   if (knobbly && sp.med) sp.around(Math.round(n * 0.75), a => sp.box(R * 0.09, R * 0.07, w * 0.42, 0x34363a, mul(M(Math.cos(a) * R, Math.sin(a) * R, 0, 0, 0, a), M(0, 0, 0, 0, 0.5, 0)), 'rubber'));
   // rim and hub
   sp.rev([[rIn, -sh * 0.9, hubColor], [rIn * 1.02, -sh * 0.5], [rIn * 0.86, -sh * 0.35], [rIn * 0.3, -sh * 0.5, P.gun], [0.002, -sh * 0.55]], 'metal', { m: lay, crease: 0.5, seg: n });

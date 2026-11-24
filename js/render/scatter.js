@@ -390,6 +390,9 @@ uniform float uRange, uTime, uSway;
 uniform vec4 uShadowDims;        // of the thing that casts it, per unit of its height scale: radius, height; then lift off the ground (m), depth pull
 uniform vec3 uSun;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
+#ifdef ROCK
+varying vec3 vM; varying float vS;
+#endif
 void main(){
   vec4 ip = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
   vec4 wc = modelMatrix * ip;
@@ -416,6 +419,12 @@ void main(){
     vN = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * normal));
     vC = instanceColor; vY = uv.y; vT = uv.x; vFade = k;
     vL = position + fract(ip.xyz * 0.173) * 9.0;                // each object gets its own piece of the noise
+    #ifdef ROCK
+      // the stone as it lies, in metres (turned, squashed and stretched as it is drawn), and how big it is: the
+      // grain of a rock is the same size on a pebble and on a block as big as a house
+      vS = length(mat3(instanceMatrix) * vec3(1.0, 0.0, 0.0));
+      vM = mat3(instanceMatrix) * position + fract(ip.xyz * 0.173) * 9.0;
+    #endif
     vView = wp.xyz - cameraPosition;
     gl_Position = projectionMatrix * viewMatrix * wp;
   #endif
@@ -427,6 +436,9 @@ ${ATMO_GLSL}
 ${NOISE}
 uniform vec3 uSun, uSunColor, uAmb, uUp, uCamU; uniform float uRadius, uShadowK, uShadowGain; uniform vec4 uShadowDims;
 varying vec3 vN, vC, vL, vView; varying float vY, vT, vFade;
+#ifdef ROCK
+varying vec3 vM; varying float vS;
+#endif
 void main(){
   #include <logdepthbuf_fragment>
   if (vFade < 0.02) discard;
@@ -475,10 +487,22 @@ void main(){
   #endif
   #ifdef ROCK
     // every kind of rock: mottled, a little bumpy, dark where it meets the ground; then each look in its own way
-    float r1 = n3(vL * 2.4), r2 = n3(vL * 7.5 + 2.0), r3 = n3(vL * 23.0 + 5.0);
-    vec3 bump = vec3(n3(vL * 6.1 + 11.0), n3(vL * 6.1 + 23.0), n3(vL * 6.1 + 37.0)) - 0.5 + 0.5 * (vec3(n3(vL * 19.0 + 3.0), n3(vL * 19.0 + 13.0), r3) - 0.5);
+    // The pattern is laid out in the stone's own shape up to a metre across (a pebble keeps its mottling), and in
+    // metres beyond that: on a great block the marks stay the size they are on a small one, and do not smear along
+    // the way the block was stretched. Close to, two finer grains come in (they fade before they can shimmer).
+    vec3 q = mix(vL, vM, smoothstep(0.7, 1.3, vS));
+    float near1 = 1.0 - smoothstep(6.0, 22.0, dist), near2 = 1.0 - smoothstep(2.5, 9.0, dist);
+    float g1 = n3(vM * 61.0 + 7.0), g2 = n3(vM * 173.0 + 3.0);
+    float r1 = n3(q * 2.4), r2 = n3(q * 7.5 + 2.0), r3 = mix(n3(q * 23.0 + 5.0), 0.5 * n3(q * 23.0 + 5.0) + 0.3 * g1 + 0.2 * g2, near1);
+    vec3 bump = vec3(n3(q * 6.1 + 11.0), n3(q * 6.1 + 23.0), n3(q * 6.1 + 37.0)) - 0.5 + 0.5 * (vec3(n3(q * 19.0 + 3.0), n3(q * 19.0 + 13.0), r3) - 0.5);
+    bump += near1 * 0.45 * (vec3(g1, n3(vM * 61.0 + 19.0), n3(vM * 61.0 + 31.0)) - 0.5) + near2 * 0.3 * (vec3(g2, n3(vM * 173.0 + 17.0), n3(vM * 173.0 + 29.0)) - 0.5);
+    // hairline cracks and a few pits, on stones big enough to have them
+    float bigK = smoothstep(0.9, 2.2, vS) * near1;
+    float crack = (1.0 - smoothstep(0.0, 0.022, abs(n3(vM * 1.9 + 41.0) - 0.5))) * smoothstep(0.35, 0.6, n3(vM * 0.7 + 5.0));
+    float pit = smoothstep(0.74, 0.86, n3(vM * 27.0 + 13.0));
     float top = dot(N, uUp);                                    // which way the face itself looks, before the bumps
-    float foot = smoothstep(0.04, 0.6, vY);
+    // dark where it meets the ground: a hand's breadth on a pebble, not half the height of a great block
+    float foot = smoothstep(0.04, 0.04 + 0.56 / max(1.0, vS * 1.4), vY);
     #if LOOK == 1
       // ice: hard clean facets, rime on what looks up and clear blue ice between; light gets a little way into it,
       // so the shaded side is not black; a broad glint off the faces that catch the sun
@@ -520,9 +544,9 @@ void main(){
       extra = uSunColor * (pow(max(dot(N, normalize(uSun + V)), 0.0), 14.0) * 0.05 * step(0.0, dot(N, uSun)));
     #elif LOOK == 5
       // fresh broken rock: clean flat fracture faces, one a little lighter than the next, hardly any dust yet
-      N = normalize(N + bump * 0.4);
+      N = normalize(N + bump * (0.4 + 0.3 * smoothstep(0.9, 2.2, vS)));
       ndl = max(dot(N, uSun), 0.0);
-      alb *= (0.86 + 0.2 * r1) * (0.9 + 0.2 * r3) * (0.84 + 0.32 * vT);
+      alb *= (0.86 + 0.2 * r1) * (0.9 + 0.2 * smoothstep(0.9, 2.2, vS) * (n3(vM * 0.9 + 17.0) - 0.5)) * (0.9 + 0.2 * r3) * (0.84 + 0.32 * vT);
       alb *= 1.0 + 0.1 * smoothstep(0.5, 0.95, top);
       ao = 0.42 + 0.58 * foot;
     #else
@@ -532,6 +556,9 @@ void main(){
       alb *= (0.66 + 0.5 * r1) * (0.8 + 0.3 * r2) * (0.88 + 0.24 * r3);
       alb *= 1.0 + 0.22 * smoothstep(0.35, 0.9, dot(N, uUp));
       ao = (0.42 + 0.58 * foot) * (0.75 + 0.25 * smoothstep(0.25, 0.6, r2));
+    #endif
+    #if LOOK != 1
+      alb *= 1.0 - bigK * (0.55 * crack + 0.22 * pit);
     #endif
   #endif
   vec3 col = alb * (uSunColor * ndl * ao + uAmb * ao * (0.6 + 0.4 * max(dot(N, uUp), 0.0))) + extra;
