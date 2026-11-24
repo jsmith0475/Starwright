@@ -39,6 +39,7 @@ import { createPlume, SmokeTrail, createExplosion, createReentryGlow, createVapo
 import { createPostChain } from '../render/post.js';
 import { createBarge } from '../render/barge.js';
 import { createTower } from '../render/tower.js';
+import { planPadFit } from '../render/padfit.js';
 import { towerClient } from '../core/tower.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
@@ -269,6 +270,20 @@ export function createFlightScene(app) {
   // its arms as drawn, gliding after what the physics says (closed fraction, pin level, the stage's axis from the mount's)
   let tower = null, towerSite = SYSTEM.sites && SYSTEM.sites.tower ? SYSTEM.sites.tower : null;
   const towerQ = towerSite ? World.padFrame(towerSite.dir) : null, towerArm = { k: 0, h: 45, x: 0, z: 0 };
+  // The pad dressed for the rocket standing on it: mount, hold-down clamps and the tower's arms (js/render/padfit.js).
+  // The vessel and the space centre share the pad's frame, so the plan needs no turning. The arms swing away when the
+  // engines light, the clamps let go when the rocket leaves, and the steel stays where it is until another rocket comes.
+  let fitKey = '';
+  function fitPadTo(world) {
+    if (!base || typeof base.fitPad !== 'function') return;
+    let pv = null;
+    for (const v of world.vessels) if (!v.dead && v.launchSite === 'pad' && v.landed && !v.launched && v.situation === 'prelaunch' && v.body === SYSTEM.home) { pv = v; break; }
+    if (pv) {
+      const key = pv.id + ':' + pv.parts.size;
+      if (key !== fitKey) { fitKey = key; base.fitPad(planPadFit(pv)); }
+      base.setPadState({ arms: pv.thrust > 0 ? 1 : 0, clamps: 0 });
+    } else if (fitKey) { fitKey = ''; base.setPadState({ arms: 1, clamps: 1 }); }
+  }
   function useLegacyPad() { if (pad) return; pad = createLaunchPad(); pad.visible = false; shadowFlags(pad, false, true); near.add(pad); }
   function adoptBase(b) {
     if (!b || !b.group || disposed) { if (b && b.dispose) b.dispose(); return; }
@@ -949,6 +964,7 @@ export function createFlightScene(app) {
             // sun direction in the centre's own frame (+X east, +Y up, +Z south), local solar time 0..1 (0.5 = noon)
             v4.copy(sunDir).applyQuaternion(q1.copy(site.quaternion).invert());
             const tod = (Math.atan2(v4.x, v4.y) / TAU + 0.5 + 1) % 1;
+            try { fitPadTo(world); } catch (err) { if (!base._fitWarned) { base._fitWarned = true; console.warn('[flight] the pad could not be fitted to the rocket:', err && err.message); } }
             try { base.update(dt, { sunDir: v4, timeOfDay: 1 - tod }); } catch (err) { if (!base._warned) { base._warned = true; console.warn('[flight] space centre update failed:', err && err.message); } }
           }
         }

@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'pad-mount-and-arms', date: '2026-11-24', title: 'A launch mount, hold-downs and arms that reach',
+    text: 'A rocket on the pad no longer rests on its engine bell. It stands on a launch mount fitted to it, held by clamps on the rim above the engine, with the bell hanging free over the flame opening. The tower\'s arms now end on the hull, with a white room at the capsule. The arms swing clear when the engines light and the clamps let go at lift-off. The pad\'s pipes are round, flanged and connected at both ends.' },
   { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',
     text: 'Re-entry heating now works part by part. Small parts out in the stream get hottest, wide blunt ones run cooler, and anything in a heat shield\'s shadow is safe. Skins warm and cool by a real heat balance, and the air can no longer heat a part past its own temperature. The Entry box names the hottest part and keeps the record of the entry. Settings can switch heating to its true physical strength.' },
   { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
