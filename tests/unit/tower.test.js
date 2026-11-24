@@ -7,7 +7,7 @@ import { Vessel, surfaceAt, propIn } from '../../js/core/vessel.js';
 import { World } from '../../js/core/world.js';
 import { Craft, stockCrafts } from '../../js/core/craft.js';
 import { SYSTEM, TOWER } from '../../js/core/bodies.js';
-import { catchState, catchFault, catchPins, armsClosed } from '../../js/core/tower.js';
+import { catchState, catchFault, catchPins, armsClosed, armPose, strikeTower, ARM, COLUMN } from '../../js/core/tower.js';
 import { flyReturn } from '../tools/tower_dev.mjs';
 
 const home = SYSTEM.home, site = SYSTEM.sites.tower, Y = new Vector3(0, 1, 0), TAU = Math.PI * 2;
@@ -41,12 +41,12 @@ function over({ clearance = 6, east = 0, sink = 1.2, drift = 0, tilt = 0, craft 
   const s = catchState(w, v, {});
   if (s) v.pos.addScaledVector(up, clearance - s.clearance);
   const events = [];
-  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'liftoff'].includes(type)) events.push({ type, ...d }); });
+  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'liftoff', 'towerStrike'].includes(type)) events.push({ type, ...d }); });
   return { w, v, events };
 }
 /** Hold the sink rate with the centre three while the test watches. */
-function descend(w, v, sink, seconds, until = () => false) {
-  for (const en of v.engines) { en.part.ignited = true; v.setEngineMode(en.part.id, 2); }
+function descend(w, v, sink, seconds, until = () => false, mode = 2) {
+  for (const en of v.engines) { en.part.ignited = true; v.setEngineMode(en.part.id, mode); }
   v.ctrl.sas = true;
   for (let t = 0; t < seconds && !until(); t += 0.02) {
     const up = v.pos.clone().normalize(), wy = TAU / home.rotPeriod;
@@ -120,7 +120,7 @@ test('what the arms will not take: too fast, too far off, sliding, leaning', () 
   ]) {
     const { w, v, events } = over({ clearance: TOWER.hang + TOWER.window + 0.2, sink: 1.5, ...o });      // (in free fall: started just above the arms)
     for (let i = 0; i < 100 && !events.length; i++) w.step(0.02);
-    const e = events[0];
+    const e = events.find(x => x.type === 'catchMissed');
     assert.ok(e && e.type === 'catchMissed', what + ': ' + JSON.stringify(events.map(x => x.type)));
     assert.match(e.reason, re, what);
     assert.ok(!v.landed || !v.surface.held, what + ': not held');
@@ -149,6 +149,7 @@ test('the whole return: launched from the mount, staged by the assist, flown bac
   assert.ok(e && e.speed < TOWER.maxSink && e.offset < TOWER.reach, JSON.stringify(e));
   assert.ok(r.booster.landed && r.booster.surface.held === 'tower' && !r.booster.dead);
   assert.equal(r.events.filter(x => x.type === 'destroyed' || x.type === 'catchMissed').length, 0);
+  assert.equal(r.events.filter(x => x.type === 'towerStrike').length, 0, 'it never touched the steel, going up or coming back');
   assert.ok(r.left > 1500, `propellant to spare in the booster: ${r.left.toFixed(0)} kg`);
   assert.ok(log.some(m => /boostback burn/.test(m)) && log.some(m => /landing burn/.test(m)));
   // it flew the burns on the inner thirteen and the last metres on the centre three
@@ -171,4 +172,59 @@ test('tower: a caught stage is turned so its two pins lie north and south, one o
   assert.ok(Math.abs(d.dot(up)) < 0.05, 'the pins are level');
   assert.ok(Math.abs(Math.abs(d.normalize().dot(north)) - 1) < 1e-3, 'and in line north to south: ' + d.dot(north).toFixed(4));
   assert.ok(d.length() > 0.99);
+});
+
+/** The booster's east (m) off the mount's axis, and its speed that way. */
+function eastOf(w, v) {
+  const up = home.surfaceDirToInertial(site.dir, w.ut, new Vector3()).normalize(), ev = new Vector3().crossVectors(Y, up).normalize();
+  const o = up.clone().multiplyScalar(home.radius + surfaceAt(home, site.dir)), wy = TAU / home.rotPeriod;
+  return { east: v.pos.clone().sub(o).dot(ev), ve: new Vector3(v.vel.x - wy * v.pos.z, v.vel.y, v.vel.z + wy * v.pos.x).dot(ev) };
+}
+
+test('solid steel: a booster swinging into the column at speed is destroyed', () => {
+    // 30 m up beside the mount, carried west into the column at 20 m/s (a tank gives way at 7 and the whole stage at 2.2
+  // times that), holding its height on its engines
+  const { w, v, events } = over({ clearance: 30, east: -1, drift: -20, sink: 0, fuel: 0.3 });
+  descend(w, v, 0, 2, () => v.dead, 1);
+  const hit = events.find(e => e.type === 'towerStrike');
+  assert.ok(hit && hit.lost, 'struck and lost: ' + JSON.stringify(events.map(e => [e.type, e.part, e.lost])));
+  assert.ok(v.dead, 'nothing left');
+  assert.equal(events.find(e => e.type === 'destroyed').reason, 'tower');
+});
+
+test('solid steel: a slow touch stops the stage against the column instead of passing through it', () => {
+  const { w, v, events } = over({ clearance: 30, east: -2, drift: -1.5, sink: 0, fuel: 0.3 });
+  const face = COLUMN.x1 - 2.8125;          // the booster's axis when its side meets the column's east face
+  let west = 0;
+  descend(w, v, 0, 5, () => { west = Math.min(west, eastOf(w, v).east); return v.dead; }, 1);      // (holding its height on the inner thirteen)
+  const hit = events.find(e => e.type === 'towerStrike');
+  assert.ok(hit && !hit.lost && hit.broken === 0, 'scraped, nothing broken: ' + JSON.stringify(events.map(e => [e.type, e.lost])));
+  assert.ok(!v.dead && v.partList.length === booster().parts.length, 'whole');
+  assert.ok(west > face - 0.3, `stopped at the steel: ${west.toFixed(2)} m, the face is at ${face.toFixed(2)}`);
+  assert.ok(eastOf(w, v).ve > -0.1, 'no longer moving into it');
+});
+
+test('solid steel: a closing arm is steel too, and the arms wait open for a stage hovering out of line', () => {
+  // the arms do not close on a stage low down and more than its reach off the axis
+  const { w, v } = over({ clearance: 10, east: TOWER.reach + 3, sink: 1 });
+  descend(w, v, 1, 2);
+  assert.ok(catchState(w, v, {}).offset > TOWER.reach + 2.5);
+  assert.ok(armsClosed(w) < 0.05, 'open: ' + armsClosed(w));
+  // a stage dropped onto a closed arm, off its pins, is stopped by it
+  const pose = armPose(1, 30, 0, 0);
+  for (const a of pose.arms) {
+    assert.ok(Math.abs(a.hx - (COLUMN.x1 + 0.95)) < 1e-9, 'hinged on the column');
+    const tipZ = a.hz + a.uz * ARM.length;
+    assert.ok(Math.sign(tipZ) === a.s && Math.abs(tipZ) - ARM.half > 2.8 && Math.abs(tipZ) - ARM.half < 3.3, 'closed, each passes beside the stage: ' + tipZ.toFixed(2));
+  }
+  const open = armPose(0, 30, 0, 0);
+  for (const a of open.arms) near(Math.atan2(Math.abs(a.uz), a.ux), ARM.open, 1e-9, 'open at 50 degrees');
+  // a stage the arms are not catching (legs, no pins), 3 m south of the axis and sinking, runs into a shut arm
+  const b = over({ clearance: 20, sink: 6, craft: booster({ legs: true, pins: 0 }) });
+  const up = b.v.pos.clone().normalize(), south = new Vector3().crossVectors(new Vector3().crossVectors(Y, up).normalize(), up);
+  b.v.pos.addScaledVector(south, 3);
+  const ev = [];
+  assert.ok(strikeTower(b.w, b.v, ev, armPose(1, 40, 0, 0)), 'it touched');
+  assert.ok(ev.some(e => e.type === 'towerStrike'), 'and said so');
+  assert.equal(strikeTower(b.w, b.v, [], armPose(0, 40, 0, 0)), false, 'with the arms open it passes');
 });

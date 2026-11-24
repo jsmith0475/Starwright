@@ -103,6 +103,7 @@ test('home from orbit: a braking burn, the fall on the flaps, the flip, and the 
   assert.ok(r.tmax < 0.9, 'nothing near its heat limit: ' + r.tmax.toFixed(2));
   assert.ok(r.left > 1500, 'propellant to spare: ' + (r.left / 1000).toFixed(1) + ' t');
   assert.equal(r.v.partList.length, shearwaterShip({ cargo: false }).parts.length, 'nothing broke off');
+  assert.ok(!r.events.some(e => e.type === 'towerStrike'), 'nothing touched the tower: the arms waited for the aft flaps to pass under them');
 });
 
 test('scenario Belly First: built unloaded with a sixth of a tank, survives a save, and the catch completes it', { timeout: 600000 }, () => {

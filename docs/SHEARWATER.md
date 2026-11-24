@@ -81,9 +81,17 @@ below.
 
 **How the return is flown.** Flip, then a boostback burn on the inner 13 engines until the
 predicted end of the fall is on the mount. A long fall engine first, steering on the three grid
-fins. A landing burn on the inner 13 that stops the stage about 20 m above the arms. Then the
-centre 3 alone: it slides over the mount, waits until it is steady, and comes down at 1.2 m/s
-until the arms have it.
+fins. A landing burn on the inner 13 that stops the stage about 20 m above the arms and about
+8 m east of the mount, on the side away from the tower, so that whatever it misses by it misses
+away from the steel. Low down the burn stands the stage upright (at most 20° of lean at
+250 m up, shrinking to 1° near the arms), so that it does not come out of the burn still turning.
+Then the centre 3 alone: it slides across to the mount leaning at most 7°, waits until it is
+steady, and comes down at 1.2 m/s until the arms have it.
+
+Why the care: the stage is 70 m tall and the column stands 4.4 m from its engines. A lean of
+5° swings the bottom of the stage 4 m to the side. Before this, a stage that came out of the
+burn rotating swung 13 m to one side and back across the mount, and its engines passed through
+the column, which was not yet solid.
 
 One thing in this is new, and a booster this heavy needs it. On the way down the guidance aims
 the point where the landing burn will *stop* the stage, not the point where it would hit the
@@ -111,16 +119,26 @@ game says which limit it broke, and the stage goes on down onto the mount.
 |---|---|
 | Staging | 104 s, 29.5 km, 62 t left in the booster |
 | Boostback burn | 40 s, from 37 km |
-| Landing burn lights | 1,920 m up, 334 m/s |
-| Off the mount when the fall is stopped | 2 m |
-| Caught | 324 s after lift-off, at 1.4 m/s, 2 cm from the mount's axis |
-| Propellant left in the booster | 2.4 t |
+| Landing burn lights | 2,008 m up, 342 m/s |
+| Off the mount when the fall is stopped | 12 m east, away from the tower |
+| Lean in the hover | 3° at most |
+| Caught | 317 s after lift-off, at 1.4 m/s, 0.7 m from the mount's axis |
+| Propellant left in the booster | 4.0 t |
+| Touches of the tower | none (and none in 8 flights with the booster nudged at staging) |
 | Ship in orbit | 42 % full, 1,415 m/s left |
 
 **Honest limits of the catch.**
 
-- The arms are not solid. Nothing can hit them on the way in or on the way out, and a stage
-  that misses does not strike an arm: it falls to the mount. The five limits are the whole model.
+- The column and the arms are solid steel, simple boxes. A part that touches them is stopped
+  against them; met faster than its crash tolerance it breaks off, and faster than 2.2 times
+  that the whole vessel is lost (a booster tank takes 7 m/s, so the whole stage goes at about
+  15 m/s). The game says which part touched. The launch mount, its clamps and the other
+  buildings are not solid yet.
+- The arms close only round a stage that is within reach of the mount, and wait open while
+  anything wider than the gap between them still has to come down past them (the ship's aft
+  flaps hang 10 m below its pins). Round a stage they are catching the arms guide its body
+  in rather than strike it; whatever sticks out of it still meets them.
+- A stage that misses the catch falls to the mount. The five limits decide the catch itself.
 - The pins are not checked one by one. The stage has to carry two; where they sit sets how high
   the arms are drawn, not whether the catch works.
 - A stage is taken wherever it is within 2.5 m, and is turned in the arms, the shorter way round, until its two pins lie north and south, one on each rail. The drawn arms move to it.

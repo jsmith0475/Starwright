@@ -42,7 +42,7 @@ import { createPostChain } from '../render/post.js';
 import { createBarge } from '../render/barge.js';
 import { createTower } from '../render/tower.js';
 import { planPadFit } from '../render/padfit.js';
-import { towerClient } from '../core/tower.js';
+import { towerClient, armState } from '../core/tower.js';
 import { isSpan, vesselSpan } from '../core/span.js';
 import { createEnvProbe } from '../render/envprobe.js';
 import { partEnvironment, setPartEnvironment } from '../render/parts/materials.js';
@@ -1080,12 +1080,10 @@ export function createFlightScene(app) {
         tower.visible = seen;
         if (seen) {
           tower.quaternion.setFromAxisAngle(Y_AXIS, body.rotationAngle(ut)).multiply(towerQ); tower.position.copy(v2);
-          const c = towerClient(world), cv = c ? views.get(c.vessel) : null, f = 1 - Math.exp(-Math.min(dt, 0.1) * 2.5);
-          // open and parked when nothing is there. The level and the axis are followed faster than the arms close, so
-          // that the rails are under the pins before the pins reach them (the arms start to close 150 m up)
-          const k = c ? c.k : 0, h = c ? c.pinH + c.hang + (cv && cv.lift || 0) : tower.userData.plan.armPark, f2 = c ? 1 - Math.exp(-Math.min(dt, 0.1) * 6) : f;
-          towerArm.k += (k - towerArm.k) * f; towerArm.h += clamp((h - towerArm.h) * f2, -4 * Math.min(dt, 0.1), 4 * Math.min(dt, 0.1));     // (the carriage rides at 4 m/s at most)
-          towerArm.x += ((c ? c.east : 0) - towerArm.x) * f2; towerArm.z += ((c ? c.south : 0) - towerArm.z) * f2;
+          // the arms stand where the physics has them (core/tower.js armState): they are solid, so what is drawn is what a
+          // stage can strike. (A drawn stage lifted for its own landing gear lifts the carriage with it.)
+          const as = armState(world), c = towerClient(world), cv = c ? views.get(c.vessel) : null;
+          towerArm.k = as.k; towerArm.h = as.h + (cv && cv.lift || 0); towerArm.x = as.x; towerArm.z = as.z;
           tower.userData.setArms(towerArm.k, towerArm.h, towerArm.x, towerArm.z);
           // the service arm rests on the hull of a stack that stands on the mount, and draws back as its engines light
           let sv = 0; const sp = tower.userData.plan.service;

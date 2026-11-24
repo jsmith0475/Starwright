@@ -136,10 +136,16 @@ export function groundDistance(body, a, b) {
  * prediction, c.result the touchdown record, c.site the ground it chose when it landed away from the target
  * (c.warning when that ground is steeper than it should stand on). Like every program it only moves the controls.
  */
+/** A stage with catch pins comes down beside a 91 m steel tower. Its landing burn is steered to stop over the mount
+ *  (left alone, the level speed that dies with the fall carried it past, and it swung back across the mount and
+ *  through the tower's column), it ends upright, and its hover is gentle: a tilt of a few degrees swings the bottom
+ *  of a 70 m stage metres to the side, and the column stands only 4 m from the engines. */
+const TOWER_CATCH = (v, opts) => v.partList.filter(p => p.def.catchPin).length >= 2 ? { lowLean: 250, hoverLean: 0.12, hoverGain: 0.05, steerBurn: 0.08, standOff: 8 } : {};
+
 export function boosterRecovery(world, vessel, opts = {}) {
   const v = vessel, body = v.body;
   const o = { target: body.launchSite ? body.launchSite.dir : new Vector3(1, 0, 0), stopAlt: 20, touchdownSpeed: 1.2, heatLimit: 0.8,
-    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, thrustScale: 1, steerBurn: 0, ...opts };
+    landingAccel: 26, period: 0.25, tolerance: 40, reach: 60, maxLean: 0.12, aimShort: 0, aimSwitch: 3500, legAlt: 60, entryTip: 0.14, entryExtra: 60, floor: 0, sets: null, aimBurn: false, terrain: true, siteReach: 150, thrustScale: 1, steerBurn: 0, lowLean: 0, hoverLean: 0.25, hoverGain: 0.07, ...TOWER_CATCH(vessel, opts), ...opts };
   const c = { name: 'recovery', phase: 'init', done: false, failed: false, log: [], vessel: v, miss: NaN, prediction: null, result: null, target: o.target, site: null, warning: null };
   c.note = msg => { c.log.push({ t: world.ut, msg }); };
   c.finish = (ok, msg) => { c.done = true; c.failed = !ok; c.phase = ok ? 'done' : 'failed'; if (msg) c.note(msg); };
@@ -382,6 +388,10 @@ export function boosterRecovery(world, vessel, opts = {}) {
         break;
       }
       case 'landing': {
+        // opts.standOff (m): beside the catch tower the burn aims this far east of the mount, the side away from the
+        // column, so that whatever it misses by it misses away from the steel; the hover then slides it across
+        const eTrue = e.length();
+        if (o.standOff > 0 && body.sites && body.sites.tower && o.target.dot(body.sites.tower.dir) > 1 - 1e-12) e.addScaledVector(_q.set(0, 1, 0).cross(up).normalize(), o.standOff);
         // throttle: the setting whose stop point is the hover height
         let need;
         if (stopAlt(1) < o.stopAlt) need = 1;
@@ -404,10 +414,18 @@ export function boosterRecovery(world, vessel, opts = {}) {
           const m = _t.length(); if (m > o.steerBurn) _t.multiplyScalar(o.steerBurn / m);
           dir.add(_t).normalize();
         }
+        {
+          // low down, the lean comes off (opts.lowLean, m: full lean above it, none at the ground). A tall stage
+          // still swinging when the burn hands over to the hover cannot stop in time: it swung 14 m to one side
+          // and back at the catch tower, through the tower's column, before this
+          const cap = o.lowLean > 0 ? clamp(ralt() / o.lowLean, 0.05, 1) * 0.35 : 9;
+          const tl = dir.angleTo(up);
+          if (tl > cap) { _r.crossVectors(up, dir); if (_r.lengthSq() > 1e-12) dir.copy(up).applyAxisAngle(_r.normalize(), cap); }
+        }
         point(dir);
         const err = noseError(dir);
         v.ctrl.throttle = err < 0.5 ? clamp(need, 0.05, 1) : 0.05;
-        if (speed < 10 || ralt() < o.stopAlt * 0.5) { c.phase = 'final'; c.note(`final descent from ${ralt().toFixed(0)} m, ${e.length().toFixed(0)} m from the target`); }
+        if (speed < 10 || ralt() < o.stopAlt * 0.5) { c.phase = 'final'; c.note(`final descent from ${ralt().toFixed(0)} m, ${eTrue.toFixed(0)} m from the target`); }
         break;
       }
       case 'final': {
@@ -465,8 +483,8 @@ export function boosterRecovery(world, vessel, opts = {}) {
         // (up to 14 degrees, low or high: at 8 degrees under twelve metres a stage that came out of its landing burn
         // still sliding at 10 m/s needed a hundred metres to stop, and hovered back over the pad on propellant it did
         // not have)
-        const leanMax = st.committed ? 0.015 : 0.25;
-        const lean = Math.min(leanMax, 0.07 * _s.length());
+        const leanMax = st.committed ? 0.015 : o.hoverLean;
+        const lean = Math.min(leanMax, o.hoverGain * _s.length());
         dir.copy(up);
         if (_s.lengthSq() > 1e-6) dir.addScaledVector(_s.normalize(), Math.tan(lean));
         point(dir);
