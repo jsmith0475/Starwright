@@ -198,6 +198,9 @@ export function sideport(def, g, pb) {
 // Flaps: a flat tapered slab hinged along its root. One face is steel, the other tiled, and which is which
 // depends on the side of the ship it hangs from, so both hands are built ('sideA': tiles on −Z, 'sideB': on +Z)
 // and partmesh shows the one whose tiles face the craft's belly.
+// The plate outboard of the hinge line is its own group in each hand ('bladeA' / 'bladeB', origin on the hinge
+// line), which partmesh turns about Y by the fold angle. The strip inboard of the hinge (it reaches into the hull),
+// the hinge fairing and the lugs stay with the hull.
 // ---------------------------------------------------------------------------------------------
 function flapOutline(def) {
   const { h, rw, variant } = def, x0 = -rw / 2 - 0.3, x1 = rw / 2, yb = -h / 2, yt = h / 2, fore = variant === 'fore';
@@ -209,25 +212,35 @@ function flapOutline(def) {
   pts.push(lead, [x0, yt]);
   return pts;
 }
+/** Where a flap's hinge line runs in the part's frame: parallel to Y at this x (z = 0). */
+export function flapHingeX(def) { return -def.rw / 2 + def.t * 0.5 * 0.55; }
 export function flap(def, g, pb) {
-  const { h, rw, t } = def, x0 = -rw / 2, th = Math.min(t * 0.5, 0.16), pts = flapOutline(def), hr = t * 0.5;
+  const { h, rw, t } = def, x0 = -rw / 2, th = Math.min(t * 0.5, 0.16), pts = flapOutline(def), hr = t * 0.5, xh = flapHingeX(def);
+  // the outline cut along the hinge line: the root strip (first and last point are its hull-side corners) and the blade,
+  // which is given from the hinge line
+  const n = pts.length, k = (xh - pts[0][0]) / (pts[1][0] - pts[0][0]), yh = pts[0][1] + (pts[1][1] - pts[0][1]) * k;
+  const root = [pts[0], [xh, yh], [xh, pts[n - 1][1]], pts[n - 1]];
+  const blade = [[0, yh], ...pts.slice(1, n - 1).map(p => [p[0] - xh, p[1]]), [0, pts[n - 1][1]]];
   for (const [name, s] of [['sideA', 1], ['sideB', -1]]) {
-    const grp = sub(g, name), sp = new PB(pb.q), steelT = th * 0.4, tileT = th - steelT;
+    const grp = sub(g, name), sp = new PB(pb.q), bp = new PB(pb.q), steelT = th * 0.4, tileT = th - steelT;
     // tiles take the belly face and wrap the edges; the steel skin lies on the lee face
-    sp.poly(pts, tileT, 0.02, TILE, M(0, 0, -s * (th / 2 - tileT / 2)), 'hextile');
-    sp.poly(pts, steelT, 0.015, STEEL, M(0, 0, s * (th / 2 - steelT / 2 + 0.004)), 'steel');
+    for (const [b, o] of [[sp, root], [bp, blade]]) {
+      b.poly(o, tileT, 0.02, TILE, M(0, 0, -s * (th / 2 - tileT / 2)), 'hextile');
+      b.poly(o, steelT, 0.015, STEEL, M(0, 0, s * (th / 2 - steelT / 2 + 0.004)), 'steel');
+    }
     // hinge fairing along the root, steel above and tiled below
     const hp = [[0.002, -h / 2 + 0.02], [hr * 0.8, -h / 2 + hr * 1.2], [hr, -h / 2 + hr * 2.6], [hr, h / 2 - hr * 3], [hr * 0.7, h / 2 - hr * 1.1], [0.002, h / 2 - 0.02]];
-    const mh = M(x0 + hr * 0.55, 0, 0), sg = Math.max(4, sp.seg(hr) / 2);
+    const mh = M(xh, 0, 0), sg = Math.max(4, sp.seg(hr) / 2);
     sp.rev(hp.map((p, i) => [p[0], p[1], i ? undefined : STEEL]), 'steel', { m: mh, seg: sg, a0: s > 0 ? 0 : Math.PI, a1: s > 0 ? Math.PI : TAU, crease: 0.7 });
     sp.rev(hp.map((p, i) => [p[0], p[1], i ? undefined : TILE]), 'hextile', { m: mh, seg: sg, a0: s > 0 ? Math.PI : 0, a1: s > 0 ? TAU : Math.PI, crease: 0.7, uRep: 1, vTile: 1 });
     if (sp.med) {
-      // stiffeners on the steel face and the hinge lugs
-      const xr = x0 + hr * 1.5;
-      for (const u of [0.22, 0.5, 0.74]) { const y = lerp(-h / 2, h / 2, u) * 0.8; sp.box(rw * 0.52, 0.05, 0.03, STEEL_DK, M(xr + rw * 0.27, y, s * (th / 2 + 0.012), 0, 0, -0.12), 'steel'); }
+      // stiffeners on the steel face (they turn with the blade) and the hinge lugs
+      const xr = x0 + hr * 1.5 - xh;
+      for (const u of [0.22, 0.5, 0.74]) { const y = lerp(-h / 2, h / 2, u) * 0.8; bp.box(rw * 0.52, 0.05, 0.03, STEEL_DK, M(xr + rw * 0.27, y, s * (th / 2 + 0.012), 0, 0, -0.12), 'steel'); }
       for (const u of [0.14, 0.5, 0.86]) sp.rbox(hr * 1.5, 0.3, hr * 2.25, 0.02, STEEL_DK, M(x0 + hr * 0.7, lerp(-h / 2, h / 2, u) * 0.86, 0), 'steel');
     }
     sp.build(grp);
+    bp.build(sub(grp, s > 0 ? 'bladeA' : 'bladeB', xh, 0, 0));
     if (s < 0) grp.visible = false;
   }
 }

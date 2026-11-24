@@ -365,7 +365,7 @@ export function createFlightScene(app) {
   const sky = new THREE.Color(), col2 = new THREE.Color(), col3 = new THREE.Color(), dustCol = new THREE.Color();
   const t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), t3 = new THREE.Vector3();
   const shift = new THREE.Vector3(), elAcc = new THREE.Vector3(), lampAcc = new THREE.Vector3(), lampDir = new THREE.Vector3();
-  const pstate = { deployed: false, throttle: 0, ignited: false, flameout: false, temp: 0, gimbal: undefined, control: undefined, steer: undefined, spin: undefined, compress: undefined, light: undefined };
+  const pstate = { deployed: false, throttle: 0, ignited: false, flameout: false, temp: 0, gimbal: undefined, control: undefined, steer: undefined, spin: undefined, compress: undefined, light: undefined, fold: undefined };
   let clock = 0, lastDt = 1 / 60, sunElevNow = 1, canopyZoom = null;
   const hv = new THREE.Vector3(), hOut = { spacing: Infinity, level: -1 };
 
@@ -536,7 +536,7 @@ export function createFlightScene(app) {
       const level = loaded && p.ignited && !p.flameout ? (Number.isFinite(p.level) ? p.level : 0) : 0;
       const st = pstate;
       st.deployed = p.deployed; st.throttle = level; st.ignited = p.ignited && level > 0; st.flameout = p.flameout; st.temp = p.temp;
-      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = undefined;
+      st.gimbal = st.control = st.steer = st.spin = st.compress = st.light = st.fold = undefined;
       if (def.engine && def.engine.gimbal > 0 && act) {
         // the bell swings so the exhaust pushes the tail the way the torque command asks (pitch, roll, −yaw)
         const g = def.engine.gimbal * Math.PI / 180 * (live && level > 0.01 ? 1 : 0) * (p.pos.y < com.y ? 1 : -1);
@@ -566,6 +566,8 @@ export function createFlightScene(app) {
         if (e.comp < 1e-4) e.comp = 0;
         st.compress = e.comp;
       }
+      // a body flap stands where the core has folded it (part.fold); one with no lee side to fold to stays flat
+      if (def.flap && p.fold !== undefined) st.fold = p._flap === false ? 0 : p.fold;
       if (def.light) {
         st.light = p.deployed ? 1 : 0;
         if (p.deployed && isActive) { lampN++; lampAcc.x += p.pos.x - com.x; lampAcc.y += p.pos.y - com.y; lampAcc.z += p.pos.z - com.z; lampDir.x += Math.cos(p.rot || 0); lampDir.z -= Math.sin(p.rot || 0); }
