@@ -9,6 +9,7 @@
 //   13e  opening fully: the same, with the air the canopy takes along
 //   13f  a capsule that arrives with sideways speed swings under its canopy as the reference says
 //   13g  limits: Mach and line strength hold an armed parachute shut, lines loaded past their strength tear
+//   13j  the drogue a pack carries: it takes the fast part, and hands over to the main when the main may open
 //   13h  two canopies side by side lean apart and still carry the craft down at the speed their areas give
 //   13i  the step size: 20 ms against 5 ms
 import { World, SYSTEM } from './harness.mjs';
@@ -18,12 +19,16 @@ import { Vector3 } from '../../js/lib/three.module.min.js';
 import { Craft } from '../../js/core/craft.js';
 import { PARTS } from '../../js/core/parts.js';
 import { TUNING } from '../../js/core/vessel.js';
-import { chuteSpec, chuteShape, chuteDragArea, chuteOpeningLoad, chuteDisreefLoad, CHUTE } from '../../js/core/parachute.js';
+import { chuteSpec, chuteShape, chuteDragArea, chuteOpeningLoad, chuteDisreefLoad, chuteStageSpec, CHUTE } from '../../js/core/parachute.js';
 import { canopyLayout, writeCanopy, canopyPlacement } from '../../js/render/canopy.js';
 
 const sys = R.readSystem();
 const refBody = id => sys.bodies.find(b => b.id === id);
 const CHUTES = Object.values(PARTS).filter(d => d.chute);
+/** The drogue a pack carries, written as a parachute block of its own (one stage: its reefed area is all of it). */
+const drogueBlock = d => ({ area: d.chute.drogue.area, semiArea: d.chute.drogue.area, strength: d.chute.drogue.strength, maxMach: d.chute.drogue.maxMach, fullAlt: d.chute.fullAlt });
+/** Every canopy in the game: [name, game spec, reference spec, kind for drawing, strength in kN]. */
+const CANOPIES = CHUTES.flatMap(d => { const g = chuteSpec(d, TUNING.CHUTE_CD), out = [[d.name, g, RP.spec(d.chute), d.variant === 'drogue' ? 'drogue' : g.count > 1 ? 'cluster' : 'main', d.chute.strength, d.chute.area]]; if (d.chute.drogue) out.push([`${d.name}, its drogue`, g.drogue, RP.spec(drogueBlock(d)), g.count > 1 ? 'cluster' : 'main', d.chute.drogue.strength, d.chute.drogue.area]); return out; });
 const gEff = (b, alt) => { const r = b.radius + alt, w = 2 * Math.PI / b.rotPeriod; return b.gm / (r * r) - w * w * r; };
 
 // ---------------------------------------------------------------------------------------------- game-side helpers
@@ -74,8 +79,8 @@ function ownDragCurve(opts, alt, vMax) {
 
 // ---------------------------------------------------------------------------------------------- 13a the canopy
 function geometry(S) {
-  for (const d of CHUTES) {
-    const g = chuteSpec(d, TUNING.CHUTE_CD), r = RP.spec(d.chute);
+  for (const [name, g, r, , strength, area] of CANOPIES) {
+    const d = { name, chute: { strength, area } };
     S.check(`${d.name}: nominal diameter from its drag area, 2 sqrt(CdS / (0.8 pi n))`, r.d0, g.d0, 1e-12, { rel: true, unit: 'm' });
     S.check(`${d.name}: lines one nominal diameter long`, r.line, g.line, 1e-12, { rel: true, unit: 'm' });
     S.check(`${d.name}: line strength as the part states it`, d.chute.strength * 1000, g.rated, 0, { unit: 'N' });
@@ -105,8 +110,8 @@ function geometry(S) {
 
 // ---------------------------------------------------------------------------------------------- 13b picture = physics
 function picture(S) {
-  for (const d of CHUTES) {
-    const g = chuteSpec(d, TUNING.CHUTE_CD), kind = d.variant === 'drogue' ? 'drogue' : g.count > 1 ? 'cluster' : 'main';
+  for (const [name, g, , kind] of CANOPIES) {
+    const d = { name };
     let gap = 0, seam = 0, wide = 0, hem = 0, len = 0, conf = 0, n = 0, lines = 0;
     for (const q of [2, 1, 0]) for (const [stage, fill] of [['semi', 0.02], ['semi', 0.4], ['semi', 1], ['full', 0.3], ['full', 0.7], ['full', 1]]) for (const breath of [1, 0.96, 1.012]) {
       const lay = canopyLayout(kind, q), sh = chuteShape(g, chuteDragArea(g, stage, fill), {});
@@ -261,27 +266,41 @@ function swing(S) {
 // ---------------------------------------------------------------------------------------------- 13g limits
 function limits(S) {
   const b = refBody('verda');
-  // Mach: armed above the limit, it waits; it opens on the first step under it
-  for (const [chute, alt, vy] of [['chute', 16000, -520], ['chute_drogue', 20000, -1000]]) {
-    const d = PARTS[chute], D = drop({ chutes: [chute], alt, vy }), p = D.v.chuteParts[0];
+  // Mach: armed above the limit, it waits; it opens on the first step under it. A pack opens its drogue first
+  // (limit: the drogue's), and its main when the main's own limit is passed.
+  for (const [chute, alt, vy] of [['chute', 30000, -1150], ['chute_drogue', 20000, -1000]]) {
+    const d = PARTS[chute], first = d.chute.drogue || d.chute, D = drop({ chutes: [chute], alt, vy }), p = D.v.chuteParts[0];
     let over = true, guard = 0, machOpen = 0, waited = '';
-    while (p.deployed === 'armed' && guard++ < 20000) { const m = D.v.airspeed / R.soundSpeed(b, D.v.altitude); D.step(); if (p.deployed === 'armed') { if (m < d.chute.maxMach - 0.02) over = false; waited = p.chuteWait; } else machOpen = m; }
-    S.ok(`${d.name}: armed at Mach ${(Math.abs(vy) / R.soundSpeed(b, alt)).toFixed(1)}, it stays packed while faster than Mach ${d.chute.maxMach}`, over && waited === 'mach', `was waiting for: ${waited}`);
-    S.check(`${d.name}: it opens as the Mach number comes under its limit`, d.chute.maxMach, machOpen, 0.02);
+    while (p.deployed === 'armed' && guard++ < 20000) { const m = D.v.airspeed / R.soundSpeed(b, D.v.altitude); D.step(); if (p.deployed === 'armed') { if (m < first.maxMach - 0.02) over = false; waited = p.chuteWait; } else machOpen = m; }
+    const what = d.chute.drogue ? `${d.name}, its drogue` : d.name;
+    S.ok(`${what}: armed at Mach ${(Math.abs(vy) / R.soundSpeed(b, alt)).toFixed(1)}, it stays packed while faster than Mach ${first.maxMach}`, machOpen > 0 && machOpen <= first.maxMach + 1e-9, `opened at Mach ${machOpen.toFixed(2)}, last waiting for: ${waited}`);
+    // (a light capsule this fast is also over the load limit of a small drogue: then it opens later still, on the load)
+    if (waited === 'mach') S.check(`${what}: it opens as the Mach number comes under its limit`, first.maxMach, machOpen, 0.02);
+    else S.info(`${what}: under Mach ${first.maxMach} it was still held shut by the load on its lines, and opened at Mach`, machOpen);
+    if (!d.chute.drogue) continue;
+    S.ok(`${d.name}: what came out first was the drogue`, p.deployed === 'drogue');
+    let fast = true, mainMach = 0; guard = 0;
+    while (p.deployed === 'drogue' && guard++ < 60000 && !D.v.landed) { const m = D.v.airspeed / R.soundSpeed(b, D.v.altitude); D.step(); if (p.deployed === 'drogue') { if (m < d.chute.maxMach - 0.02) fast = false; } else mainMach = m; }
+    S.ok(`${d.name}: the main stays in the pack while faster than Mach ${d.chute.maxMach}`, fast && p.deployed === 'semi');
+    S.check(`${d.name}: the main comes out as the Mach number comes under its own limit`, d.chute.maxMach, mainMach, 0.02);
   }
-  // air: too thin to fill it above 0.02 atm
-  { const D = drop({ alt: 40000, vy: -100 }), p = D.v.chuteParts[0]; D.step(50);
-    S.ok('a parachute armed at 40 km stays packed: the air is too thin to fill it', p.deployed === 'armed' && p.chuteWait === 'thin'); }
-  // strength: a heavy craft at speed is held shut by the sequencer, then opens when the load would be inside the margin
-  { const D = drop({ ballast: Array(10).fill('tank_m400'), alt: 3000, vy: -400 }), v = D.v, p = v.chuteParts[0], gs = chuteSpec(p.def, TUNING.CHUTE_CD);
+  // slow enough for the main already: no drogue, the main comes straight out
+  { const D = drop({ alt: 2500, vy: -70 }), p = D.v.chuteParts[0]; D.step(2);
+    S.ok('a pack armed below its main\'s limits skips the drogue', p.deployed === 'semi'); }
+  // air: too thin to fill even a drogue
+  { const D = drop({ alt: 60000, vy: -100 }), p = D.v.chuteParts[0]; D.step(50);
+    S.ok('a parachute armed at 60 km stays packed: the air is too thin to fill it', p.deployed === 'armed' && p.chuteWait === 'thin'); }
+  // strength: a heavy craft at speed is held shut by the sequencer (drogue and main both), then opens when the load
+  // would be inside the margin
+  { const D = drop({ ballast: Array(10).fill('tank_m400'), alt: 3000, vy: -400 }), v = D.v, p = v.chuteParts[0], gs = chuteSpec(p.def, TUNING.CHUTE_CD).drogue;
     D.step();
     const rho0 = R.airDensity(b, v.altitude), est0 = chuteOpeningLoad(gs, 0.5 * rho0 * v.airspeed ** 2, rho0, v.mass, gEff(b, v.altitude));
-    S.ok(`${(v.mass / 1000).toFixed(1)} t on one Canopy Parachute at ${v.airspeed.toFixed(0)} m/s: held shut, opening would load the lines to ${(est0 / 1000).toFixed(0)} kN of ${(gs.rated / 1000).toFixed(0)}`, p.deployed === 'armed' && p.chuteWait === 'load' && est0 > CHUTE.OPEN_MARGIN * gs.rated);
+    S.ok(`${(v.mass / 1000).toFixed(1)} t on one Canopy Parachute at ${v.airspeed.toFixed(0)} m/s: held shut, even the drogue would load its lines to ${(est0 / 1000).toFixed(0)} kN of ${(gs.rated / 1000).toFixed(0)}`, p.deployed === 'armed' && p.chuteWait === 'load' && est0 > CHUTE.OPEN_MARGIN * gs.rated);
     let guard = 0, peak = 0;
     while (p.deployed === 'armed' && guard++ < 20000 && !v.dead && !v.landed) D.step();
-    const opened = p.deployed === 'semi';
-    for (let i = 0; i < 500 && p.deployed === 'semi'; i++) { D.step(); peak = Math.max(peak, v.chuteTension); }
-    if (opened) S.ok('... and once it does open, the reefed stage stays inside the margin it waited for', peak <= CHUTE.OPEN_MARGIN * gs.rated * 1.02, `peak ${(peak / 1000).toFixed(0)} kN, margin ${(CHUTE.OPEN_MARGIN * gs.rated / 1000).toFixed(0)} kN`);
+    const opened = p.deployed === 'drogue';
+    for (let i = 0; i < 500 && p.deployed === 'drogue'; i++) { D.step(); peak = Math.max(peak, v.chuteTension); }
+    if (opened) S.ok('... and once the drogue does open, it stays inside the margin it waited for', peak <= CHUTE.OPEN_MARGIN * gs.rated * 1.02, `peak ${(peak / 1000).toFixed(0)} kN, margin ${(CHUTE.OPEN_MARGIN * gs.rated / 1000).toFixed(0)} kN`);
     else S.info('... it reached the ground still waiting (a parachute this small cannot take this craft at this speed)', v.airspeed, 'm/s'); }
   // tearing: a canopy that is open and then loaded past its strength comes away (with joints that hold: on this
   // stack the joint under the capsule would let go before the lines do)
@@ -301,6 +320,36 @@ function limits(S) {
       let guard = 0; while (guard++ < 1500 && !D.v.landed && !D.v.dead) D.step();
       S.ok('with TUNING.CHUTE_FAIL off the same canopy holds', p.deployed === 'full' || D.v.landed); } finally { TUNING.CHUTE_FAIL = keep; } }
   } finally { TUNING.STRUCT_FAIL = keepS; }
+}
+
+// ---------------------------------------------------------------------------------------------- 13j pack drogues
+function packDrogue(S) {
+  const b = refBody('verda');
+  for (const [chute, pod, shield, ballast, alt, vy] of [['chute', 'pod_acorn', 'heatshield_m', [], 12000, -330], ['chute', 'pod_acorn', 'heatshield_m', [], 30000, -800],
+    ['chute_grand', 'pod_hearth', 'heatshield_l', [], 12000, -330], ['chute', 'pod_acorn', 'heatshield_m', ['tank_m400'], 9000, -280]]) {
+    const d = PARTS[chute], rs = RP.spec(drogueBlock(d)), opts = { chutes: [chute], pod, shield, ballast };
+    const D = drop({ ...opts, alt, vy });
+    const G = gameStage(D, 'drogue', 9), st = G.start, p = D.v.chuteParts[0];
+    const name = `${d.name}'s drogue under ${(st.mass / 1000).toFixed(2)} t from ${Math.hypot(st.vx, st.vy).toFixed(0)} m/s at ${(st.h / 1000).toFixed(1)} km`;
+    if (G.rows.length < 20) { S.ok(`${name}: the drogue stage was flown`, false, `${G.rows.length} steps, parachute ${p.deployed}`); continue; }
+    const capCdA = ownDragCurve(opts, st.h, Math.hypot(st.vx, st.vy));
+    const ref = RP.fly({ mass: st.mass, capCdA, sp: rs, stage: 'reefed', rho: h => R.airDensity(b, h), g: gEff(b, st.h), h: st.h, vx: st.vx, vy: st.vy, theta: st.theta, s: st.s, t0: st.t0, tEnd: G.rows[G.rows.length - 1].t, every: 0.02 });
+    const gp = peakOf(G.rows), rp = peakOf(ref);
+    S.check(`${name}: peak line load vs the reference`, rp.T, gp.T, 0.03, { rel: true, unit: 'N', note: `${(gp.T / (st.mass * 9.80665)).toFixed(1)} g` });
+    let wV = 0, wT = 0;
+    for (const r of G.rows) { const q = at(ref, r.t); wV = Math.max(wV, Math.abs(r.speed - q.speed) / Math.max(q.speed, 1)); if (r.t > 0.3) wT = Math.max(wT, Math.abs(r.T - q.T) / rp.T); }
+    S.check(`${name}: speed all the way through vs the reference (worst)`, 0, wV, 0.03);
+    S.check(`${name}: line load all the way through, as a share of the peak (worst)`, 0, wT, 0.05);
+    const gs = chuteSpec(d, TUNING.CHUTE_CD).drogue;
+    S.ok(`${name}: inside what its lines hold`, gp.T < gs.rated, `${(100 * gp.T / gs.rated).toFixed(0)} % of ${(gs.rated / 1000).toFixed(0)} kN`);
+    // on down: the main comes out, opens fully, and the craft lands at the speed the main's area gives
+    let guard = 0, peakMain = 0; const seen = ['drogue'];
+    while (!D.v.landed && !D.v.dead && guard++ < 200000) { D.step(); if (p.deployed !== seen[seen.length - 1]) seen.push(p.deployed); if (p.deployed === 'semi' || p.deployed === 'full') peakMain = Math.max(peakMain, D.v.chuteTension || 0); if (p.deployed === 'full' && p.deployT >= 1 && D.v.radarAlt < 200) break; }
+    const ms = chuteSpec(d, TUNING.CHUTE_CD);
+    S.ok(`${name}: then main reefed, then main fully open, in that order`, seen.slice(0, 3).join() === 'drogue,semi,full', seen.join(' > '));
+    S.ok(`${name}: the main's lines are never loaded past their strength on the way`, peakMain < ms.rated, `peak ${(peakMain / 1000).toFixed(0)} kN of ${(ms.rated / 1000).toFixed(0)}`);
+    S.check(`${name}: sinking speed near the ground is the main's`, RP.sinkSpeed(D.v.mass, gEff(b, D.v.altitude), R.airDensity(b, D.v.altitude), RP.spec(d.chute).cdsFull, capCdA(6)), -D.v.verticalSpeed, 0.02, { rel: true, unit: 'm/s' });
+  }
 }
 
 // ---------------------------------------------------------------------------------------------- 13h two canopies
@@ -340,6 +389,7 @@ export const groups = [
   { name: '13e. Parachutes: opening fully, with the air the canopy takes along', fast: false, run: S => opening(S, 'full') },
   { name: '13f. Parachutes: the swing of a capsule that arrives with sideways speed', fast: false, run: S => swing(S) },
   { name: '13g. Parachutes: Mach and line-strength limits, and tearing', fast: true, run: S => limits(S) },
+  { name: '13j. Parachutes: the drogue a pack carries, and the hand-over to the main', fast: false, run: S => packDrogue(S) },
   { name: '13h. Parachutes: two canopies side by side', fast: true, run: S => twin(S) },
   { name: '13i. Parachutes: step size', fast: false, run: S => stepSize(S) },
 ];

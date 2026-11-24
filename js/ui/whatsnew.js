@@ -37,6 +37,10 @@ export const RECENT_DAYS = 6;
 export const RELEASES = [
   { id: 'pad-mount-and-arms', date: '2026-11-24', title: 'A launch mount, hold-downs and arms that reach',
     text: 'A rocket on the pad no longer rests on its engine bell. It stands on a launch mount fitted to it, held by clamps on the rim above the engine, with the bell hanging free over the flame opening. The tower\'s arms now end on the hull, with a white room at the capsule. The arms swing clear when the engines light and the clamps let go at lift-off. The pad\'s pipes are round, flanged and connected at both ends.' },
+  { id: 'drogue-parachutes', date: '2026-11-24', title: 'Drogues, and parachutes with real limits',
+    text: 'Every main parachute pack now carries a small drogue. It comes out first, as fast as Mach 3, and slows the craft until the main can open below Mach 0.4, so Hopper I comes home at 4 g where it used to take 18. Lines are as strong as real ones, and a craft far too heavy for its parachute will tear it. After touchdown or splashdown the canopy no longer vanishes: it topples over and settles beside the craft.' },
+  { id: 'splashdown-spray-foam', date: '2026-11-24', title: 'A splashdown that looks like one',
+    text: 'A capsule that comes down in the sea now throws up a crown of spray that falls back, and a ring of foam runs out over the water and breaks up. Foam washes round the hull at the waterline for as long as it floats. Once it has settled it rides a slow swell, rising and tilting a little, instead of sitting as still as if it stood on rock.' },
   { id: 'reentry-glow', date: '2026-11-24', title: 'A re-entry glow without the hard edge',
     text: 'The glow of re-entry used to be a smooth cone with a hard-rimmed disc at its widest ring. It is now a hot layer on the face that meets the air and a streaked tail that thins and tears away, with no outline. The Entry box also had a row so long it pushed its numbers off the edge; that is now two rows, So far and Ablator lost.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',

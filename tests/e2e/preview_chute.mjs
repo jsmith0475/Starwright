@@ -2,7 +2,7 @@
 // opening and fully open, from far enough to see the whole thing and close enough to see where the lines meet the
 // skirt. A capture script, not a test: it fails only on page errors.
 //   node tests/e2e/preview_chute.mjs [only,comma,separated] [--scale 2] [--url http://...]
-//   names: main skirt opening reefed twin grand drogue swing         → tests/out/preview-chute-<name>.png
+//   names: main skirt opening reefed twin grand drogue swing packdrogue down         → tests/out/preview-chute-<name>.png
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -71,7 +71,7 @@ async function boot() {
   await E(() => { const s = window.__sw.app.settings; s.gfxForce = true; s.gfxQuality = 'high'; s.showHints = false; });
 }
 /** Launch a craft built by `src`, lift it to `alt` m over the daylit land near the space centre, falling at `vy`, drifting at `vx`. */
-async function drop(src, { alt = 2500, vy = -90, vx = 0 } = {}) {
+async function drop(src, { alt = 2500, vy = -90, vx = 0, dx = 0 } = {}) {
   await E(async ({ src }) => {
     const { Craft } = await import('/js/core/craft.js');
     const c = new Craft(); new Function('c', src)(c); c.autoStage();
@@ -86,13 +86,14 @@ async function drop(src, { alt = 2500, vy = -90, vx = 0 } = {}) {
     const w = window.__sw.world, v = w.active, b = v.body;
     const up = v.pos.clone().normalize(), wy = 2 * Math.PI / b.rotPeriod;
     v.landed = false; v.splashed = false; v.surface = null; v.onRails = false; v.launched = true; v.launchUt = w.ut;
-    v.pos.addScaledVector(up, o.alt);
     const east = new THREE.Vector3(0, 1, 0).cross(up).normalize();
+    if (o.dx) { const r0 = v.pos.length(); v.pos.addScaledVector(east, o.dx).setLength(r0); up.copy(v.pos).normalize(); east.set(0, 1, 0).cross(up).normalize(); }
+    v.pos.addScaledVector(up, o.alt);
     v.vel.set(wy * v.pos.z, 0, -wy * v.pos.x).addScaledVector(up, o.vy).addScaledVector(east, o.vx);
     v.w.set(0, 0, 0); v.sasTarget = null; v.ctrl.throttle = 0; v.ctrl.sas = true; v._stamp++;
     v.updateTelemetry(w.ut); w.step(0.001);
     while (v.chuteParts.some(p => p.deployed === 'stowed')) w.stage();
-  }, { alt, vy, vx });
+  }, { alt, vy, vx, dx });
 }
 const CAPSULE = chute => `const pod = c.setRoot('pod_acorn')[0]; ${chute} c.attachStack('heatshield_m', pod.id, 'bottom'); c.name = 'Drop';`;
 const HEARTH = chute => `const pod = c.setRoot('pod_hearth')[0]; ${chute} c.attachStack('heatshield_l', pod.id, 'bottom'); c.name = 'Drop';`;
@@ -116,6 +117,15 @@ try {
   if (want('twin')) { await drop(CAPSULE(`c.attachRadial('chute_radial', pod.id, pod.pos.y + 0.1, 0, 2);`), { alt: 1500 }); await ff(300, open); await ff(6); await cam(0.2, -0.08, 75); await shot('twin'); }
   if (want('grand')) { await drop(HEARTH(`c.attachStack('chute_grand', pod.id, 'top');`), { alt: 1700 }); await ff(300, open); await ff(4); await cam(0.8, -0.08, 100); await shot('grand'); }
   if (want('drogue')) { await drop(CAPSULE(`c.attachStack('chute_drogue', pod.id, 'top');`), { alt: 2600, vy: -150 }); await ff(300, open); await ff(2); await cam(0.8, -0.08, 45); await shot('drogue'); }
+  if (want('packdrogue')) { await drop(CAPSULE(`c.attachStack('chute', pod.id, 'top');`), { alt: 30000, vy: -700 }); await ff(120, 'v && v.chuteParts[0].deployed === "drogue" && v.chuteParts[0].deployT >= 1'); await ff(1); await cam(0.8, -0.1, 22); await shot('packdrogue'); }
+  if (want('down')) {
+    // touchdown: the canopy stays, topples and deflates (the fall runs on the wall clock, so wait it out)
+    await drop(CAPSULE(`c.attachStack('chute', pod.id, 'top');`), { alt: 420, vy: -30, dx: +(flag('dx') || -900) });
+    await ff(400, 'v && (v.landed || v.splashed)'); await ff(0.5); await cam(2.5, 0.3, 75);
+    await E(() => { for (let i = 0; i < 3; i++) { window.__sw.app.current.update(0.02); window.__sw.app.input.endFrame(); } });
+    await page.waitForTimeout(6000);
+    await shot('down');
+  }
 } finally {
   await browser.close(); server.close();
 }
