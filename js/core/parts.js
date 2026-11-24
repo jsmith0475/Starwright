@@ -36,7 +36,7 @@ export const SIZES = { S: 0.3125, M: 0.625, L: 1.25, XL: 1.875, XXL: 2.8125 };
 //                              ispVac, ispAtm and gimbal are the totals of mode 0 so nothing else needs to know.
 //   joint: 2                   end rings this many times as strong as a plain part's (structure.js)
 //   decoupler.hot: true        a hot-staging ring: it lets go of the stage above and stays on the stage below
-//   shape 'flap' (flap: { area, where: 'fore' | 'aft' })   a body flap; it is drawn and weighed, and does not steer yet
+//   shape 'flap' (flap: { area, where: 'fore' | 'aft' })   a body flap: a plate hinged along the hull that folds toward the lee side (vessel.js, TUNING.FLAP_*)
 // Interstage trusses (not a catalog part; see the helpers at the bottom of this file and Craft.interstages()):
 //   whatever is stacked on the nozzle end of a rocket engine is joined to the engine's mount ring by an open
 //   lattice ring that surrounds the engine, so the load runs rim to rim and never through the bell. The truss
@@ -778,7 +778,7 @@ const defs = [
       modes: [{ name: 'All 33', rings: [0, 1, 2] }, { name: 'Inner 13', rings: [0, 1] }, { name: 'Centre 3', rings: [0] }] },
     tolerance: 8, maxTemp: 1900,
     desc: 'Thirty-three Peregrine engines on one thrust plate: three in the centre, ten round them, twenty on the rim. The inner thirteen steer. It can burn all thirty-three, the inner thirteen, or the centre three.' },
-  { id: 'eng_peregrine6', name: 'Peregrine Mount 3+3', cat: 'engines', tech: 'very_heavy', cost: 26000, mass: 11.2, size: 'XXL',
+  { id: 'eng_peregrine6', name: 'Peregrine Mount 3+3', cat: 'engines', tech: 'very_heavy', cost: 26000, mass: 16.0, size: 'XXL',
     joint: 2, shape: 'engine', variant: 'cluster6', h: 3.6, r: 2.8125, attach: STACK,
     engine: { type: 'liquid', prop: 'methalox', thrust: 0, ispVac: 0, ispAtm: 0, gimbal: 0,
       rings: [{ n: 3, thrust: 340, ispVac: 350, ispAtm: 330, gimbal: 8, radius: 0.5 }, { n: 3, thrust: 375, ispVac: 380, ispAtm: 200, gimbal: 0, radius: 1.75, vacuum: true }],
@@ -788,21 +788,24 @@ const defs = [
   { id: 'tank_xxl_long', name: 'Stalwart Tank XXL-200', cat: 'tanks', tech: 'very_heavy', cost: 21000, mass: 25.0, size: 'XXL',
     joint: 2, shape: 'tank', variant: 'steel', h: 18.75, r: 2.8125, attach: STACK, res: { lox: 156520, ch4: 43480 }, tolerance: 7, maxTemp: 1500,
     desc: 'A stainless tank for two liquids: 157 tonnes of liquid oxygen above 43 tonnes of liquid methane, in the 3.6 to 1 the Peregrine burns.' },
-  { id: 'tank_xxl_ship', name: 'Shearwater Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 49.0, size: 'XXL',
+  { id: 'tank_xxl_ship', name: 'Shearwater Tank XXL-160', cat: 'tanks', tech: 'very_heavy', cost: 19000, mass: 16.2, size: 'XXL',
     joint: 2, tiles: true, shape: 'tank', variant: 'steel', h: 15, r: 2.8125, attach: STACK, res: { lox: 125220, ch4: 34780 }, tolerance: 7, maxTemp: 1700,
     desc: 'The ship\'s own tank, tiled down one side: 125 tonnes of liquid oxygen and 35 tonnes of liquid methane.' },
   { id: 'ring_hotstage', name: 'Hot-Stage Ring XXL', cat: 'structure', tech: 'very_heavy', cost: 4200, mass: 3.0, size: 'XXL',
     joint: 2, shape: 'hotring', h: 2.2, r: 2.8125, attach: STACK, decoupler: { force: 40, hot: true }, command: 'probe', crew: 0, torque: 60, res: { elec: 600 }, elecDrain: 0.2,
     tolerance: 9, maxTemp: 2000,
     desc: 'A vented ring on top of a booster. The stage above lights its engines through the vents before it lets go, and the ring stays on the booster. It also carries the booster\'s guidance.' },
-  { id: 'pod_shearwater', name: 'Shearwater Forward Section', cat: 'command', tech: 'very_heavy', cost: 42000, mass: 19.0, size: 'XXL',
+  { id: 'pod_shearwater', name: 'Shearwater Forward Section', cat: 'command', tech: 'very_heavy', cost: 42000, mass: 18.3, size: 'XXL',
     joint: 2, shape: 'capsule', variant: 'ogive', h: 9.0, r: 2.8125, rTop: 0.35, rBottom: 2.8125, attach: STACK,
     command: 'crew', crew: 6, torque: 120, res: { mono: 600, elec: 2400 }, tolerance: 12, maxTemp: 2300,
     drag: { top: 0.15, bottom: 0.9, side: 0.45 }, experiment: 'crew_report', comY: -1.5,
     desc: 'The front of the ship: a long steel nose with the crew deck inside.' },
-  { id: 'bay_shearwater', name: 'Shearwater Cargo Bay', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 49.0, size: 'XXL',
+  { id: 'bay_shearwater', name: 'Shearwater Cargo Bay', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 77.0, size: 'XXL',
     joint: 2, shape: 'cargobay', h: 4.5, r: 2.8125, attach: STACK, tolerance: 10, maxTemp: 2300,
-    desc: 'A loaded cargo bay: about forty tonnes of freight bound for Pell behind a steel door. The ship is sized to carry it, and cannot reach Pell with it unless it is refuelled in orbit.' },
+    desc: 'A loaded cargo bay: sixty-eight tonnes of freight bound for Pell behind a steel door. The ship is sized to carry it, and cannot reach Pell with it unless it is refuelled in orbit.' },
+  { id: 'bay_shearwater_empty', name: 'Shearwater Cargo Bay (unloaded)', cat: 'structure', tech: 'very_heavy', cost: 9000, mass: 9.0, size: 'XXL',
+    joint: 2, shape: 'cargobay', h: 4.5, r: 2.8125, attach: STACK, tolerance: 10, maxTemp: 2300,
+    desc: 'The same cargo bay with its freight delivered: nine tonnes of steel door and frames. This is how the ship comes home, and the only way its six engines can set it down.' },
   { id: 'fin_grid_xxl', name: 'Lattice Vane XXL', cat: 'aero', tech: 'very_heavy', cost: 2600, mass: 1.1,
     joint: 2, shape: 'fin', variant: 'grid', h: 2.4, rw: 2.6, t: 0.3, attach: RADIAL, fin: { area: 6.2, control: true }, tolerance: 10, maxTemp: 2300,
     desc: 'A grid fin the size of a garage door, for steering a very large booster on its way down.' },
@@ -822,10 +825,10 @@ const defs = [
     desc: 'A docking port that looks out of the side of a hull, with a propellant line through it. Two ships that carry one each dock side by side, and liquid oxygen and methane are pumped across at 300 kg a second while the tanks are settled. It mates only with another Flank Port.' },
   { id: 'flap_fore', name: 'Shearwater Forward Flap', cat: 'aero', tech: 'very_heavy', cost: 1800, mass: 1.0,
     joint: 2, shape: 'flap', variant: 'fore', h: 4.6, rw: 2.3, t: 0.3, attach: RADIAL, flap: { area: 8, where: 'fore' }, aRad: 0.7, tolerance: 10, maxTemp: 2300,
-    desc: 'One of the ship\'s two forward flaps. Fitted and weighed; it does not steer yet.' },
+    desc: 'One of the ship\'s two forward flaps: a steel plate hinged along the hull that folds up out of the wind. With the aft pair it balances the ship as it falls belly first, and steers it.' },
   { id: 'flap_aft', name: 'Shearwater Aft Flap', cat: 'aero', tech: 'very_heavy', cost: 2200, mass: 1.6,
     joint: 2, shape: 'flap', variant: 'aft', h: 6.4, rw: 2.9, t: 0.3, attach: RADIAL, flap: { area: 15, where: 'aft' }, aRad: 0.9, tolerance: 10, maxTemp: 2300,
-    desc: 'One of the ship\'s two aft flaps. Fitted and weighed; it does not steer yet.' },
+    desc: 'One of the ship\'s two aft flaps, the larger pair. Folding them lets the tail drop; spreading them lifts it.' },
   // ---------- Internal (not in catalog) ----------
   { id: 'pip', name: 'Pip (EVA)', cat: 'internal', tech: 'start', cost: 0, mass: 0.09,
     shape: 'pip', h: 0.9, r: 0.25, attach: STACK, command: 'eva', crew: 1, torque: 0.1, res: { evafuel: 5 },

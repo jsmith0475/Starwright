@@ -96,6 +96,7 @@ export const TUNING = {
   FLAP_CN: 1.2,              // flat-plate force coefficient below the speed of sound...
   FLAP_CN_HYPER: 1.8,        // ...and where Newtonian flow has taken over
   FLAP_THROW: 0.8,           // rad of fold a full command adds or takes away
+  FLAP_ROLL: 1, FLAP_YAW: 1,   // share of the throw given to roll and to yaw
   FLAP_TRIM_RATE: 0.25,      // rad/s: how fast the resting fold of the fore and aft pairs is walked toward balance
   FLAP_Q_MIN: 40,            // Pa: below this the flaps are left where they are
   BELLY_AOA: 1.22,           // rad (70°): the angle to the air the belly hold flies
@@ -449,6 +450,7 @@ export class Vessel {
     this.sasTarget = null;        // Quaternion held by SAS 'hold'
     this.sasDir = new Vector3(0, 1, 0);   // inertial direction for sasMode 'direction'
     this.bellyAoa = TUNING.BELLY_AOA;      // commanded angle to the air (rad) for sasMode 'belly'
+    this.bellyLift = null; this.bellyNose = null;     // guidance's own lift vector and nose direction for it (bellyAttitude)
     this.bank = 0;                        // commanded bank (rad) for sasMode 'bankHold': 0 = lift up, positive = lift to the right
     this._trim = null;                    // set by _updateMass while a capsule's Entry trim is on
     this.aeroLocal = new Vector3();       // the air force of the last step (N), parachutes apart, in the vessel's own axes
@@ -1012,18 +1014,32 @@ export class Vessel {
    * present end first at no angle without), turned about the velocity so that the lift points `bank` from straight
    * up. Null when there is no airflow direction to hold to.
    */
-  /** The attitude that puts the belly (vessel −Z) to the air with the nose `bellyAoa` from the direction of travel,
-   *  lifted toward straight up as seen across the flow. Null out of the air or with no speed. */
+  /** The attitude that puts the belly (vessel −Z) to the air. With nothing else said the nose is `bellyAoa` from the
+   *  direction of travel, lifted toward straight up as seen across the flow. Guidance may instead give `bellyLift`,
+   *  an inertial vector whose part across the flow is the sideways force wanted as a fraction of the drag, and
+   *  `bellyNose`, the way the nose should lie (default: along that lift). Null with no airflow. */
   bellyAttitude(out) {
     const u = this.airDirection(_c);
     if (!u) return null;
     _up.copy(this.pos).normalize();
     const h = _a.copy(_up).addScaledVector(u, -_up.dot(u));
-    if (h.lengthSq() < 1e-8) { _e.set(0, 1, 0).applyQuaternion(this.q); h.copy(_e).addScaledVector(u, -_e.dot(u)); if (h.lengthSq() < 1e-8) return null; }
+    if (h.lengthSq() < 1e-6) { _e.set(0, 1, 0).applyQuaternion(this.q); h.copy(_e).addScaledVector(u, -_e.dot(u)); if (h.lengthSq() < 1e-8) return null; }
     h.normalize();
-    const ca = Math.cos(this.bellyAoa), sa = Math.sin(this.bellyAoa);
-    const y = _b.copy(u).multiplyScalar(ca).addScaledVector(h, sa);
-    const z = _d.copy(u).multiplyScalar(-sa).addScaledVector(h, ca);
+    const z = _d;
+    if (this.bellyLift) {
+      z.copy(this.bellyLift).addScaledVector(u, -this.bellyLift.dot(u));
+      const m = z.length(); if (m > 1) z.multiplyScalar(1 / m);
+      z.sub(u).normalize();
+    } else z.copy(u).multiplyScalar(-Math.sin(this.bellyAoa)).addScaledVector(h, Math.cos(this.bellyAoa));
+    // (a round hull makes its sideways force along its own length and nowhere else: the lift goes where the nose
+    // leans, so with a lift asked for and no nose direction given, the nose is laid along the lift)
+    const y = _b;
+    if (this.bellyNose) y.copy(this.bellyNose);
+    else if (this.bellyLift) { y.copy(this.bellyLift).addScaledVector(u, -this.bellyLift.dot(u)); if (y.lengthSq() < 1e-6) y.copy(h); }
+    else y.copy(h);
+    y.addScaledVector(z, -y.dot(z));
+    if (y.lengthSq() < 1e-4) { y.set(0, 1, 0).applyQuaternion(this.q).addScaledVector(z, -y.dot(z)); if (y.lengthSq() < 1e-6) return null; }
+    y.normalize();
     const x = _e.crossVectors(y, z);
     return out.setFromRotationMatrix(_m4.makeBasis(x, y, z));
   }
@@ -2393,7 +2409,7 @@ export class Vessel {
       } else this.sasTarget = null;
     }
     // body flaps: the fore and aft pairs share out pitch, the left and right pairs roll, and the diagonals yaw
-    // (a folded flap is pushed toward the hull as well as downwind). The resting fold of each pair walks toward
+    // (a folded flap is pushed away from the hull as well as downwind). The resting fold of each pair walks toward
     // the balance that leaves the pitch command at nothing, so the wheels and thrusters are not left holding it.
     if (this._flaps.length) {
       const live = qdyn > TUNING.FLAP_Q_MIN && this.controllable;
@@ -2403,7 +2419,7 @@ export class Vessel {
         if (!p._flap) continue;
         if (live) {
           const sy = p.pos.y > com.y ? 1 : -1, so = p._ox * 1 > 0 ? 1 : -1;
-          p._foldCmd = clamp(TUNING.FLAP_REST + sy * this._flapTrim - th * cx * sy + th * cy * so + th * cz * sy * so, 0, TUNING.FLAP_MAX);
+          p._foldCmd = clamp(TUNING.FLAP_REST + sy * this._flapTrim - th * cx * sy + TUNING.FLAP_ROLL * th * cy * so - TUNING.FLAP_YAW * th * cz * sy * so, 0, TUNING.FLAP_MAX);
         }
         const d = p._foldCmd - p.fold;
         p.fold += d > step ? step : d < -step ? -step : d;
