@@ -166,7 +166,10 @@ export function ascentProgram(world, opts = {}) {
         const acc = v.maxThrust / v.mass;
         if (acc > o.maxG * 9.81) thr = Math.min(thr, o.maxG * 9.81 / acc);
         v.ctrl.throttle = thr;
-        if (gap <= 0) {
+        // Past the top of the climb and above the air with the apoapsis already close: raising it further while the
+        // stage falls back only wastes the time it has. Circularize now from where it is (the coast plans the burn).
+        const passedTop = gap < 6000 && v.verticalSpeed < 0 && (!body.atmo || alt > body.atmo.height);
+        if (gap <= 0 || passedTop) {
           v.ctrl.throttle = 0;
           c.phase = 'coast';
           c.note(`apoapsis ${(v.apoapsis / 1000).toFixed(1)} km reached at ${(alt / 1000).toFixed(1)} km altitude`);

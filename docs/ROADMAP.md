@@ -185,7 +185,7 @@ skin follows a heat balance, and heat shields ablate by area ([HEATING.md](HEATI
 **The plan.** The mathematics is written up in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md) and the
 build is specified in seven steps in [REENTRY_SPEC.md](REENTRY_SPEC.md): A the air (built),
 B forces on bodies at high Mach (built), C capsule trim and steering (built), E heating by shape and attitude (built),
-D wings and fins at speed, F plasma and blackout where it is real, G winds.
+D wings and fins at speed (built, [WINGS.md](WINGS.md)), F plasma and blackout where it is real, G winds.
 
 **Building it.** Add body lift, a temperature profile per atmosphere, occlusion so shielded
 parts stay cool, and optional winds. Every change needs a matching check in the verification

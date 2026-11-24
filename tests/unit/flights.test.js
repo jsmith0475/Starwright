@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { World } from '../../js/core/world.js';
+import { terrainAt } from '../../js/core/vessel.js';
 import { stockCrafts, stockSite } from '../../js/core/craft.js';
 import { SYSTEM } from '../../js/core/bodies.js';
 import { Career } from '../../js/core/career.js';
@@ -197,12 +198,28 @@ test('flight 3: Pell Runner - orbit, transfer, Pell encounter, capture and power
   assert.equal(m.count('crewLost'), 0);
   const td = m.events.filter(e => e.type === 'landed' && e.vessel === v).pop();
   assert.ok(td.speed < 4, 'touchdown speed ' + td.speed);
-  // the ground is real terrain now: "upright" means square to the local slope, which must itself be gentle
-  const tilt = v.pos.clone().set(0, 1, 0).applyQuaternion(v.q).angleTo(v.pos);
-  // the script does not choose its site: it comes down wherever the timing of the whole flight puts it, so the
-  // lander is judged against the ground it found (the next line), and the ground only has to be standable
-  assert.ok(v.surface.slope < 0.2, 'landed on standable ground: ' + v.surface.slope);
-  assert.ok(tilt < v.surface.slope + 0.03, 'standing upright on its legs: tilt ' + tilt + ' on a slope of ' + v.surface.slope);
+  // the ground is real terrain now: "upright" means square to the ground under its feet, which must itself be gentle.
+  // The script does not choose its site: it comes down wherever the timing of the whole flight puts it, so the
+  // lander is judged against the ground it found. That is the plane through the ground under the feet that carry
+  // it, not the slope sampled one base radius out from the middle: on 2026-11-24 a lander stood square (0.4 degrees)
+  // on three feet whose ground sloped 6.3 degrees, the fourth foot 13 cm over a dip, where the middle sample said 3.6.
+  const axis = v.pos.clone().set(0, 1, 0).applyQuaternion(v.q), feet = [];
+  for (const p of v._legs) {
+    let best = null;
+    for (let j = p._lp0; j < p._lp0 + p._lpN; j++) {
+      const c = v._pts[j], wp = v.pos.clone().set(c.x - v.com.x, c.y - v.com.y, c.z - v.com.z).applyQuaternion(v.q).add(v.pos);
+      const hT = terrainAt(v.body, v.body.inertialToSurfaceDir(wp.clone(), w.ut, wp.clone()).normalize());
+      const gap = wp.length() - v.body.radius - hT;
+      if (!best || gap < best.gap) best = { gap, g: wp.clone().normalize().multiplyScalar(v.body.radius + hT) };
+    }
+    if (best && best.gap < 0.05) feet.push(best.g);
+  }
+  assert.ok(feet.length >= 3, 'standing on three feet or more: ' + feet.length);
+  const nG = feet[1].clone().sub(feet[0]).cross(feet[2].clone().sub(feet[0])).normalize();
+  if (nG.dot(v.pos) < 0) nG.negate();
+  const groundSlope = nG.angleTo(v.pos), lean = axis.angleTo(nG);
+  assert.ok(groundSlope < 0.2, 'landed on standable ground: ' + groundSlope);
+  assert.ok(lean < 0.03, 'standing square to the ground under its feet: ' + lean + ' rad, on ground sloping ' + groundSlope);
   assert.ok(Math.abs(v.radarAlt) < 1e-6);
   assert.ok(v.parts.has(7), 'the lander engine survived');
   assert.ok(v.deltaV > 600, 'fuel to come home on: ' + v.deltaV);

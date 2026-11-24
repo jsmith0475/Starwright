@@ -4,7 +4,7 @@
 // reference cannot drift from js/core/vessel.js, js/core/structure.js and js/core/parts.js. The same mathematics is
 // set out for developers in README.md (Aerodynamics), docs/STRUCTURE.md and docs/AERO_BREAKUP.md.
 // Pure data and string work: imported by the unit tests in Node.
-import { TUNING, HEAT_SCALE_GAME, wingCoefficients } from '../core/vessel.js';
+import { TUNING, HEAT_SCALE_GAME, wingCoefficients, machSlope, machInduced } from '../core/vessel.js';
 import { GASES } from '../core/bodies.js';
 import { STRUCT, rootSection } from '../core/structure.js';
 import { AIR_RATING, PARTS } from '../core/parts.js';
@@ -44,7 +44,7 @@ export function aeroModel() {
     const cd90 = wingCoefficients(Math.PI / 2)[1];
     return { name: d.name, h: d.h, t: d.t, width: d.rw, area: w.area, sec, factor, capM: STRUCT.LINE_T * factor * sec.zFlap, cd90, arm: d.rw / 2 };
   };
-  return { TUNING, HEAT_SCALE_GAME, GASES, STRUCT, PARTS, MAX_DEBRIS, AERO, rated, machRise, wingCoefficients, rootSection, tearTime, ring, fin, DEG };
+  return { TUNING, HEAT_SCALE_GAME, GASES, STRUCT, PARTS, MAX_DEBRIS, AERO, rated, machRise, wingCoefficients, machSlope, machInduced, rootSection, tearTime, ring, fin, DEG };
 }
 
 export const AERO_CHAPTERS = [
@@ -190,9 +190,9 @@ $$ C_L = a\,\alpha, \qquad C_D = ${T.WING_CD0} + ${T.WING_K}\,C_L^2 $$
 
 The lift-curve slope $a$ is ${T.WING_SLOPE} per radian for a wing and ${T.FIN_LIFT} for a fin, which is short and stubby. Lift acts at right angles to the flow and drag along it:
 
-$$ L = \tfrac{1}{2}\rho v^2\,S\,C_L, \qquad D = \tfrac{1}{2}\rho v^2\,S\,C_D\,M(\mathrm{Ma}) $$
+$$ L = \tfrac{1}{2}\rho v^2\,S\,C_L, \qquad D = \tfrac{1}{2}\rho v^2\,S\,C_D $$
 
-Here $M(\mathrm{Ma})$ is the one drag-rise curve that lifting surfaces and open panels keep: 1 below Mach 0.7, a straight line up to ${T.MACH_PEAK.toFixed(1)} at Mach 1.1, down to ${T.MACH_HIGH} at Mach 2.5 and level above.
+Near and above the speed of sound the profile drag, the ${T.WING_CD0} in $C_D$, is multiplied by the slender drag-rise curve given earlier in this chapter. Open panels keep their own single curve: 1 below Mach 0.7, a straight line up to ${T.MACH_PEAK.toFixed(1)} at Mach 1.1, down to ${T.MACH_HIGH} at Mach 2.5 and level above.
 
 Past the stall the flow separates and the surface behaves as a flat plate:
 
@@ -202,13 +202,38 @@ The stall angle is ${(T.WING_STALL * DEG).toFixed(0)}° for a wing and ${(T.FIN_
 
 > example: A ${fin.name} ($S = ${fin.fin.area}$ m²) at 5° to the flow at ${q0 / 1000} kPa: $C_L = ${T.FIN_LIFT} \times ${sig(a5, 3)} = ${sig(cf[0], 3)}$, so the lift is $${sig(q0 * fin.fin.area * cf[0] / 1000, 3)}$ kN, with $${sig(q0 * fin.fin.area * cf[1], 3)}$ N of drag. Four of them at the foot of a rocket are a strong hand on the tail.
 
+## Wings and fins above the speed of sound
+
+A wing lifts at low speed because the air ahead of it feels it coming and bends around it. Above the speed of sound the air cannot be warned: each part of the surface acts on its own, pressing on the air under it and pulling away from the air above. Ackeret worked out the result for a thin flat plate in 1925, and it is one of the simplest formulas in aerodynamics:
+
+$$ C_L = \frac{4\,\alpha}{\sqrt{\mathrm{Ma}^2 - 1}}, \qquad C_{D,lift} = C_L\,\alpha = \frac{4\,\alpha^2}{\sqrt{\mathrm{Ma}^2 - 1}} $$
+
+So the lift-curve slope falls as the Mach number rises, and the lift no longer comes cheap: the force on a flat plate stands square to the plate, and its backward share is the lift times the angle. The game takes the smaller of the low-speed slope and Ackeret's, and the larger of the two drags due to lift:
+
+$$ a(\mathrm{Ma}) = \min\left(a,\ \frac{4}{\sqrt{\mathrm{Ma}^2 - 1}}\right), \qquad K(\mathrm{Ma}) = \max\left(${T.WING_K},\ \frac{\sqrt{\mathrm{Ma}^2 - 1}}{4}\right) $$
+
+A wing ($a = ${T.WING_SLOPE}$) meets the cap at Mach ${sig(Math.sqrt(1 + 16 / (T.WING_SLOPE * T.WING_SLOPE)), 3)} and a fin ($a = ${T.FIN_LIFT}$) at Mach ${sig(Math.sqrt(1 + 16 / (T.FIN_LIFT * T.FIN_LIFT)), 3)}. The two curves meet there, so nothing jumps.
+
+| Mach number | Wing slope | Fin slope | $K$ |
+| --- | --- | --- | --- |
+| below 1 | ${T.WING_SLOPE} | ${T.FIN_LIFT} | ${T.WING_K} |
+| 2 | ${sig(A.machSlope(T.WING_SLOPE, 2), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 2), 3)} | ${sig(A.machInduced(2), 3)} |
+| 3 | ${sig(A.machSlope(T.WING_SLOPE, 3), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 3), 3)} | ${sig(A.machInduced(3), 3)} |
+| 5 | ${sig(A.machSlope(T.WING_SLOPE, 5), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 5), 3)} | ${sig(A.machInduced(5), 3)} |
+
+> example: The ${fin.name} of the last example, again at 5°, now at Mach 5. Its slope is $4 / \sqrt{24} = ${sig(A.machSlope(T.FIN_LIFT, 5), 3)}$ per radian, so $C_L = ${sig(A.machSlope(T.FIN_LIFT, 5) * a5, 3)}$: about half of what it gave at low speed. A booster coming down through Mach 5 steers with half a hand.
+
+Past the stall nothing changes. A plate broadside to a fast flow has $C_D = ${T.WING_PLATE_CD}$ in the game, and Newton's impact theory of the previous sections gives 1.84. A surface also takes the shadow rule: tucked in the lee of a wider body above Mach 1.5 it keeps a tenth of its force.
+
+> game: **The ${A.PARTS.fin_grid ? A.PARTS.fin_grid.name : 'lattice vane'}** is a grid of small cells. Near the speed of sound each cell chokes, as a nozzle does, and the air spills round the vane instead of through it. Between Mach ${T.GRID_FROM} and ${T.GRID_TO} the game takes away up to ${int(T.GRID_LIFT_LOSS * 100)} % of its lift and adds up to ${int(T.GRID_DRAG_GAIN * 100)} % to its drag, most at Mach ${T.GRID_PEAK.toFixed(1)}. The effect is real; the numbers are the game's own, because published figures vary with the shape of the lattice.
+
 ## Control surfaces
 
 A steering vane, elevon or canard works by changing its own angle of attack. With the pilot's command $u$ between −1 and 1:
 
 $$ \alpha_{eff} = \alpha + \tau\,\delta_{max}\,u $$
 
-The full throw $\delta_{max}$ is ${(T.CTRL_DEFLECT * DEG).toFixed(0)}°. An all-moving surface has $\tau = 1$. A hinged flap on a fixed wing turns only part of the surface and counts for $\tau = ${T.CTRL_TAU}$. Control authority is therefore proportional to dynamic pressure: fins steer hard at max Q and not at all in vacuum, where the engine gimbal and the reaction wheels take over.
+The full throw $\delta_{max}$ is ${(T.CTRL_DEFLECT * DEG).toFixed(0)}°. An all-moving surface has $\tau = 1$. A hinged flap on a fixed wing turns only part of the surface and counts for $\tau = ${T.CTRL_TAU}$. Control authority is therefore proportional to dynamic pressure and to the lift-curve slope: fins steer hard at max Q, less above Mach ${sig(Math.sqrt(1 + 16 / (T.FIN_LIFT * T.FIN_LIFT)), 2)}, and not at all in vacuum, where the engine gimbal and the reaction wheels take over.
 
 ## The sum, and why a rocket flies straight
 

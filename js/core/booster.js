@@ -462,7 +462,10 @@ export function boosterRecovery(world, vessel, opts = {}) {
           else if (settled && hgt < 14 && tiltNow < 0.05) st.committed = true;
           else if (hgt < 14) vsT = clamp((12 - hgt) * 0.4, -1.5, 1.5);
         }
-        const leanMax = st.committed ? 0.015 : hgt < 16 ? 0.14 : 0.25;
+        // (up to 14 degrees, low or high: at 8 degrees under twelve metres a stage that came out of its landing burn
+        // still sliding at 10 m/s needed a hundred metres to stop, and hovered back over the pad on propellant it did
+        // not have)
+        const leanMax = st.committed ? 0.015 : 0.25;
         const lean = Math.min(leanMax, 0.07 * _s.length());
         dir.copy(up);
         if (_s.lengthSq() > 1e-6) dir.addScaledVector(_s.normalize(), Math.tan(lean));
