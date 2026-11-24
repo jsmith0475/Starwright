@@ -987,9 +987,9 @@ export function createFlightScreen(app) {
         }
         if (isBody && tgt !== body && (tgt.parent === body || tgt.parent === body.parent)) add('correct', 'Plan: course correction to ' + tgt.name, 'a small burn that fixes the arrival', v.situation !== 'landed', '', true);
         if (body.parent && body.parent.type !== 'star') add('return', 'Plan: return to ' + body.parent.name, 'leaves ' + body.name + ' so the path dips to ' + body.parent.name, closed, 'Needs a closed orbit first', true);
-        if (!atmoH && rocket) add('landhere', 'Land here', 'brakes out of orbit and sets down on the engine', (v.deltaV || 0) > 50, 'No propellant');
+        if (!atmoH && rocket) add('landhere', 'Land here', 'brakes out of orbit, finds level ground and sets down on the engine', (v.deltaV || 0) > 50, 'No propellant');
         if (atmoH && rocket && closed) add('deorbit', 'Deorbit', 'burns retrograde until the path dips into the air', (v.deltaV || 0) > 10, 'No propellant');
-      } else if (!ground && !atmoH && rocket) add('landhere', 'Land here', 'brakes and sets down on the engine', (v.deltaV || 0) > 20, 'No propellant');
+      } else if (!ground && !atmoH && rocket) add('landhere', 'Land here', 'brakes, finds level ground and sets down on the engine', (v.deltaV || 0) > 20, 'No propellant');
       return list;
     },
     /** Start (or stop, when it is the one running) a guidance program from programs(). → true when something happened. */
@@ -1669,6 +1669,11 @@ export function createFlightScreen(app) {
     if (kind === 'ascent') {                                           // (the assist is quiet, except to say why it staged early)
       for (let i = ctl._said || 0; i < ctl.log.length; i++) if (/fly back|for its return/.test(ctl.log[i].msg)) toast('Ascent assist: ' + ctl.log[i].msg, 'info');
       ctl._said = ctl.log.length; return;
+    }
+    if (kind === 'landhere') {                                         // (what it found on the ground, and nothing else)
+      const upTo = ctl.done ? ctl.log.length - 1 : ctl.log.length;
+      for (let i = ctl._said || 0; i < upTo; i++) if (ctl.log[i].call) toast('Landing autopilot: ' + ctl.log[i].msg, ctl.log[i].call === 'warn' ? 'warn' : 'info');
+      ctl._said = Math.max(ctl._said || 0, upTo); return;
     }
     if (kind !== 'recovery') return;
     const upTo = ctl.done ? ctl.log.length - 1 : ctl.log.length;      // (the last line of a finished program is its own toast)
