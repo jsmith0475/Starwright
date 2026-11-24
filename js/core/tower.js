@@ -347,6 +347,8 @@ export const STEEL_N = new Vector3();
  *  y up, z south). → { o, east, up, south } (shared vectors, inertial). */
 export function siteFrame(body, site, ut) { mountFrame(body, site, ut); return { o: _o, east: _pe, up: _a, south: _ps }; }
 export { eachBall };
+/** Sets an unturned frame at `origin` (inertial axes) for eachBall: what js/core/contact.js measures two vessels in. */
+export function inertialFrame(origin) { _o.copy(origin); _pe.set(1, 0, 0); _a.set(0, 1, 0); _ps.set(0, 0, 1); }
 
 /** Any fixed steel or concrete against a vessel, by the ground's rules (Vessel._groundContact): every part is tried
  *  as balls (eachBall), in the frame siteFrame set last. `hit.distance(part, x, y, z, r)` gives the distance from a

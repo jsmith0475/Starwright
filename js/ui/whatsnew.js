@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'craft-collide', date: '2026-11-24', title: 'Craft bump into each other',
+    text: 'Two craft can no longer pass through each other. A gentle touch pushes them apart, sharing the push by their masses, and a fast one breaks parts off or destroys them. Docking ports still latch as before, and stages that have just separated are left to drift apart.' },
   { id: 'solid-space-centre', date: '2026-11-24', title: 'The space centre is solid',
     text: 'Buildings, lightning masts, the service tower, the propellant tanks and the launch mount under the pad are now solid. A rocket that falls back onto the pad lands on its mount, a craft that flies into a building is stopped against the wall, and a fast hit breaks parts off or destroys it, by the same rules as hitting the ground.' },
   { id: 'solid-tower', date: '2026-11-24', title: 'The catch tower is solid steel',

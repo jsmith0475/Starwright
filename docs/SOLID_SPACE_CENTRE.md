@@ -69,6 +69,24 @@ pad with the Acorn Capsule".
 - The shapes are the drawing's primitives, not its exact triangles: a dome is taken as a whole ball, a tapering
   lattice mast as four boxes, a dish antenna as the ball it can sweep.
 - Hitting the service tower's swing arms before they swing away is not caught (they are not solid).
-- Vessels do not yet collide with each other.
 - The hammerhead crane's jib on the service tower was shortened from 4 m to 11 m off the pad's axis, so the drawing
   keeps the stated rule that nothing fixed comes within 10 m of it (a Shearwater on the pad would have struck it).
+
+## Craft against craft
+
+`js/core/contact.js` (added after the space centre) makes craft solid to each other with the same balls and the same
+breaking rule. Two craft that touch are pushed apart along the line between the touching balls, the push shared by
+their masses so that momentum is kept, with a little bounce (CONTACT.bounce 0.2). Met faster than the parts can take,
+each craft breaks by the ground's rule (reason `collision`). A landed craft does not move: it takes the hit as the
+ground would.
+
+Left out:
+- pieces that start out within 1 m of each other (stages and boosters just separated, craft just undocked, craft
+  placed together) until they have been 1 m apart, and for 3 s after they came apart. The stock radial boosters tip
+  their tails back into the core within half a second of release, because the radial decouplers push them off too
+  gently; that touch is not counted until the decouplers are given a proper push;
+- two craft docking: while their nearest matching ports are within 3 m and they close slower than 3 m/s;
+- Pips on a walk, and a stage held in the catch tower's arms.
+
+Limits: the push changes how fast each craft moves, not how it turns. Checked by `tests/unit/contact.test.js`, every
+docking and staging flight in the unit tests, and in the browser (`tests/e2e/preview_structures.mjs meet,ram`).

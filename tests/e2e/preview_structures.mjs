@@ -1,7 +1,7 @@
 // The space centre is solid (js/core/structures.js), checked in the real game: a Skylark II that cuts its engine just
 // off the pad and falls back onto the launch mount, and a capsule flown into the assembly building's wall slow (it is
 // stopped outside) and fast (it is lost). Prints what the game said (toasts, strike events) and captures pictures.
-//   groups: fallback bump crash
+//   groups: fallback bump crash meet ram (the last two: two capsules in orbit meeting at 2 m/s and at 60 m/s)
 //   SIZE=small node tests/e2e/preview_structures.mjs [groups]      → tests/out/solid-<nn>-<name>-<w>x<h>.png
 import path from 'node:path';
 import fs from 'node:fs';
@@ -260,6 +260,21 @@ try {
     await ff(1); await shot('crash-1-after');
     console.log('  capsule after a 40 m/s hit: ' + await where());
     await report('crash');
+  });
+  if (grp('meet') || grp('ram')) for (const [g, speed] of [['meet', 2], ['ram', 60]]) if (grp(g)) await safe(g, async () => {
+    await launchCustom(CAPSULE); await listen();
+    await teleport({ alt: 300000, side: 1 });
+    // a second capsule 10 m ahead along the orbit, closing at `speed`
+    await E(async o => {
+      const THREE = await import('/js/lib/three.module.min.js'); const { Craft } = await import('/js/core/craft.js');
+      const w = window.__sw.world, v = w.active, c = new Craft('Birch'); const pod = c.setRoot('pod_acorn')[0]; c.attachStack('chute', pod.id, 'top'); c.autoStage();
+      const along = v.vel.clone().normalize();
+      w.spawn(c, { crew: [], body: v.body, pos: v.pos.clone().addScaledVector(along, 10), vel: v.vel.clone().addScaledVector(along, -o.speed), q: v.q.clone() });
+    }, { speed });
+    await cam(1.6, 0.25, 18); await ff(0.2); await shot(g + '-0-closing', { freeze: true });
+    await ff(speed > 10 ? 0.3 : 5); await shot(g + '-1-after', { freeze: true });
+    console.log('  ' + g + ': ' + await where());
+    await report(g);
   });
 } catch (err) { problems.push('stopped: ' + (err.stack || err.message)); }
 await browser.close(); await server.close();
