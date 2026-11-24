@@ -603,7 +603,7 @@ export const CHAPTERS = [
       d.caption('Re-entry', 'Home again at two kilometres a second. The heat shield takes the plasma and burns away as it goes.', { pos: 'flight' });
       lapse(d, sim, 3);
       const drift = camDrift(d, flight, 0.12);
-      await d.untilSim(world, () => (v.heatFlux || 0) > 56000 || v.altitude < 38500, 40);
+      await d.untilSim(world, () => (v.heatFlux || 0) > 53000 || v.altitude < 38500, 40);
       d.note('plasma at ' + Math.round(v.altitude) + ' m');
       await d.poster();
       await d.untilSim(world, () => v.altitude < 37200, 30);

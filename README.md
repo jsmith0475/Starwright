@@ -441,9 +441,17 @@ Control surfaces work by adding to $\alpha$, up to 20° of throw. The totals tha
 
 $$\mathbf{F} = \sum_i \mathbf{F}_i \qquad \boldsymbol{\tau} = \sum_i \mathbf{r}_i \times \mathbf{F}_i$$
 
-Re-entry heating uses the Sutton-Graves form, with heat flux in W/m²:
+Re-entry heating uses the law of Sutton and Graves on each part's own nose radius $R_j$, with
+its attitude factor $f_j$ and its shadow $e_j$, and each skin follows a heat balance:
 
-$$\dot{q} = 1.83 \times 10^{-4} \sqrt{\rho} v^3$$
+$$\dot{q}_j = S \times 1.7415 \times 10^{-4} \sqrt{\frac{\rho}{R_j}}\, v^3 f_j e_j \qquad c_j \frac{dT}{dt} = \dot{q}_j \left(1 - \frac{T}{T_0}\right) - \varepsilon \sigma \left(T^4 - T_{env}^4\right)$$
+
+$T_0$ is the total temperature of the oncoming air, which no skin can pass. $S = 20$ is the
+model's one declared departure from physics: Verda is small and its orbital speed is 2.3 km/s,
+so at $S = 1$ nothing would ever burn. Settings can set it to 1. A small antenna out in the
+stream is heated harder than the capsule it stands on, a part in a heat shield's shadow meets
+3 % of the open stream, and a shield loses ablator in proportion to heat times area:
+[docs/HEATING.md](docs/HEATING.md).
 
 ### What it gives you in flight
 
@@ -460,8 +468,10 @@ $$\dot{q} = 1.83 \times 10^{-4} \sqrt{\rho} v^3$$
 
 The independent verification covers density and pressure against scale height on six
 atmospheres (exact), a capsule drop against an integrated reference (0.9 m after a 5.4 km
-fall), terminal velocity, re-entry (peak heat flux 119.2 kW/m² against a reference of
-119.1, with peak heating ahead of peak deceleration as Allen and Eggers predict), and the
+fall), terminal velocity, re-entry (peak heat flux 113.4 kW/m² against a reference of
+113.4, with peak heating ahead of peak deceleration as Allen and Eggers predict), skin
+temperature and ablator lost on entries against a heat balance integrated separately
+(worst difference 0.024 %), and the
 force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference. Numbers and
 method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
@@ -469,7 +479,7 @@ method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
 One scale height per atmosphere and no winds. A capsule held at an angle lifts above Mach 1.5
 but cannot yet hold that angle by itself. Shock waves from one part do not strike another.
-There is no shock heating model beyond the flux law, and no flutter or buckling: thin parts carry a stated air rating instead.
+Each part has one temperature, there is no radiative heating from the shock layer, and no flutter or buckling: thin parts carry a stated air rating instead.
 Deeper aerodynamics and re-entry is [roadmap item 6](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry).
 
 ## Under the hood

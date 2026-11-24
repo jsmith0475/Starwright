@@ -28,10 +28,12 @@ const _d = new Vector3();
  * area (m², constant); dragScale (multiplies the table: a capsule held at its trim angle shows less than head on);
  * ld (lift over drag); ldMach: [from, full] the Mach numbers between which the lift fades in (default always full);
  * bank (rad); maxT (s); path (true to record the path); floor (m, stop this high above the ground); terrain (false:
- * the ground is the body's datum radius everywhere).
+ * the ground is the body's datum radius everywhere); ablate: { k, area, left } a heat shield that leads and loses mass
+ * as the flight does (k: its exposure over the square root of its nose radius, area m², left kg of ablator).
  */
 export function predictEntry(body, pos, vel, ut, opts = {}) {
-  const o = { mass: 1000, drag: null, area: 1, dragScale: 1, ld: 0, ldMach: null, bank: 0, maxT: 4000, path: false, floor: 0, terrain: true, ...opts };
+  const o = { mass: 1000, drag: null, area: 1, dragScale: 1, ld: 0, ldMach: null, bank: 0, maxT: 4000, path: false, floor: 0, terrain: true, ablate: null, ...opts };
+  let mass = o.mass, ablLeft = o.ablate ? o.ablate.left : 0, mdot = 0;
   const R = body.radius, gm = body.gm, wy = TAU / body.rotPeriod;
   const top = body.atmo ? body.atmo.height : 0, scaleH = body.atmo ? body.atmo.scale : 1;
   const cb = Math.cos(o.bank), sb = Math.sin(o.bank);
@@ -56,7 +58,7 @@ export function predictEntry(body, pos, vel, ut, opts = {}) {
     if (sp < 1e-6) return;
     qd = 0.5 * rho * sp * sp;
     const mach = sp / body.soundSpeed(alt);
-    const D = qd * dragArea(mach) / o.mass;                      // drag deceleration
+    const D = qd * dragArea(mach) / mass;                      // drag deceleration
     const ex = sx / sp, ey = sy / sp, ez = sz / sp;
     ax -= D * ex; ay -= D * ey; az -= D * ez;
     let ld = o.ld;
@@ -88,9 +90,17 @@ export function predictEntry(body, pos, vel, ut, opts = {}) {
     if (inAir) {
       if (aero > out.maxG) { out.maxG = aero; out.maxGT = t; out.maxGSpeed = sp; }
       if (qd > out.maxQ) out.maxQ = qd;
-      const flux = TUNING.HEAT_FLUX_K * Math.sqrt(rho) * sp * sp * sp;
+      const flux = body.atmo.heatK * Math.sqrt(rho) * sp * sp * sp;
       if (flux > out.maxFlux) { out.maxFlux = flux; out.maxFluxT = t; out.maxFluxSpeed = sp; }
-    }
+      mdot = 0;
+      if (ablLeft > 0 && sp > 0) {
+        // the shield's ablator leaves as in the flight: heat taken by the wall, times area, over Q*
+        const q = TUNING.HEAT_SCALE * flux * o.ablate.k, tr = body.temperature(alt) + sp * sp / (2 * body.atmo.cp);
+        let tw = Math.sqrt(Math.sqrt(TUNING.AMBIENT_T ** 4 + q / (TUNING.HEAT_EMIS * 5.670374419e-8)));
+        if (tw > TUNING.ABLATE_TEMP) tw = TUNING.ABLATE_TEMP;
+        if (tw < tr && q > TUNING.HEAT_MIN_FLUX) mdot = q * (1 - tw / tr) * o.ablate.area / TUNING.ABLATE_Q;
+      }
+    } else mdot = 0;
     const vr = (x * vx + y * vy + z * vz) / rr;
     if (wasIn && !inAir && vr > 0) {
       // back along the last step to the top of the air
@@ -133,6 +143,7 @@ export function predictEntry(body, pos, vel, ut, opts = {}) {
     x += vx * dt + (k1x + k2x + k3x) * dt * dt / 6; y += vy * dt + (k1y + k2y + k3y) * dt * dt / 6; z += vz * dt + (k1z + k2z + k3z) * dt * dt / 6;
     vx += (k1x + 2 * k2x + 2 * k3x + k4x) * dt / 6; vy += (k1y + 2 * k2y + 2 * k3y + k4y) * dt / 6; vz += (k1z + 2 * k2z + 2 * k3z + k4z) * dt / 6;
     t += dt;
+    if (mdot > 0) { const dm = Math.min(ablLeft, mdot * dt); mass -= dm; ablLeft -= dm; }
     if (inAir || wasIn) push();
   }
   out.t = t; out.pos.set(x, y, z); out.vel.set(vx, vy, vz);
