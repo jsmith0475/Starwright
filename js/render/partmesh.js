@@ -62,12 +62,14 @@ import * as stackShapes from './parts/shapes_stack.js';
 import * as engineShapes from './parts/shapes_engine.js';
 import * as aeroShapes from './parts/shapes_aero.js';
 import * as radialShapes from './parts/shapes_radial.js';
-import { cargobay, hotring, catchpin, flap, sideport } from './parts/shapes_shearwater.js';
+import { cargobay, hotring, catchpin, flap, sideport, flankLink } from './parts/shapes_shearwater.js';
 import { buildPipInto, buildPipMesh, animatePip } from './parts/pip.js';
 
 export { PALETTE, mergeGeometries, buildPipMesh, animatePip };
 export const nozzleExitRadius = engineShapes.nozzleExitRadius;
 export const nozzleExits = engineShapes.nozzleExits;
+/** The collar that joins two docked Flank Ports (shapes_shearwater.js). */
+export const buildFlankLink = flankLink;
 export const PLANE_DORSAL_ANGLE = stackShapes.DORSAL;
 export const setPartEnvironment = setEnv;
 

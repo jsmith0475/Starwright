@@ -194,6 +194,57 @@ export function sideport(def, g, pb) {
   if (pb.med) for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + 0.39; pb.cyl(0.035, 0.035, 0.05, 0, P.gun, 'metal', 6, false, mul(M(x1 + 0.01, Math.cos(a) * R * 1.01, Math.sin(a) * R * 1.01), RX)); }
 }
 
+/**
+ * What joins two docked Flank Ports (drawn by the flight scene, not part of either port's mesh): a ribbed bellows
+ * collar over both latch rings, a clamp band at each end and six latch bars closed across the joint.
+ * → { object, set(a, b), flow(on, pumping, dt) }. `object` goes in the craft's frame. set(a, b): the two ports'
+ * centres there (Vector3); the collar is laid between them and made as long as the gap between their faces, which is
+ * measured from those two points (`gap`, metres). flow(on, pumping, dt): `on` while a transfer is set up across the
+ * line, `pumping` while propellant is moving: the bellows frosts over, and pulses slowly while it flows.
+ */
+export function flankLink(def) {
+  const R = Math.min(def.h, def.t) * 0.42, lap = 0.2, ribs = 7, pts = [];
+  for (let i = 0; i <= ribs * 4; i++) { const u = i / (ribs * 4); pts.push(new THREE.Vector2(R * (1.245 + 0.055 * Math.cos(u * ribs * TAU)), u - 0.5)); }
+  const turn = g => g.rotateZ(-Math.PI / 2);                    // +Y of a primitive along +X, the line from port to port
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x3b4047, roughness: 0.8, metalness: 0.05, emissive: 0x9fc4ff, emissiveIntensity: 0, side: THREE.DoubleSide });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8b949e, roughness: 0.45, metalness: 0.7 });
+  const amber = new THREE.MeshStandardMaterial({ color: 0xe59a2f, roughness: 0.6, metalness: 0.2 });
+  const object = new THREE.Group(); object.name = 'flankLink';
+  const bellows = new THREE.Mesh(turn(new THREE.LatheGeometry(pts, 28)), rubber);
+  const bandGeo = turn(new THREE.CylinderGeometry(R * 1.335, R * 1.335, 0.04, 28, 1, true)), bands = [-1, 1].map(() => new THREE.Mesh(bandGeo, metal));
+  bands.forEach(b => { b.material.side = THREE.DoubleSide; });
+  const barGeo = new THREE.BoxGeometry(1, 0.05, 0.07), hookGeo = new THREE.BoxGeometry(0.06, 0.09, 0.13), bars = [], hooks = [];
+  for (let i = 0; i < 6; i++) {
+    const an = (i + 0.5) * TAU / 6, grp = new THREE.Group(); grp.rotation.x = an;
+    const bar = new THREE.Mesh(barGeo, metal); bar.position.y = R * 1.36; grp.add(bar); bars.push(bar);
+    for (const sgn of [-1, 1]) { const h = new THREE.Mesh(hookGeo, amber); h.position.y = R * 1.36; h.userData.sgn = sgn; grp.add(h); hooks.push(h); }
+    object.add(grp);
+  }
+  object.add(bellows, ...bands);
+  const cold = new THREE.Color(0x3b4047), frost = new THREE.Color(0xe8f2fb), X = new THREE.Vector3(1, 0, 0), d = new THREE.Vector3();
+  let chill = 0, t = 0;
+  const api = {
+    object, gap: 0,
+    set(a, b) {
+      d.copy(b).sub(a);
+      const dist = d.length(), gap = api.gap = Math.max(0, dist - def.rw), len = gap + lap * 2;
+      object.position.copy(a).addScaledVector(d, 0.5);
+      if (dist > 1e-6) object.quaternion.setFromUnitVectors(X, d.multiplyScalar(1 / dist));
+      bellows.scale.x = len;
+      bands[0].position.x = -len / 2 + 0.03; bands[1].position.x = len / 2 - 0.03;
+      for (const bar of bars) bar.scale.x = len - 0.02;
+      for (const h of hooks) h.position.x = h.userData.sgn * (len / 2 - 0.05);
+    },
+    flow(on, pumping, dt) {
+      t += dt; chill += ((on ? 1 : 0) - chill) * Math.min(1, dt * 0.8);
+      rubber.color.copy(cold).lerp(frost, chill);
+      rubber.emissiveIntensity = chill * (pumping ? 0.1 + 0.1 * (0.5 + 0.5 * Math.sin(t * 2.6)) : 0.03);
+    },
+    dispose() { bellows.geometry.dispose(); bandGeo.dispose(); barGeo.dispose(); hookGeo.dispose(); rubber.dispose(); metal.dispose(); amber.dispose(); },
+  };
+  return api;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Flaps: a flat tapered slab hinged along its root. One face is steel, the other tiled, and which is which
 // depends on the side of the ship it hangs from, so both hands are built ('sideA': tiles on −Z, 'sideB': on +Z)
