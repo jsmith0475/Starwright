@@ -25,6 +25,7 @@ import { World } from './world.js';
 import { Craft, shearwaterShip, deepwell } from './craft.js';
 import { partDef } from './parts.js';
 import { surfaceAt } from './vessel.js';
+import { BOULDERS, bouldersNear } from './boulders.js';
 import { Career, SCENARIO_SAVE_KEY } from './career.js';
 
 export { SCENARIO_SAVE_KEY };
@@ -121,14 +122,30 @@ export function flatSpot(b, near, { reach = 30000, samples = 400, wide = 60 } = 
 /**
  * A place to drive: a start point and compass heading (degrees, 90 = east) from which the ground stays gentle for
  * `length` metres. Searches a fixed spiral of spots round `near` and eight headings from each, scoring a run by its
- * steepest stretch, so every call picks the same route. → { dir, heading, slope (worst rise / run on the way) }
+ * steepest stretch, so every call picks the same route. A route whose first `clear` metres (320) have a boulder on
+ * them is taken only when the clear ones are a tenth steeper. → { dir, heading, slope (worst rise / run on the way), blocked }
  */
 export function driveRoute(b, near, opts = {}) {
   // first among spots that are themselves level (a parked rover should stand square); any spot if there is none
   return routeSearch(b, near, { ...opts, startFlat: opts.startFlat ?? 0.08 }) || routeSearch(b, near, { ...opts, startFlat: 0.3 })
     || { dir: near.clone().normalize(), heading: 90, slope: slopeAt(b, near.clone().normalize(), 6) };
 }
-function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, step = 20, good = 0.05, startFlat = 0.08 } = {}) {
+/** Is there a boulder too tall to roll over on the strip `half` metres either side of the line from d along `along`, from 6 m behind to `length` m ahead? */
+const _rocks = [];
+function rocksOnRun(b, d, along, side, length, half = 2.2) {
+  const R = b.radius;
+  for (let x0 = 0; x0 <= length; x0 += 40) {
+    const c = d.clone().addScaledVector(along, (x0 + 14) / R);
+    for (const k of bouldersNear(b, c.x, c.y, c.z, 30, _rocks)) {
+      if (k.top < 0.15) continue;
+      const ex = k.ox - d.x * R, ey = k.oy - d.y * R, ez = k.oz - d.z * R;
+      const x = ex * along.x + ey * along.y + ez * along.z, y = ex * side.x + ey * side.y + ez * side.z, wide = Math.max(k.a, k.c);
+      if (x > -6 - wide && x < length + wide && Math.abs(y) < half + wide) return true;
+    }
+  }
+  return false;
+}
+function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, step = 20, good = 0.05, startFlat = 0.08, clear = 320 } = {}) {
   const base = near.clone().normalize();
   const frame = d => { const east = new Vector3().crossVectors(Y, d); if (east.lengthSq() < 1e-9) east.set(0, 0, -1); east.normalize(); return { east, north: new Vector3().crossVectors(d, east) }; };
   const f0 = frame(base);
@@ -142,7 +159,7 @@ function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, ste
     for (let h = 0; h < 360; h += 45) {
       const along = f.north.clone().multiplyScalar(Math.cos(h * Math.PI / 180)).addScaledVector(f.east, Math.sin(h * Math.PI / 180));
       let worst = 0;
-      const limit = () => (best ? best.slope : 1);
+      const limit = () => (best ? best.score : 1);
       for (let x = 0; x <= length + 40 && worst < limit(); x += step) {
         const q = d.clone().addScaledVector(along, x / b.radius).normalize();
         if (b.ocean && typeof b.isWater === 'function' && b.isWater(q)) { worst = 9; break; }
@@ -160,9 +177,13 @@ function routeSearch(b, near, { length = 1000, reach = 30000, samples = 120, ste
           }
         }
       }
-      if (!best || worst < best.slope) best = { dir: d, heading: h, slope: worst };
+      // and the first stretch free of boulders (core/boulders.js): the drive should not begin with a rock in the way
+      // (a route with one counts as a tenth steeper than it is: it is taken only when the clear ones are worse)
+      const blocked = worst < limit() && BOULDERS.solid && clear > 0 && rocksOnRun(b, d, along, new Vector3().crossVectors(d, along).normalize(), Math.min(length, clear));
+      const score = worst + (blocked ? 0.1 : 0);
+      if (!best || score < best.score) best = { dir: d, heading: h, slope: worst, blocked, score };
     }
-    if (best && best.slope <= good) break;
+    if (best && best.score <= good) break;
   }
   return best;
 }

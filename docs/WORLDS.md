@@ -19,8 +19,8 @@ it exactly as before. Everything here is drawn on top of that ground:
   dimple the eye sees and the wheels do not feel, the same way the existing detail relief
   already worked. The largest are about 150 m across and shallow; at the scale where a real
   crater that size would matter to a rover, the drawn one does not exist for the physics.
-- **Rocks** are placed from the same single `terrainHeight` sample as before and still have no
-  collision.
+- **Rocks** are placed from the same single `terrainHeight` sample as before. Boulders have
+  since been made solid; see [BOULDERS.md](BOULDERS.md).
 - **Clouds** are sky.
 
 That is a limit as well as a safety rule. If craters and dunes are ever to be driven over and
@@ -175,6 +175,6 @@ Roadmap item 4 asked for more than this pass delivers:
   0.75 m cells; a finer level only helps once the height function has detail at that scale.
 - **Weather and ground haze.** Mist in valleys, dust storms on Rusk, rain on Verda.
 - **The high layer on distant globes**, and its shadow on the ground.
-- **Bigger and clustered rocks**, and rocks with collision.
+- **Bigger and clustered rocks.** (Rocks with collision are done: [BOULDERS.md](BOULDERS.md).)
 - **The home world.** Verda got the sky work only; beaches, river beds and bare mountain rock
   could use the same feature code.

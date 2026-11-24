@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'solid-boulders', date: '2026-11-24', title: 'Boulders are solid',
+    text: 'Rovers, landers and Pips no longer pass through boulders. A wheel rolls over a low stone and is stopped by a tall one, a leg that comes down on a rock stands on it, and hitting one fast breaks things. The landing autopilot avoids ground with a boulder on it, and the rover cruise control steers round them.' },
   { id: 'autopilot-time-in-hand', date: '2026-11-24', title: 'Braking burns with time in hand',
     text: 'The landing autopilot now gives itself time. A lander with a strong engine over a small world used to start braking six seconds before the hover; the burn now lasts 20 seconds where the engine allows, with more than half the thrust in hand. Every guidance burn also now waits until the ship has turned to face the right way before the engine lights.' },
   { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',

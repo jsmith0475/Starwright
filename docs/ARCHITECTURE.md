@@ -502,7 +502,7 @@ point (x, z) metres from the pad is `home.dirFromLatLon(-z / R, x / R)`.
 | `globe.js` | `createBodyVisual`: a whole body on a unit sphere (maps, clouds, ocean glint, rings, atmosphere shell, star glare) |
 | `atmosphere.js` | the scattering model, as GLSL (`ATMO_GLSL`) and as the same maths in JS (`skyAt`, `sunTransmit`, `skyColor`) |
 | `sky.js` | `createStarfield`: point stars + galactic band and nebulae (baked once into a cube map) |
-| `scatter.js` | instanced rocks, grass tufts and trees near the camera |
+| `scatter.js` | instanced rocks, grass tufts and trees near the camera. Boulder placement comes from `js/core/boulders.js`, which the physics also collides with ([BOULDERS.md](BOULDERS.md)) |
 | `bodytex.js`, `bodybake.js` | baked colour / relief / glow / cloud / ring maps per body, cached, made by workers |
 | `workpool.js`, `terrainworker.js` | pool of module workers (falls back to time-sliced work on the main thread) |
 | `worldstyle.js` | per-body look: rock colour, strata, lava glow, clouds, water colours, snow line, clutter |

@@ -9,6 +9,7 @@ import { Vector3, Quaternion } from '../lib/three.module.min.js';
 import { partDef, currentPartId, engineThrust, engineIsp, engineNow, PROP_MIX, G0, airRating } from './parts.js';
 import { Orbit } from './orbit.js';
 import { SYSTEM } from './bodies.js';
+import { BOULDERS, bouldersNear, boulderProbe, boulderAt } from './boulders.js';
 import { maneuverBasis } from './trajectory.js';
 import { Structure, STRUCT } from './structure.js';
 import { CHUTE, chuteSpec, chuteDragArea, chuteShape, chuteAddedMass, chuteFillDistance, chuteGate, chuteReach, chuteReefProgress, chuteDisreefLoad } from './parachute.js';
@@ -261,6 +262,7 @@ function terrainAtPos(body, pos, ut) {
   if (typeof body.terrainHeight !== 'function') return 0;
   return surfaceAt(body, body.inertialToSurfaceDir(_tp.copy(pos).normalize(), ut, _tp));
 }
+const _bp = { d: 0, nx: 0, ny: 0, nz: 0 }, _bh = { d: 0, nx: 0, ny: 0, nz: 0, b: null };            // a point against a boulder (_contact)
 const _rl1 = new Vector3(), _rl2 = new Vector3();   // relief under the contact points (_contact)
 const WHEEL_DOWN = new Vector3(0, 0, -1);   // craft axis that points at the ground for wheeled vehicles
 
@@ -2759,7 +2761,10 @@ export class Vessel {
       const g = this._groundInfo(ut - dt);
       const clear = alt - (g.water ? g.sea : g.h) - this._bound - 2;
       this._gndSkip = clear > 200 ? ut + clear / (speed + 50) / 4 : 0;
-      if (clear < 0) {
+      // boulders stand on the ground (core/boulders.js): the ones within reach, and how high the tallest stands
+      const rocks = clear < 8 && !g.water && !g.deck ? this._rocksNear(ut - dt) : null;
+      this._rocks = rocks && rocks.list.length ? rocks.list : null;
+      if (clear < (this._rocks ? rocks.top : 0)) {
         near = true;
         if (this._contact(dt, ut, ev, g, alt, ux, uy, uz, speed)) return;      // parts were destroyed: start the step over next time
         Fx += this._cfx; Fy += this._cfy; Fz += this._cfz; Tx += this._ctx; Ty += this._cty; Tz += this._ctz;
@@ -3153,6 +3158,25 @@ export class Vessel {
     return g;
   }
 
+  /**
+   * The boulders this vessel could touch where it is: { list, top (m, the tallest of them above its ground) }.
+   * Looked up again once it has moved three metres.
+   */
+  _rocksNear(ut0) {
+    const body = this.body;
+    const k = this._rk || (this._rk = { x: 1e30, y: 0, z: 0, body: null, list: [], top: 0, bound: 0 });
+    if (!BOULDERS.solid) { k.list.length = 0; k.top = 0; k.body = null; return k; }
+    const p = body.inertialToSurfaceDir(this.pos, ut0, _rl1);
+    if (k.body !== body || k.bound !== this._bound || (p.x - k.x) ** 2 + (p.y - k.y) ** 2 + (p.z - k.z) ** 2 > 9) {
+      k.body = body; k.bound = this._bound; k.x = p.x; k.y = p.y; k.z = p.z;
+      bouldersNear(body, p.x, p.y, p.z, this._bound + 4, k.list);
+      let top = 0;
+      for (let i = 0; i < k.list.length; i++) if (k.list[i].top > top) top = k.list[i].top;
+      k.top = top;
+    }
+    return k;
+  }
+
   /** Is the player (or the machine) asking for something a pinned vessel cannot do? See the wake rules in the docs. */
   _wantsAwake(thrust, s) {
     const c = this.ctrl;
@@ -3225,7 +3249,25 @@ export class Vessel {
     const SW = this.structure ? this.structure.wrench : null;      // structural loads: forces are booked to their parts too
     let fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
     let nPen = 0, support = 0, slipping = false, floating = false, wet = 0;
-    for (let i = 0; i < list.length; i++) { const p = list[i]; p._tcP = p._tc; p._tc = false; p._wetP = p._wet; p._wet = false; p._hit = 0; p._hitN = -1; }
+    for (let i = 0; i < list.length; i++) { const p = list[i]; p._tcP = p._tc; p._tc = false; p._tbP = p._tb; p._tb = false; p._wetP = p._wet; p._wet = false; p._hit = 0; p._hitN = -1; }
+    // --- boulders (core/boulders.js). A point that has come down onto the top of one stands on it: the rock is its
+    // ground, that much higher. A point that has run into the side of one is pushed back out along the rock's own
+    // face (`side`, the forces are further down). The craft's axes and place in the body's own frame, at the time
+    // `pos` belongs to:
+    const rocks = this._rocks;
+    let nSide = 0;
+    let bX = 0, bY = 0, bZ = 0, m00 = 1, m01 = 0, m02 = 0, m10 = 0, m11 = 1, m12 = 0, m20 = 0, m21 = 0, m22 = 1;
+    if (rocks) {
+      const ut0 = ut - dt, a = body.rotationAngle(ut0), ca = Math.cos(a), sa = Math.sin(a);
+      const P = this.pos; bX = P.x * ca - P.z * sa; bY = P.y; bZ = P.x * sa + P.z * ca;
+      const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+      const r00 = 1 - 2 * (qy * qy + qz * qz), r01 = 2 * (qx * qy - qz * qw), r02 = 2 * (qx * qz + qy * qw);
+      const r10 = 2 * (qx * qy + qz * qw), r11 = 1 - 2 * (qx * qx + qz * qz), r12 = 2 * (qy * qz - qx * qw);
+      const r20 = 2 * (qx * qz - qy * qw), r21 = 2 * (qy * qz + qx * qw), r22 = 1 - 2 * (qx * qx + qy * qy);
+      m00 = r00 * ca - r20 * sa; m01 = r01 * ca - r21 * sa; m02 = r02 * ca - r22 * sa;
+      m10 = r10; m11 = r11; m12 = r12;
+      m20 = r00 * sa + r20 * ca; m21 = r01 * sa + r21 * ca; m22 = r02 * sa + r22 * ca;
+    }
     // --- pass 1: which hull points are below the ground / water, and how hard did they arrive
     // still rolling while two tyres carry it (or did a moment ago), even when a tail or wing tip already drags
     if (this.wheelsOnGround >= 2) this._rollUt = ut;
@@ -3233,9 +3275,37 @@ export class Vessel {
     for (let i = 0; i < pts.length; i++) {
       const c = pts[i];
       const rx = c.x - com.x, ry = c.y - com.y, rz = c.z - com.z;
-      const hp = d0 + rx * nx + ry * ny + rz * nz + (relief ? c.dh || 0 : 0);
-      c.hp = hp; c.rx = rx; c.ry = ry; c.rz = rz;
+      let hp = d0 + rx * nx + ry * ny + rz * nz + (relief ? c.dh || 0 : 0);
       const vx = ux + (w.y * rz - w.z * ry), vy = uy + (w.z * rx - w.x * rz), vz = uz + (w.x * ry - w.y * rx);
+      c.side = false;
+      if (rocks && c.kind !== 2) {      // (a wheel meets a rock as a wheel: see the tyres below)
+        const px = bX + m00 * rx + m01 * ry + m02 * rz, py = bY + m10 * rx + m11 * ry + m12 * rz, pz = bZ + m20 * rx + m21 * ry + m22 * rz;
+        for (let j = 0; j < rocks.length; j++) {
+          const b = rocks[j], ex = px - b.ox, ey = py - b.oy, ez = pz - b.oz;
+          if (ex * ex + ey * ey + ez * ez > b.reach * b.reach || !boulderProbe(b, px, py, pz, 0, _bp)) continue;
+          // the rock's face there, in the craft's axes
+          const bx = m00 * _bp.nx + m10 * _bp.ny + m20 * _bp.nz, by = m01 * _bp.nx + m11 * _bp.ny + m21 * _bp.nz, bz = m02 * _bp.nx + m12 * _bp.ny + m22 * _bp.nz;
+          const cs = bx * nx + by * ny + bz * nz;
+          if (cs > 0.7) { const hb = _bp.d / cs; if (hb < hp) hp = hb; }
+          else if (!c.side || _bp.d < c.bd) {
+            c.side = true; c.bd = _bp.d; c.bx = bx; c.by = by; c.bz = bz;
+          }
+        }
+        if (c.side) {
+          nSide++;
+          const p = c.p;
+          if (!p._tbP && !p._tb && !c.skin) {
+            const vn = vx * c.bx + vy * c.by + vz * c.bz;
+            if (vn < 0) {      // closing on the rock: the blow counts in full, the slide along its face for a third
+              const v2 = vx * vx + vy * vy + vz * vz, hit = Math.sqrt(vn * vn + (v2 - vn * vn) * 0.11);
+              if (hit > p._hit) p._hit = hit;
+              if (p._hitN >= 0 && -vn > p._hitN) p._hitN = -vn;
+            }
+          }
+          p._tb = true;
+        }
+      }
+      c.hp = hp; c.rx = rx; c.ry = ry; c.rz = rz;
       c.vx = vx; c.vy = vy; c.vz = vz;
       if (hp < 0 && !c.leg) {
         nPen++;
@@ -3277,15 +3347,35 @@ export class Vessel {
       if (!p.deployed) continue;
       nWdown++;
       const rx = p._wx - com.x, ry = p._wy - com.y, rz = p._wz - com.z;
-      const hp = d0 + rx * nx + ry * ny + rz * nz;
+      let hp = d0 + rx * nx + ry * ny + rz * nz;
+      // A tyre meets a boulder as a wheel does: its hub against the rock grown by the tyre's radius. So it rolls up
+      // and over a stone lower than about that radius, and is stopped by a taller one. The rock is then what this
+      // wheel stands on (`_rk`: its face there in the craft's axes, and how upright that face is).
+      p._rk = false;
+      if (rocks) {
+        const rw = p.def.wheel.radius || 0.3, hz = rz + rw;
+        const px = bX + m00 * rx + m01 * ry + m02 * hz, py = bY + m10 * rx + m11 * ry + m12 * hz, pz = bZ + m20 * rx + m21 * ry + m22 * hz;
+        for (let j = 0; j < rocks.length; j++) {
+          const b = rocks[j], ex = px - b.ox, ey = py - b.oy, ez = pz - b.oz, lim = b.reach + 1.8 * rw;
+          if (ex * ex + ey * ey + ez * ez > lim * lim || !boulderProbe(b, px, py, pz, rw, _bp)) continue;
+          if (_bp.d < hp) {
+            hp = _bp.d; p._rk = true;
+            p._rx = m00 * _bp.nx + m10 * _bp.ny + m20 * _bp.nz; p._ry = m01 * _bp.nx + m11 * _bp.ny + m21 * _bp.nz; p._rz = m02 * _bp.nx + m12 * _bp.ny + m22 * _bp.nz;
+            p._rc = p._rx * nx + p._ry * ny + p._rz * nz;
+          }
+        }
+      }
       p._hp = hp;
       if (hp < 0) {
         nW++;
-        if (!p._tcP && !p._tc) {
+        const onRock = p._rk && !p._tbP;
+        if ((!p._tcP && !p._tc) || onRock) {
           const vx = ux + (w.y * rz - w.z * ry), vy = uy + (w.z * rx - w.x * rz), vz = uz + (w.x * ry - w.y * rx);
-          p._hit = Math.max(p._hit, Math.abs(vx * nx + vy * ny + vz * nz));
+          const vn = p._rk ? vx * p._rx + vy * p._ry + vz * p._rz : vx * nx + vy * ny + vz * nz;
+          // (a tyre that rolls onto a stone is struck only by what drives it into the stone's face)
+          if (!p._rk || vn < 0) p._hit = Math.max(p._hit, Math.abs(vn));
         }
-        p._tc = true;
+        p._tc = true; if (p._rk) p._tb = true;
       }
     }
     // landing legs: how far is each foot under the ground, and has the strut run out of travel
@@ -3361,7 +3451,7 @@ export class Vessel {
       this.destroyParts(snapped, ev, 'crash');
       return true;
     }
-    const touching = nPen > 0 || nW > 0 || wet > 0 || nLt > 0;
+    const touching = nPen > 0 || nW > 0 || wet > 0 || nLt > 0 || nSide > 0;
     if (touching && !this._touched) {
       this._touched = true;
       this._impact = speed;
@@ -3416,6 +3506,39 @@ export class Vessel {
       if (px || py || pz) {
         fx += px; fy += py; fz += pz;
         tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;        if (SW) { const k = c.p._si * 6, mx = c.ry * pz - c.rz * py, my = c.rz * px - c.rx * pz, mz = c.rx * py - c.ry * px; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += mx; SW[k + 4] += my; SW[k + 5] += mz; }
+      }
+    }
+    // --- the sides of boulders: each point that is in one is pushed out along the rock's face, by the same spring
+    // and damper as the ground's (shared among the points that are in a rock), with the same friction along it
+    if (nSide) {
+      const invS = 1 / nSide;
+      for (let i = 0; i < pts.length; i++) {
+        const c = pts[i];
+        if (!c.side) continue;
+        const bx = c.bx, by = c.by, bz = c.bz, dep = -c.bd;
+        const vn = c.vx * bx + c.vy * by + c.vz * bz;
+        const ax = c.ry * bz - c.rz * by, ay = c.rz * bx - c.rx * bz, az = c.rx * by - c.ry * bx;
+        let N = (kN * (dep > 0.04 ? 0.04 : dep) - cN * (vn > 0 ? TUNING.GROUND_REBOUND : 1) * vn / (1 + m * (ax * ax * iIx + ay * ay * iIy + az * az * iIz))) * invS;
+        if (!(N > 0)) continue;
+        const cap = 60 * m * gLoc + kN * 0.05;
+        if (N > cap) N = cap;
+        const up = bx * nx + by * ny + bz * nz;
+        if (up > 0) support += N * up;
+        let px = N * bx, py = N * by, pz = N * bz;
+        const tvx = c.vx - vn * bx, tvy = c.vy - vn * by, tvz = c.vz - vn * bz;
+        const vt = Math.sqrt(tvx * tvx + tvy * tvy + tvz * tvz);
+        if (vt > 1e-9) {
+          const ex = tvx / vt, ey = tvy / vt, ez = tvz / vt;
+          const cx = c.ry * ez - c.rz * ey, cy = c.rz * ex - c.rx * ez, cz = c.rx * ey - c.ry * ex;
+          let F = kf * invS * vt / (1 + m * (cx * cx * iIx + cy * cy * iIy + cz * cz * iIz));
+          const mu = c.kind === 1 ? TUNING.LEG_MU : TUNING.GROUND_MU;
+          if (F > mu * N) { F = mu * N; if (vt > 0.05) slipping = true; }
+          const k = F / vt;
+          px -= k * tvx; py -= k * tvy; pz -= k * tvz;
+        }
+        fx += px; fy += py; fz += pz;
+        tx += c.ry * pz - c.rz * py; ty += c.rz * px - c.rx * pz; tz += c.rx * py - c.ry * px;
+        if (SW) { const k = c.p._si * 6; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += c.ry * pz - c.rz * py; SW[k + 4] += c.rz * px - c.rx * pz; SW[k + 5] += c.rx * py - c.ry * px; }
       }
     }
     // --- landing legs: one spring and damper per leg, a hard stop at the end of the stroke, friction under the foot
@@ -3539,25 +3662,29 @@ export class Vessel {
         }
         p._steer = ang;
         if (!(p._hp < 0)) { p._spin *= 0.995; continue; }
-        const vn = vx * nx + vy * ny + vz * nz;
+        // what this wheel stands on: the ground, or a boulder's face (wk: how much of its grip and drive it has
+        // there, none on a face too steep for a tyre to climb; steep: the rock stops it as it stops a hull)
+        let wnx = nx, wny = ny, wnz = nz, wk = 1, steep = false, wup = 1;
+        if (p._rk) { wnx = p._rx; wny = p._ry; wnz = p._rz; wup = p._rc > 0 ? p._rc : 0; wk = clamp((p._rc - 0.3) / 0.4, 0, 1); steep = p._rc < 0.7; }
+        const vn = vx * wnx + vy * wny + vz * wnz;
         const comp = -p._hp;
-        let N = kW * comp - cW * vn;
+        let N = steep ? (kN * (comp > 0.04 ? 0.04 : comp) - cN * (vn > 0 ? TUNING.GROUND_REBOUND : 1) * vn) / nWdown : kW * comp - cW * vn;
         // the bump stop is rubber, not spring: as hard on a small moon as at home, so that a soft-sprung rover coming
         // down off a ripple is caught by it and not by the hub striking the ground
-        if (comp > p._travel) { N += 6 * kStop * (comp - p._travel); if (vn < 0) N -= cStop * vn; }
+        if (!steep && comp > p._travel) { N += 6 * kStop * (comp - p._travel); if (vn < 0) N -= cStop * vn; }
         if (!(N > 0)) { p._spin *= 0.995; continue; }
         const cap = 40 * m * gLoc + kW * 0.3;
         if (N > cap) N = cap;
         onWheels++;
-        support += N;
-        p._load = N;
+        support += N * wup;
+        p._load = N * wup;
         // rolling direction in the ground plane
         let dx = Math.sin(ang), dy = Math.cos(ang), dz = 0;
-        const dn = dx * nx + dy * ny;
-        dx -= dn * nx; dy -= dn * ny; dz -= dn * nz;
+        const dn = dx * wnx + dy * wny;
+        dx -= dn * wnx; dy -= dn * wny; dz -= dn * wnz;
         const dl = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
         dx /= dl; dy /= dl; dz /= dl;
-        const lx = ny * dz - nz * dy, ly = nz * dx - nx * dz, lz = nx * dy - ny * dx;      // lateral = n × forward
+        const lx = wny * dz - wnz * dy, ly = wnz * dx - wnx * dz, lz = wnx * dy - wny * dx;      // lateral = n × forward
         const vLong = vx * dx + vy * dy + vz * dz, vLat = vx * lx + vy * ly + vz * lz;
         p._spin = vLong / (wd.radius || 0.3);
         const grip = TUNING.WHEEL_MU * N;
@@ -3585,7 +3712,8 @@ export class Vessel {
         // reverse as well went over its front wheels
         const lim = Math.min(grip, Math.max(TUNING.WHEEL_BRAKE_MU, TUNING.WHEEL_DRIVE_MU) * N + roll);
         if (Flong > lim) Flong = lim; else if (Flong < -lim) Flong = -lim;
-        const px = N * nx + Flong * dx + Flat * lx, py = N * ny + Flong * dy + Flat * ly, pz = N * nz + Flong * dz + Flat * lz;
+        if (wk < 1) { Flong *= wk; Flat *= wk; }
+        const px = N * wnx + Flong * dx + Flat * lx, py = N * wny + Flong * dy + Flat * ly, pz = N * wnz + Flong * dz + Flat * lz;
         fx += px; fy += py; fz += pz;
         tx += ry * pz - rz * py; ty += rz * px - rx * pz; tz += rx * py - ry * px;
         if (SW) { const k = p._si * 6; SW[k] += px; SW[k + 1] += py; SW[k + 2] += pz; SW[k + 3] += ry * pz - rz * py; SW[k + 4] += rz * px - rx * pz; SW[k + 5] += rx * py - ry * px; }
@@ -3594,7 +3722,7 @@ export class Vessel {
     }
     this._cfx = fx; this._cfy = fy; this._cfz = fz; this._ctx = tx; this._cty = ty; this._ctz = tz;
     this.grounded = touching;
-    this.groundContacts = nPen + nW + nLt;
+    this.groundContacts = nPen + nW + nLt + nSide;
     this.wheelsOnGround = onWheels;
     this._onWheels = onWheels >= 2 && onWheels >= nPen;
     this._slipping = slipping;
@@ -3766,10 +3894,24 @@ export class Vessel {
           _a.set(tx, 0, tz).applyQuaternion(s.qRel);
           _a.addScaledVector(s.dir, -_a.dot(s.dir));
           _b.copy(s.dir).addScaledVector(_a, pace * TUNING.EVA_WALK * dt / R).normalize();
-          _qa.setFromUnitVectors(s.dir, _b);
-          s.qRel.premultiply(_qa).normalize();
-          s.dir.copy(_b);
-          s.gh = undefined;
+          // a boulder is in the way of a Pip as of anything else: no step is taken into one at knee height (a
+          // Pip that finds itself in one, having come down on it, may always walk out)
+          let blocked = false;
+          if (BOULDERS.solid) {
+            const rk = body.radius + surfaceAt(body, _b) + 0.35;
+            const hit = boulderAt(body, _b.x * rk, _b.y * rk, _b.z * rk, 0.2, _bh);
+            if (hit) {
+              const r0 = body.radius + surfaceAt(body, s.dir) + 0.35, dNew = hit.d;
+              boulderProbe(hit.b, s.dir.x * r0, s.dir.y * r0, s.dir.z * r0, 0.2, _bp);
+              blocked = !(dNew > _bp.d);
+            }
+          }
+          if (!blocked) {
+            _qa.setFromUnitVectors(s.dir, _b);
+            s.qRel.premultiply(_qa).normalize();
+            s.dir.copy(_b);
+            s.gh = undefined;
+          }
         }
       }
       if (c.ty > 0.5) {

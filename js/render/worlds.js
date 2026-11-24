@@ -317,7 +317,8 @@ export function createWorldRenderer({ renderer = null, scene, camera, system = S
       group.add(mesh);
       e.clouds = { mesh, mat, speed: st.clouds.speed, style: st, shell, thick: st.clouds.cover > 0.8 };
     }
-    if (scatter && st.scatter && quality !== 'low') { e.scatter = createScatter(body, st, { quality }); group.add(e.scatter.group); }
+    // (at 'low' quality only the boulders are drawn: they are solid, see scatter.js)
+    if (scatter && st.scatter) { e.scatter = createScatter(body, st, { quality }); group.add(e.scatter.group); }
   }
 
   /**
