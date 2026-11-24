@@ -1,16 +1,16 @@
-// Group 11: parachutes (docs/PARACHUTES.md). The game (js/core/parachute.js, the canopy step in js/core/vessel.js and
+// Group 13: parachutes (docs/PARACHUTES.md). The game (js/core/parachute.js, the canopy step in js/core/vessel.js and
 // the drawn cloth and lines in js/render/canopy.js) against tests/verify/ref_parachute.mjs, which shares no code with
 // any of them, and against closed forms. What is asked of it:
-//   11a  the canopy the part numbers imply: diameter, cloth length, line length, at every stage of filling
-//   11b  the picture is the physics: the drawn canopy is as wide and as high as the flown one, and every suspension
+//   13a  the canopy the part numbers imply: diameter, cloth length, line length, at every stage of filling
+//   13b  the picture is the physics: the drawn canopy is as wide and as high as the flown one, and every suspension
 //        line ends on the skirt at a seam (the fault this chapter was written after)
-//   11c  steady descent under every parachute part on every world with air
-//   11d  the reefed stage opening: speed and line load against the reference, and the sequencer's estimate
-//   11e  opening fully: the same, with the air the canopy takes along
-//   11f  a capsule that arrives with sideways speed swings under its canopy as the reference says
-//   11g  limits: Mach and line strength hold an armed parachute shut, lines loaded past their strength tear
-//   11h  two canopies side by side lean apart and still carry the craft down at the speed their areas give
-//   11i  the step size: 20 ms against 5 ms
+//   13c  steady descent under every parachute part on every world with air
+//   13d  the reefed stage opening: speed and line load against the reference, and the sequencer's estimate
+//   13e  opening fully: the same, with the air the canopy takes along
+//   13f  a capsule that arrives with sideways speed swings under its canopy as the reference says
+//   13g  limits: Mach and line strength hold an armed parachute shut, lines loaded past their strength tear
+//   13h  two canopies side by side lean apart and still carry the craft down at the speed their areas give
+//   13i  the step size: 20 ms against 5 ms
 import { World, SYSTEM } from './harness.mjs';
 import * as R from './ref.mjs';
 import * as RP from './ref_parachute.mjs';
@@ -72,7 +72,7 @@ function ownDragCurve(opts, alt, vMax) {
   return sp => { if (sp <= pts[0][0]) return pts[0][1]; for (let i = 1; i < pts.length; i++) if (sp <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (sp - x0) / (x1 - x0); } return pts[pts.length - 1][1]; };
 }
 
-// ---------------------------------------------------------------------------------------------- 11a the canopy
+// ---------------------------------------------------------------------------------------------- 13a the canopy
 function geometry(S) {
   for (const d of CHUTES) {
     const g = chuteSpec(d, TUNING.CHUTE_CD), r = RP.spec(d.chute);
@@ -103,7 +103,7 @@ function geometry(S) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- 11b picture = physics
+// ---------------------------------------------------------------------------------------------- 13b picture = physics
 function picture(S) {
   for (const d of CHUTES) {
     const g = chuteSpec(d, TUNING.CHUTE_CD), kind = d.variant === 'drogue' ? 'drogue' : g.count > 1 ? 'cluster' : 'main';
@@ -148,7 +148,7 @@ function picture(S) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- 11c steady descent
+// ---------------------------------------------------------------------------------------------- 13c steady descent
 function steady(S, full) {
   const cases = [['chute', 'pod_acorn', 'heatshield_m', 'verda'], ['chute_radial', 'pod_acorn', 'heatshield_m', 'verda'], ['chute_grand', 'pod_hearth', 'heatshield_l', 'verda'],
     ['chute_drogue', 'pod_acorn', 'heatshield_m', 'verda'], ['chute_drogue_radial', 'pod_acorn', 'heatshield_m', 'verda'], ['chute', 'pod_thimble', 'heatshield_s', 'verda']];
@@ -178,7 +178,7 @@ function steady(S, full) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- 11d / 11e opening
+// ---------------------------------------------------------------------------------------------- 13d / 13e opening
 /** Fly the game through one stage from the moment it starts; → { rows: [{ t, speed, T, h, theta }], start, capCdA } */
 function gameStage(D, stage, tEnd) {
   const v = D.v, p = v.chuteParts[0];
@@ -234,7 +234,7 @@ function opening(S, stage) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- 11f swing
+// ---------------------------------------------------------------------------------------------- 13f swing
 function swing(S) {
   // Opened while still moving sideways: the canopy trails back along the flight path, 45 degrees or more from the
   // vertical, and the capsule swings in under it as the sideways speed dies.
@@ -258,7 +258,7 @@ function swing(S) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------- 11g limits
+// ---------------------------------------------------------------------------------------------- 13g limits
 function limits(S) {
   const b = refBody('verda');
   // Mach: armed above the limit, it waits; it opens on the first step under it
@@ -303,7 +303,7 @@ function limits(S) {
   } finally { TUNING.STRUCT_FAIL = keepS; }
 }
 
-// ---------------------------------------------------------------------------------------------- 11h two canopies
+// ---------------------------------------------------------------------------------------------- 13h two canopies
 function twin(S) {
   const D = drop({ chutes: ['chute_radial'], alt: 1500, vy: -40 }), v = D.v, [a, c] = v.chuteParts;
   let guard = 0, closest = Infinity;
@@ -323,7 +323,7 @@ function twin(S) {
   S.check('... each line carrying its canopy\'s drag / cos(lean): what the other canopy pushes sideways goes into the line', drag / Math.cos(lineAngle(v, a)), a._c.T, 0.01, { rel: true, unit: 'N' });
 }
 
-// ---------------------------------------------------------------------------------------------- 11i step size
+// ---------------------------------------------------------------------------------------------- 13i step size
 function stepSize(S) {
   const run = dt => { const D = drop({ alt: 2500, vy: -120, dt }); const a = gameStage(D, 'semi', 7.5); const b = gameStage(D, 'full', 14); return { p1: peakOf(a.rows).T, p2: peakOf(b.rows).T, v: at(b.rows, 10).speed }; };
   const a = run(0.02), f = run(0.005);
@@ -333,13 +333,13 @@ function stepSize(S) {
 }
 
 export const groups = [
-  { name: '11a. Parachutes: the canopy its part numbers imply, at every stage of filling', fast: true, run: S => geometry(S) },
-  { name: '11b. Parachutes: the picture is the physics, and every line ends on the skirt', fast: true, run: S => picture(S) },
-  { name: '11c. Parachutes: steady descent under every parachute part', fast: true, run: (S, full) => steady(S, full) },
-  { name: '11d. Parachutes: the reefed stage opening, against the reference', fast: false, run: S => opening(S, 'semi') },
-  { name: '11e. Parachutes: opening fully, with the air the canopy takes along', fast: false, run: S => opening(S, 'full') },
-  { name: '11f. Parachutes: the swing of a capsule that arrives with sideways speed', fast: false, run: S => swing(S) },
-  { name: '11g. Parachutes: Mach and line-strength limits, and tearing', fast: true, run: S => limits(S) },
-  { name: '11h. Parachutes: two canopies side by side', fast: true, run: S => twin(S) },
-  { name: '11i. Parachutes: step size', fast: false, run: S => stepSize(S) },
+  { name: '13a. Parachutes: the canopy its part numbers imply, at every stage of filling', fast: true, run: S => geometry(S) },
+  { name: '13b. Parachutes: the picture is the physics, and every line ends on the skirt', fast: true, run: S => picture(S) },
+  { name: '13c. Parachutes: steady descent under every parachute part', fast: true, run: (S, full) => steady(S, full) },
+  { name: '13d. Parachutes: the reefed stage opening, against the reference', fast: false, run: S => opening(S, 'semi') },
+  { name: '13e. Parachutes: opening fully, with the air the canopy takes along', fast: false, run: S => opening(S, 'full') },
+  { name: '13f. Parachutes: the swing of a capsule that arrives with sideways speed', fast: false, run: S => swing(S) },
+  { name: '13g. Parachutes: Mach and line-strength limits, and tearing', fast: true, run: S => limits(S) },
+  { name: '13h. Parachutes: two canopies side by side', fast: true, run: S => twin(S) },
+  { name: '13i. Parachutes: step size', fast: false, run: S => stepSize(S) },
 ];

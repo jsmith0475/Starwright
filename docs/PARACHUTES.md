@@ -2,7 +2,7 @@
 
 How a parachute is flown and drawn. Code: `js/core/parachute.js` (numbers, no engine), the canopy step in
 `js/core/vessel.js` (`_updateChutes`, `_chuteForces`), the cloth and lines in `js/render/canopy.js`.
-Checks: `tests/verify/checks_parachute.mjs` against the independent `tests/verify/ref_parachute.mjs` (chapter 11).
+Checks: `tests/verify/checks_parachute.mjs` against the independent `tests/verify/ref_parachute.mjs` (chapter 13).
 
 ## Why this was rebuilt
 
@@ -88,7 +88,7 @@ craft far too heavy for its parachute, or a change after opening.
 
 ## What checks it
 
-Chapter 11 of `npm run verify` (182 checks). The reference shares no code with the game: it types the constants a
+Chapter 13 of `npm run verify` (182 checks). The reference shares no code with the game: it types the constants a
 second time and flies a point mass under a point canopy in a plane with Runge-Kutta at 1 ms. It compares the canopy
 geometry at every stage, that every drawn line ends on the hem (to a micrometre) and the drawn canopy is as wide as
 the flown one, steady sinking speed and line load under every parachute part and on every world with air, the

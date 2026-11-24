@@ -1,4 +1,4 @@
-// Independent reference for parachutes (verification group 11). It shares no code with js/core/parachute.js or
+// Independent reference for parachutes (verification group 13). It shares no code with js/core/parachute.js or
 // js/core/vessel.js: the constants are typed here a second time on purpose, the cloth length is integrated with a
 // different rule, and the descent is a plane two-body problem (a point mass under a point canopy on a rigid line)
 // integrated with classical Runge-Kutta at 1 ms, where the game is a 3D rigid body stepped semi-implicitly at 20 ms.

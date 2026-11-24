@@ -495,31 +495,9 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   assert.equal(v.situation, 'orbit', `Dray orbit ${km(v.apoapsis)} × ${km(v.periapsis)}, e ${v.getOrbit(w.ut).e.toFixed(3)}\n` + m.lines.slice(-8).join('\n'));
   log(`DRAY ORBIT ${km(v.apoapsis)} × ${km(v.periapsis)}; ${v.deltaV.toFixed(0)} m/s left`);
   // 6. down
-  // The landing autopilot does not choose its site: it comes down on whatever ground is under the ship, and Dray is
-  // rugged (slopes of 25 and 40 degrees are common). Which ground that is depends on the second the ship arrived, so
-  // any change to the climb from Verda moves it. So this flight does what a pilot would: it scouts. From six points
-  // of the orbit, five minutes apart, a copy of the world flies the landing. Wherever the ground it found was
-  // standable (a slope under 0.2 rad) the lander must be standing on it, and the flight then lands for real from the
-  // first point that worked.
-  let wait = null;
-  {
-    const saved = JSON.stringify(w.toJSON()), tries = [];
-    for (let k = 0; k < 6; k++) {
-      const w2 = World.fromJSON(saved), v2 = w2.getVessel(v.id);
-      const t0 = w2.ut;
-      if (k) AP.fly(w2, null, { dt: 0.1, maxSim: 300 * k + 1, until: () => w2.ut - t0 >= 300 * k });
-      const c = AP.fly(w2, AP.hoverslamLanding(w2, v2), { maxSim: 1e6 });
-      for (let i = 0; i < 200; i++) w2.step(0.1);
-      const tilt = v2.dead ? Math.PI : v2.pos.clone().set(0, 1, 0).applyQuaternion(v2.q).angleTo(v2.pos);
-      const slope = v2.surface ? v2.surface.slope : NaN, stands = c.done && !c.failed && v2.landed && !v2.dead && tilt < 0.5;
-      tries.push(`${5 * k} min: slope ${slope.toFixed(2)}, ${stands ? 'standing' : 'fell'}`);
-      if (slope < 0.2) assert.ok(stands, `on standable ground the lander stands (${tries[k]})`);
-      if (stands && wait === null) wait = 300 * k;
-    }
-    log('scouted landings: ' + tries.join('; '));
-    assert.ok(wait !== null, 'standable ground somewhere along the orbit: ' + tries.join('; '));
-  }
-  if (wait) { const t0 = w.ut; AP.fly(w, null, { dt: 0.1, maxSim: wait + 1, until: () => w.ut - t0 >= wait }); }
+  // Dray is rugged: a fifth of its ground is gentle enough to stand on. The landing autopilot looks before it goes
+  // down (docs/LANDING_SITES.md). Until it did, this flight had to wait ten minutes in orbit for gentler ground,
+  // because from five points of this orbit the old program stood on three and fell on slopes of 25 and 40 degrees.
   const before = m.events.filter(e => e.type === 'explosion').length;
   const land = fly(AP.hoverslamLanding(w, v), 'landing');
   for (let i = 0; i < 200; i++) w.step(0.1);
@@ -533,6 +511,8 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   assert.equal(m.events.filter(e => e.type === 'crewLost').length, 0);
   const tilt = v.pos.clone().set(0, 1, 0).applyQuaternion(v.q).angleTo(v.pos);
   assert.ok(tilt < 0.5, 'standing on its legs: tilt ' + tilt + ' on a slope of ' + v.surface.slope);
+  assert.ok(land.site && land.site.ok && !land.warning, 'on ground it chose as fit to stand on: ' + land.log.map(l => l.msg).join(' | '));
+  assert.ok(Math.atan(v.surface.slope || 0) < 0.14, 'and the ground under it is gentle: ' + v.surface.slope);
   assert.ok(v.legsDown);
   assert.ok(m.events.filter(e => e.type === 'landed').length < 20, 'no endless skipping in the weak gravity');
   assert.ok(v.deltaV > 1200, 'fuel to get back up and out: ' + v.deltaV);

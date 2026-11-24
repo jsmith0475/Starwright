@@ -37,6 +37,8 @@ export const RECENT_DAYS = 6;
 export const RELEASES = [
   { id: 'true-parachutes', date: '2026-11-24', title: 'Parachutes at their true size, on real lines',
     text: 'A parachute is now as big as its drag says: 22 m across on 33 m lines, and every line ends on the skirt. The canopy is its own body in the air, so the capsule swings under it. It comes out as a narrow sock, fills over six seconds, then opens fully 900 m above the ground. Each parachute has a line strength: it waits while opening would break its lines.' },
+  { id: 'autopilot-reads-terrain', date: '2026-11-23', title: 'The landing autopilot looks at the ground',
+    text: 'Land here now reads the terrain. From orbit it waits for ground the lander can stand on, the braking burn keeps clear of hills, and at the hover it flies across to the nearest level spot before it sets down. It warns you when nothing in reach is fit. In 288 test landings on the twelve airless worlds the old autopilot left 212 landers standing; this one left all 288.' },
   { id: 'catch-tower', date: '2026-11-23', title: 'A tower that catches the booster',
     text: 'The Catch Tower stands north-west of the launch pad, and Shearwater now launches from its mount. Fly with the ascent assist and the booster turns round, flies back on 13 engines, hovers on 3 and settles its two pins onto the tower\'s arms about five minutes after lift-off. The ship goes on to orbit. Press \\ to watch the catch. Miss the arms and the game says by how much.' },
   { id: 'shape-at-speed', date: '2026-11-23', title: 'Shape matters above the speed of sound',
