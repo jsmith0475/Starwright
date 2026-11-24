@@ -32,6 +32,16 @@ Real orbital mechanics. A solar system of nineteen bodies. No account, no downlo
 </p>
 
 <p align="center">
+  <a href="media/tanker-mission.mp4">
+    <img src="media/tanker-mission-preview.gif" width="100%" alt="The Shearwater lifts off the Catch Tower, hot-stages high above the coast, its booster falls back and is caught by the tower arms, then in orbit the ship docks side by side with the depot Deepwell and its tank gauge climbs as propellant is pumped across">
+  </a>
+  <br>
+  <a href="media/tanker-mission.mp4"><b>▶ Watch the tanker mission (1:49, silent)</b></a>
+  <br>
+  <sub>Real gameplay, two flights flown by the game's own autopilots: a launch from the Catch Tower with the booster caught by its arms, and the <i>Topping Up</i> scenario, docking with a depot and pumping 92.8 t across. Time-lapse where marked. <a href="#the-tanker-mission-and-the-air-it-flies-through">The air and the math behind it.</a></sub>
+</p>
+
+<p align="center">
   <a href="#play-in-one-step"><b>Play</b></a> ·
   <a href="#your-first-orbit">First orbit</a> ·
   <a href="#for-the-people-who-do-the-math">The physics</a> ·
@@ -52,6 +62,76 @@ there is a planet under you and a map full of orbits to plan.
 Program, or you never miss a launch and watch booster landings with a spreadsheet open, this
 game was made for you. It is an original game in that tradition, with its own worlds, its own
 crew and its own art, built so that anyone can open it and fly.
+
+## The tanker mission, and the air it flies through
+
+The video above is one launch and one refuelling, recorded from the game with nothing scripted:
+the ascent autopilot flies the climb, the booster's own return program flies it home, and the
+docking assist flies the approach. Everything you see the air do is the flight model working out
+forces part by part, 50 times a second. Here is what the air is doing at each stage, with the
+numbers measured from a replay of the same launch run without graphics.
+
+**The air itself.** Density falls off exponentially with height, and how hard the air pushes on a
+rocket is its *dynamic pressure*, which grows with the square of speed:
+
+$$\rho(h) = \rho_0 e^{-h/H} \qquad q = \tfrac{1}{2} \rho v^2$$
+
+On Verda $\rho_0$ is 1.22 kg/m³ and the scale height $H$ is 5.8 km, so every 5.8 km up the air is
+2.7 times thinner. Speed of sound is not one number either. It comes from the gas and its
+temperature, $c_s = \sqrt{\gamma R T / M}$: 303 m/s on the ground, 262 m/s in the cold air near
+10 km. The Mach number $\mathrm{Ma} = v / c_s$ is what decides how the air behaves around each
+part.
+
+**The climb.** The Shearwater passes Mach 1 about 47 seconds after lift-off at 5.6 km, going
+278 m/s, slower than the speed of sound on the ground because the air up there is colder. Max Q,
+the hardest push of the air on the way up, comes 10 seconds later: 19.7 kPa at 8.6 km and
+Mach 1.4. After that the air thins faster than the rocket speeds up, and $q$ falls away. This is
+why the autopilot turns gently through the thick air and saves its steep turn for above it.
+
+**The booster falls harder than it climbed.** The stages part near 29 km at Mach 3.9. The booster
+flips, burns back toward the tower at 42 km, coasts as high as 49 km and falls nearly straight
+down, tail first, with its engines off. Falling, it meets far more air than the rocket did going
+up: 64.5 kPa at 6.3 km and Mach 2.0, more than three times the climb's max Q. Its drag is the sum
+over its parts, and each face has its own drag rise with Mach number (a flat engine end stays
+high above Mach 1, a slender nose falls back). The return program predicts its own fall four
+times a second with a table of exactly that drag against Mach number, and steers the predicted
+impact point onto the tower.
+
+**Heating, and why there is no entry burn.** Heating at speed follows the Sutton and Graves law
+on each part's own nose radius $R_j$, and each skin warms and radiates:
+
+$$\dot{q}_j \propto \sqrt{\frac{\rho}{R_j}}\, v^3 \qquad c_j \frac{dT}{dt} = \dot{q}_j \left(1 - \frac{T}{T_0}\right) - \varepsilon \sigma \left(T^4 - T_{env}^4\right)$$
+
+The $v^3$ is why speed matters so much more than density. The booster peaks at 30.7 kW/m² near
+12 km, and its hottest skin reaches 22 % of its limit. Before the fall the program predicted
+28 % and said so: no entry burn needed, which saves propellant for the landing.
+
+**Grid fins near the speed of sound.** The booster steers on four Lattice Vanes. Above Mach 1 a
+lifting surface keeps at most the lift slope that linear supersonic theory allows,
+$a \le 4/\sqrt{\mathrm{Ma}^2 - 1}$, so the vanes keep 88 % of their low-speed authority at Mach 3
+and 51 % at Mach 5. Between Mach 0.8 and 1.3 a grid fin's cells choke, losing up to 40 % of
+their lift and doubling their drag (the game's own numbers, since published grid-fin data vary
+too much to cite one curve). The steering knows its authority at the present Mach number, so it
+does not overcorrect when the air gives it more or less grip.
+
+**The landing burn and the catch.** The engines light at 2,007 m going 342 m/s, still above
+Mach 1, and the booster drops back below the speed of sound near 1.7 km. It comes in on the side
+away from the tower, slows to a hover over the mount, and the arms take it at 1.4 m/s, 0.7 m
+from the centre. The tower's column and arms are solid to the physics: a booster that hits them too fast loses
+parts or is destroyed.
+
+**In orbit there is no air, and that is the problem.** At 100 km Verda's air is gone, and the
+liquids in a tank float. A pump draws from the bottom of a tank, so the depot transfer only
+works while the thrusters push the docked pair gently along its length and the liquid settles
+on the outlet. That small push is real: it changes the orbit, and stopping it stops the flow.
+Oxygen and methane cross at 300 kg a second, 92.8 t in a little over five minutes, and the
+ship goes from 42 % full to full.
+
+The full model is in [Aerodynamics](#aerodynamics) below, with
+[docs/AERODYNAMICS.md](docs/AERODYNAMICS.md), [docs/HEATING.md](docs/HEATING.md),
+[docs/WINGS.md](docs/WINGS.md), [docs/BOOSTERS.md](docs/BOOSTERS.md) and
+[docs/SHEARWATER.md](docs/SHEARWATER.md). The checks against independent reference code are in
+[docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
 ## Why this exists
 
