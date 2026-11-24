@@ -119,25 +119,8 @@ lander was still turning. The burn pushed sideways first, the descent orbit came
 shape, and on Dray the fall took 1,720 seconds in place of 960. It is fixed. Landings now use
 slightly less propellant on most worlds than before, even with the hover across.
 
-The same check guarded four other burns: the braking burn of this program, the top-up burn of the
-climb to orbit, the stand-alone deorbit burn, and the two braking burns of a rendezvous. In all five
-the direction was handed over in the very vector the check did its own work in. A second change
-closed them all at once by giving the check a vector of its own. The 288 landings, the long test
-flights and the dockings came out the same or slightly cheaper.
-
-## Time in hand on the braking burn
-
-A lander with a strong engine over a small world could leave its braking very late. On Dray the
-stock lander began from 90 m/s six seconds before the hover, at nine tenths of full throttle:
-correct on paper, with a tenth of the engine in hand and no time to use it. The burn is now planned
-to last 20 seconds or more where the engine allows. On Dray that is a burn of 16 to 17 seconds at
-under half throttle, so more than half the engine is in hand the whole way down. It costs nothing
-that can be measured: 115 m/s per landing before and after. Where the engine is the limit (Pell,
-Tiv, Cindra and the other heavy worlds) nothing changes.
-
-On Nock and Wend the lander arrives at about 20 m/s and the burn still takes one to three seconds.
-The plan will not go below three tenths of full throttle, and at that setting there is nothing more
-to spread out.
+The same check guards the throttle during the braking burn and is still open there. Closing it
+changes how every landing brakes, so it was left for a change of its own.
 
 ## What was checked
 
