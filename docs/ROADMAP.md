@@ -178,13 +178,13 @@ fades, the Newtonian force above Mach 1.5 and shelter behind wider parts
 rest at an angle and lift, a Bank hold turns that lift with the roll keys, the flight screen
 shows the entry's bank, lift, heating and the peaks ahead, and the map draws the path through
 the air to the landing point ([ENTRY.md](ENTRY.md)). Nothing flies the bank toward a chosen
-site for you yet. Heating follows
-the Sutton-Graves law, and heat shields ablate.
+site for you yet. Since step E each part is heated by its own size, attitude and shadow, its
+skin follows a heat balance, and heat shields ablate by area ([HEATING.md](HEATING.md)).
 [docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
 
 **The plan.** The mathematics is written up in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md) and the
 build is specified in seven steps in [REENTRY_SPEC.md](REENTRY_SPEC.md): A the air (built),
-B forces on bodies at high Mach (built), C capsule trim and steering, E heating by shape and attitude,
+B forces on bodies at high Mach (built), C capsule trim and steering (built), E heating by shape and attitude (built),
 D wings and fins at speed, F plasma and blackout where it is real, G winds.
 
 **Building it.** Add body lift, a temperature profile per atmosphere, occlusion so shielded

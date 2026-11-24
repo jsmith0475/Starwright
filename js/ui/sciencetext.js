@@ -623,7 +623,7 @@ $$ a_{max} = \frac{v_e^2\,\sin\gamma_e}{2\,e\,H} $$
 
 Steep entries mean crushing g-forces and intense but brief heating. Shallow ones mean gentle forces and a long, hot soak, and too shallow means skipping back out into space. The usable band of periapsis altitudes between the two is the **entry corridor**.
 
-> game: Heating flux is computed as $k\sqrt{\rho}\,v^3$ with $k = 1.83 \times 10^{-4}$, applied to the parts exposed to the flow. Parts have a maximum temperature and fail above it, shielded parts are protected by what is in front of them, and a heat shield ablates. Parachutes add a large drag area once they are open.
+> game: Heating flux is computed as $k\sqrt{\rho / R_n}\,v^3$ with $k = 1.7415 \times 10^{-4}$ for air, on each part's own nose radius, attitude and shadow, and each skin follows a heat balance (chapter 10 has the whole model). Parts have a maximum temperature and fail above it, parts behind a shield are protected by its shadow, and a heat shield ablates. Parachutes add a large drag area once they are open.
 `;
     },
   },

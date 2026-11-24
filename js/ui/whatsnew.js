@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'heating-by-shape', date: '2026-11-24', title: 'Heat that knows the shape of your ship',
+    text: 'Re-entry heating now works part by part. Small parts out in the stream get hottest, wide blunt ones run cooler, and anything in a heat shield\'s shadow is safe. Skins warm and cool by a real heat balance, and the air can no longer heat a part past its own temperature. The Entry box names the hottest part and keeps the record of the entry. Settings can switch heating to its true physical strength.' },
   { id: 'entry-trim-bank', date: '2026-11-24', title: 'Steer a capsule home with lift',
     text: 'Capsules have a new switch, Entry trim. It shifts ballast so the capsule rests at 18 degrees to the air and lifts. A new hold, Bank hold, lets the roll keys turn that lift: up for a gentler, longer entry, down for a shorter, harder one. An Entry box on the flight screen shows bank, lift, heating and the peaks ahead, and the map now draws the path through the air to where you come down.' },
   { id: 'true-parachutes', date: '2026-11-24', title: 'Parachutes at their true size, on real lines',

@@ -300,6 +300,15 @@ cross where you come down. Coming back from Pell, do not hold the lift up on a s
 entry: the box will warn that the path skips back out to space. Details:
 [ENTRY.md](ENTRY.md).
 
+**Heat.** Each part is heated by its own shape. Wide blunt things run cooler, thin things
+out in the stream run hottest, and anything tucked inside a heat shield's shadow is safe.
+So keep antennas, panels and legs within the shield's width, or expect to lose them. The
+Entry box names the **hottest part** and how close it is to its limit, and **So far** keeps
+the peak, the heat taken and the ablator lost. A heat shield glows near 2,000 K and sheds
+ablator; when the ablator is gone it burns like anything else. Heating in the game is 20
+times its physical strength, because these worlds are small; Settings can switch that
+off. Details: [HEATING.md](HEATING.md).
+
 **Getting close.** In the map, plan a burn that brings the *closest approach* marker down to a
 few hundred metres (lower orbits go round faster, so a lower orbit catches up and a higher one
 falls back). At the closest approach, point against the drift and burn to stop. Flight School has

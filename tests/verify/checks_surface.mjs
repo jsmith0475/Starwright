@@ -79,7 +79,7 @@ function drag(S) {
  */
 const POD = PARTS.pod_acorn;
 const capArea = RA.axialDrag({ rB: POD.rBottom, rT: POD.rTop, h: POD.h, capB: 25 * Math.PI / 180 }, POD.drag, sys.byId.verda.atmo.gamma || 1.4);
-const K_HEAT = 1.83e-4;
+const K_HEAT = 1.7415e-4;
 
 function entry(b, vE, gamma, { record = true } = {}) {
   const mu = b.gm, { scale, rho0, height } = b.atmo, wy = R.TAU / b.rotPeriod;
@@ -155,7 +155,7 @@ function heating(S) {
   const { g, ref } = entry(b, vE, gamma);
   S.ok('steep 2 km/s entry at 25 deg: the bare capsule survives', !g.dead, g.dead || '');
   S.check('heat flux above the atmosphere', 0, g.fluxAbove, 0, { unit: 'W/m2' });
-  S.check('heat flux follows K sqrt(rho) v^3 all the way down (worst)', 0, g.formulaErr, 0.02, { note: 'K = 1.83e-4: Sutton-Graves for Earth air and a nose radius of 0.9 m; compared below the taper at the top, where the density changes by tens of percent within one step' });
+  S.check('heat flux follows K sqrt(rho) v^3 all the way down (worst)', 0, g.formulaErr, 0.02, { note: 'K = 1.7415e-4: Sutton and Graves for air on a nose of 1 m radius; compared below the taper at the top, where the density changes by tens of percent within one step' });
   S.check('capsule holds its heat shield into the airflow while it is hot (worst tilt)', 0, g.tilt * 180 / Math.PI, 5, { unit: 'deg' });
   S.check('peak heat flux vs reference point-mass entry', ref.peakQ.flux, g.peakQ.flux, 0.01, { rel: true, unit: 'W/m2' });
   S.check('altitude of peak heating vs reference', ref.peakQ.alt, g.peakQ.alt, 150, { unit: 'm' });
