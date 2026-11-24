@@ -32,7 +32,7 @@ export function flyHome({ frac = 0.14, cargo = false, phase = 0, opts = {}, quie
   v.ctrl.throttle = 0; v.ctrl.rcs = true;
   w.switchTo(v);
   const events = [];
-  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'splashed', 'structure', 'overheat'].includes(type)) events.push({ type, reason: d.reason, speed: d.speed, offset: d.offset, ut: +w.ut.toFixed(1) }); });
+  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'splashed', 'structure', 'overheat', 'towerStrike'].includes(type)) events.push({ type, reason: d.reason, speed: d.speed, offset: d.offset, ut: +w.ut.toFixed(1) }); });
   const ret = shipReturn(w, v, { target: site.dir, floor: TOWER.hang - 0.5, sets: { deorbit: 2, burn: 0, final: 0 }, ...opts });
   let t = 0, next = 0, gmax = 0, tmax = 0; const prop0 = v.partList.reduce((m, p) => m + (p.res.lox || 0) + (p.res.ch4 || 0), 0);
   while (t < 9000 && !ret.done && !v.dead) {

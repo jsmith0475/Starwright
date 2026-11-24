@@ -37,6 +37,7 @@ const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const REASONS = {
   crash: 'It hit the ground too hard.', impact: 'It struck the surface.', atmosphere: 'It burned up in the atmosphere.',
   overheat: 'It overheated and broke apart.', heat: 'It overheated and broke apart.', explosion: 'It exploded.',
+  tower: 'It struck the catch tower.',
 };
 const TARGET_MODES = new Set(['target', 'antiTarget', 'relPrograde', 'relRetrograde']);
 const RES_NAME = { lox: 'liquid oxygen', ch4: 'methane', fuel: 'propellant', mono: 'monopropellant', elec: 'charge', xenon: 'xenon' };
@@ -249,6 +250,14 @@ export function createFlightScreen(app) {
           legToastAt = performance.now(); legToastType = type;
           if (type === 'legBroke') toast('Too hard: the landing legs bottomed out and collapsed', 'bad');
           else { toast('Hard landing: the legs ran out of travel', 'warn'); if (cam) cam.kick(0.8); }
+        }
+        break;
+      case 'towerStrike':
+        // steel on steel: once for a touch, once for what broke
+        if (mine && !p.lost) {
+          if (p.broken) toast('Struck ' + p.what + ': the ' + (p.part || 'part') + (p.broken > 1 ? ' and ' + (p.broken - 1) + ' more broke off' : ' broke off'), 'bad');
+          else toast('Scraped ' + p.what + ' with the ' + (p.part || 'hull'), 'warn');
+          if (cam) cam.kick(p.broken ? 1 : 0.5);
         }
         break;
       case 'splashed':

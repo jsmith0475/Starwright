@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'solid-tower', date: '2026-11-24', title: 'The catch tower is solid steel',
+    text: 'The tower column and its catch arms are now solid. A rocket that drifts into them is stopped, a fast hit breaks parts off, and a hard one destroys it. Returning boosters and ships now come in on the side away from the tower, stand upright before the hover and lean only a few degrees, so they no longer swing across the mount. The arms wait for the ship\'s aft flaps to pass before closing.' },
   { id: 'wings-at-speed', date: '2026-11-24', title: 'Wings and fins feel the speed of sound',
     text: 'Above Mach 1 a wing or fin now loses lift and pays more drag for what it keeps, as supersonic theory says: at Mach 5 a fin has half its low-speed grip. The Lattice Vane chokes for a moment as it passes Mach 1. A fin hidden behind the hull at a steep angle loses its bite. Slower than Mach 0.7 nothing has changed. Science chapter 10 has the formulas.' },
   { id: 'shearwater-close-up', date: '2026-11-24', title: 'Shearwater up close',
