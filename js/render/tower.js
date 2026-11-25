@@ -20,6 +20,8 @@
 // low quality).
 import * as THREE from '../lib/three.module.min.js';
 import { mergeGeometries } from './partmesh.js';
+import { ARM, armPose } from '../core/tower.js';
+const _pose = { y: 0, arms: [{ s: 1 }, { s: -1 }] };
 import { TOWER } from '../core/bodies.js';
 
 // the space centre's colours (js/render/basegfx.js)
@@ -52,7 +54,7 @@ function kit(at = null) {
 }
 
 // what the arms are: shared by the builder and by setArms
-const ARM = { length: 22, half: 0.8, gap: 3.1, open: 50 * Math.PI / 180, park: 45, pin: 0.135 };
+// (the arms' size and how they swing are the physics' own: js/core/tower.js ARM and armPose)
 // the service arm: its level, where its fixed truss ends, the hull it reaches (the XXL stack's radius), how far off
 // that hull its pads stand, and how far the head draws back
 const SERVICE = { y: 55.5, x1: -4.6, hull: 2.8125, stand: 0.04, back: 1.0 };
@@ -200,18 +202,9 @@ export function createTower({ quality = 'high' } = {}) {
 
   /** Pose the arms: see the head of this file. Nothing is smoothed here: the caller glides the numbers. */
   function setArms(k = 0, height = ARM.park, dx = 0, dz = 0) {
-    k = Math.min(1, Math.max(0, +k || 0)); const e = k * k * (3 - 2 * k);
-    carriage.position.y = Math.min(top - 3, Math.max(9, Number.isFinite(height) ? height : ARM.park));
-    dx = +dx || 0; dz = +dz || 0;
-    const off = Math.hypot(dx, dz); if (off > TOWER.reach) { dx *= TOWER.reach / off; dz *= TOWER.reach / off; }
-    for (const a of arms) {
-      // closed: the arm's inner side passes ARM.gap north or south of the stage's axis, so its rail is under a pin
-      // that points that way; and it never turns so far that the inner side comes within 2.9 m of the axis
-      const s = a.userData.side, run = dx - xh;
-      let t = dz / run; for (let i = 0; i < 2; i++) t = (dz + s * ARM.half * (Math.sqrt(1 + t * t) - 1)) / run;
-      const closed = s * Math.min(0.36, Math.max(-0.36, Math.atan(t)));
-      a.rotation.y = -s * (ARM.open + (closed - ARM.open) * e);
-    }
+    const pose = armPose(k, height, dx, dz, _pose);
+    carriage.position.y = pose.y;
+    for (const a of arms) a.rotation.y = pose.arms[a.userData.side > 0 ? 0 : 1].yaw;
   }
   /** Pose the service arm's head: k = 1 resting on the hull, 0 drawn back SERVICE.back clear of it. */
   function setService(k = 0) {

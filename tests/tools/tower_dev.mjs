@@ -13,7 +13,7 @@ export function flyReturn({ alt = 80000, opts = {} } = {}) {
   const w = new World(), site = SYSTEM.sites.tower;
   const v = w.launch(craft, { crew: ['Ada', 'Bo'], site: 'tower' });
   const events = [];
-  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'splashed', 'structure'].includes(type)) events.push({ type, name: d.vessel && d.vessel.name, reason: d.reason, speed: d.speed, offset: d.offset, tilt: d.tilt, ut: w.ut }); });
+  w.on('*', (d, type) => { if (['caught', 'catchMissed', 'destroyed', 'landed', 'splashed', 'structure', 'towerStrike'].includes(type)) events.push({ type, name: d.vessel && d.vessel.name, reason: d.reason, speed: d.speed, offset: d.offset, tilt: d.tilt, ut: w.ut }); });
   const asc = AP.ascentProgram(w, { targetAlt: alt, useWarp: false, recover: { target: site.dir } });
   let booster = null, rec = null, sep = null;
   w.on('decouple', d => { if (!booster && d.debris && d.debris.type === 'ship') booster = d.debris; });
