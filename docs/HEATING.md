@@ -170,7 +170,7 @@ target, hottest part at 0.60 of its limit.
 
 The Entry box gains three rows. **Hottest part** names the part closest to its limit and how
 close. **So far** keeps the record of this heating: the peak against the limit and the heat
-taken by the hottest part in MJ/m². **Ablator lost** is the shield's loss in kilograms. The record is saved with the
+taken by the hottest part in MJ/m². **Ablator lost** is the shield's loss in kilograms. **Heat flux** and the flux in **Peaks ahead** are in the same terms since 2026-11-25: what the hottest (or, ahead, the most exposed) part takes, game scale included, so the load is the time integral of the flux shown. Before, they showed the physical reference flux on a 1 m nose, about a sixteenth of what a capsule's shield takes. The record is saved with the
 vessel and starts again when heating next begins.
 
 The entry prediction (peaks ahead, the path on the map) now lets the shield lose ablator as

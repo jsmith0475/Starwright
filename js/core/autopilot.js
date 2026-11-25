@@ -302,14 +302,22 @@ export function executeNode(world, vessel = world.active, opts = {}) {
         const acc = Math.max(0.05, v.maxThrust / v.mass);
         const err = rem > 1e-6 ? pointingError(v, _b.copy(bv).normalize()) : 0;
         const along = bv.dot(dir0);
-        if (rem < o.tolerance || along <= 0) {
+        // Past the burn along its first direction with more than a trace left across it: point at what is left and
+        // finish that (twice at most). Ending there left 0.1 to 0.3 m/s, which is 5 to 10 km of periapsis at a moon.
+        if (along <= 0 && rem >= Math.max(o.tolerance, 0.02) && (st.reaim || 0) < 2) { st.reaim = (st.reaim || 0) + 1; dir0.copy(bv).normalize(); st.badSince = null; }
+        else if (rem < o.tolerance || along <= 0) {
           v.ctrl.throttle = 0;
           v.removeNode(node);
           mode(v, 'hold');
           c.dvUsed = st.dv0 - v.estimateDeltaV();
           return c.finish(true, `burn complete, ${rem.toFixed(2)} m/s residual`);
         }
-        v.ctrl.throttle = err < 0.12 || (rem < 3 && err < 0.6) ? clamp(rem / (acc * 0.7), 0.002, 1) : (err < 0.3 ? 0.1 : 0);
+        // the last few m/s go where they are pointed: hold to 3 degrees for them (to 34 they came out sideways), unless
+        // the craft cannot point that well within 20 s
+        if (err > 0.05) { if (st.badSince == null) st.badSince = ut; } else st.badSince = null;
+        const patient = st.badSince == null || ut - st.badSince < 20;
+        const fine = rem < 3 ? (patient ? err < 0.05 : err < 0.6) : err < 0.12;
+        v.ctrl.throttle = fine ? clamp(rem / (acc * 0.7), 0.002, 1) : (err < 0.3 && rem >= 3 ? 0.1 : 0);
         if (!v.hasEngineStagesLeft() && v.enginePower().thrust <= 0) { v.ctrl.throttle = 0; return c.finish(false, `out of propellant with ${rem.toFixed(0)} m/s to go`); }
         break;
       }
@@ -513,8 +521,17 @@ export function hoverslamLanding(world, vessel = world.active, opts = {}) {
     // (with the terrain watch on, the path may pass half the hover height lower than it stops, and no lower)
     const slack = o.terrain ? 0.5 * o.stopAlt : -1;
     const at = thr => stopAltitude(body, v.pos, v.vel, v.mass, thrust, ve, thr, world.ut, slack).alt;
-    if (at(1) < target) return 1.5;   // late: full power
     let lo = 0.15, hi = 1;
+    if (at(1) < target) {
+      // Full power stops short, over higher ground, than a gentler burn would: a hill under the near stopping point is
+      // not lateness if a gentler burn carries it on to lower ground and still stops high enough. (Before this check a
+      // lander over Pell took a hill under its full-power stop for lateness and braked 36 s early, 10 km short.)
+      // Only with the terrain watch on: without it, at() does not see the ground the longer path passes over.
+      if (!o.terrain) return 1.5;
+      hi = 0;
+      for (const thr of [0.9, 0.75, 0.6, 0.45, 0.3]) if (at(thr) > target) { hi = thr; break; }
+      if (!hi) return 1.5;   // late: full power
+    }
     if (at(lo) > target) return lo;
     for (let i = 0; i < 7; i++) {
       const mid = 0.5 * (lo + hi);

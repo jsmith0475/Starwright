@@ -20,7 +20,8 @@ const _d = new Vector3();
  *   end: 'land' | 'skip' | 'orbit' | 'time',   landed, left through the top of the air, never met the air, ran out of time
  *   t (s from ut to the end), pos, vel (inertial, at the end), dir (body-fixed unit direction of the end point),
  *   tEntry (s from ut to the first air, or null), maxG (m/s², drag and lift together), maxGT, maxGSpeed (air-relative
- *   speed then), maxFlux (W/m²), maxFluxT, maxFluxSpeed,
+ *   speed then), maxFlux (W/m², reference: 1 m nose, physical), maxFluxT, maxFluxSpeed, maxHotFlux (W/m² on the most
+ *   exposed part, game scale: maxFlux × opts.heatFactor, Vessel.axialHeatFactor; 0 without it),
  *   maxQ (Pa), minAlt (m), path: Float64Array of [x, y, z, t] rows in the inertial frame from the first air to the end
  *   (null unless opts.path), n (rows)
  * }
@@ -29,7 +30,8 @@ const _d = new Vector3();
  * ld (lift over drag); ldMach: [from, full] the Mach numbers between which the lift fades in (default always full);
  * bank (rad); maxT (s); path (true to record the path); floor (m, stop this high above the ground); terrain (false:
  * the ground is the body's datum radius everywhere); ablate: { k, area, left } a heat shield that leads and loses mass
- * as the flight does (k: its exposure over the square root of its nose radius, area m², left kg of ablator).
+ * as the flight does (k: its exposure over the square root of its nose radius, area m², left kg of ablator);
+ * heatFactor: the most exposed part's flux per unit of the reference flux.
  */
 export function predictEntry(body, pos, vel, ut, opts = {}) {
   const o = { mass: 1000, drag: null, area: 1, dragScale: 1, ld: 0, ldMach: null, bank: 0, maxT: 4000, path: false, floor: 0, terrain: true, ablate: null, ...opts };
@@ -38,7 +40,7 @@ export function predictEntry(body, pos, vel, ut, opts = {}) {
   const top = body.atmo ? body.atmo.height : 0, scaleH = body.atmo ? body.atmo.scale : 1;
   const cb = Math.cos(o.bank), sb = Math.sin(o.bank);
   const dragArea = o.drag ? m => { const x = m >= 12 ? 119.999 : m * 10, i = x | 0; return (o.drag[i] + (o.drag[i + 1] - o.drag[i]) * (x - i)) * o.dragScale; } : () => o.area * o.dragScale;
-  const out = { end: 'time', t: 0, pos: new Vector3(), vel: new Vector3(), dir: new Vector3(), tEntry: null, maxG: 0, maxGT: 0, maxGSpeed: 0, maxFlux: 0, maxFluxT: 0, maxFluxSpeed: 0, maxQ: 0, minAlt: Infinity, path: null, n: 0 };
+  const out = { end: 'time', t: 0, pos: new Vector3(), vel: new Vector3(), dir: new Vector3(), tEntry: null, maxG: 0, maxGT: 0, maxGSpeed: 0, maxFlux: 0, maxFluxT: 0, maxFluxSpeed: 0, maxHotFlux: 0, maxQ: 0, minAlt: Infinity, path: null, n: 0 };
   let x = pos.x, y = pos.y, z = pos.z, vx = vel.x, vy = vel.y, vz = vel.z, t = 0;
   let path = o.path ? new Float64Array(4 * 512) : null, n = 0;
   const push = () => {
@@ -92,6 +94,7 @@ export function predictEntry(body, pos, vel, ut, opts = {}) {
       if (qd > out.maxQ) out.maxQ = qd;
       const flux = body.atmo.heatK * Math.sqrt(rho) * sp * sp * sp;
       if (flux > out.maxFlux) { out.maxFlux = flux; out.maxFluxT = t; out.maxFluxSpeed = sp; }
+      if (o.heatFactor > 0 && flux * o.heatFactor > out.maxHotFlux) out.maxHotFlux = flux * o.heatFactor;
       mdot = 0;
       if (ablLeft > 0 && sp > 0) {
         // the shield's ablator leaves as in the flight: heat taken by the wall, times area, over Q*

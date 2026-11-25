@@ -2067,7 +2067,7 @@ export function createMapView(app, opts = {}) {
     ctx.globalAlpha = 1;
     const ex = bx + en.pos.x, ey = by + en.pos.y, ez = bz + en.pos.z;
     const left = fmt.time(Math.max(0, en.t - (ut - en.ut)));
-    const peaks = 'peak ' + (en.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num(en.maxFlux / 1000, 0) + ' kW/m²';
+    const peaks = 'peak ' + (en.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num((en.maxHotFlux || en.maxFlux) / 1000, 0) + ' kW/m²';
     if (en.end === 'land') {
       if (proj(ex, ey, ez)) {
         const sx = S.x, sy = S.y, hid = occluded(ex, ey, ez);

@@ -506,7 +506,7 @@ test('flight 7: Farwind - from the pad to Rusk, and a crewed landing on its moon
   coast(() => v.body === dray, 3e6);
   assert.equal(v.body, dray, 'reached Dray');
   log(`DRAY arrival periapsis ${km(v.periapsis)} at ${v.orbitalSpeed.toFixed(0)} m/s`);
-  assert.ok(v.periapsis > 6000 && v.periapsis < 20000, 'arrives near the 12 km it aimed for: ' + v.periapsis);
+  assert.ok(v.periapsis > 6000 && v.periapsis < 20000, 'arrives near the 12 km it aimed for: ' + v.periapsis + '\n' + m.lines.slice(-14).join('\n'));
   AP.planCircularize(w, v, 'periapsis');
   fly(AP.executeNode(w, v), 'Dray capture');
   assert.equal(v.situation, 'orbit', `Dray orbit ${km(v.apoapsis)} × ${km(v.periapsis)}, e ${v.getOrbit(w.ut).e.toFixed(3)}\n` + m.lines.slice(-8).join('\n'));

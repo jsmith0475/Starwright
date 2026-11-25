@@ -9,6 +9,7 @@ import { makeNoise, makeRandom } from './noise.js';
 
 const TAU = Math.PI * 2;
 const HOME_RHO0 = 1.22;
+const HOME_P0 = HOME_RHO0 * 9.6 * 5800;   // Pa: Verda's sea-level pressure, ρ0 g H (1 atm in the game's units)
 
 // ---------------------------------------------------------------------------------------------
 // The air as a gas (roadmap item 6, part A)
@@ -1057,13 +1058,17 @@ export class Body {
     return alt > at.taper ? rho * this._fade(alt) : rho;
   }
 
-  /** Pressure in home-sea-level atmospheres. */
+  /** Pressure in home-sea-level atmospheres: the weight of the air above, p = ρ g H for this exponential air (the
+   *  hydrostatic balance dp/dh = −ρg), over Verda's sea-level value. Until 2026-11-25 this was density over Verda's
+   *  sea-level density, right on Verda but 2.7 times too high on Rusk, 3.7 on Marn and a sixth on Thal. */
   pressureAtm(alt) {
     const at = this.atmo;
-    if (!at || !(alt < at.height)) return 0;
-    const p = (at.rho0 / HOME_RHO0) * Math.exp(-(alt > 0 ? alt : 0) / at.scale);
-    return alt > at.taper ? p * this._fade(alt) : p;
+    if (!at) return 0;
+    return this.density(alt) * this.surfaceG * at.scale / HOME_P0;
   }
+
+  /** Density over Verda's sea-level density (what the parachute gate reads as "thin air"). */
+  densityRatio(alt) { return this.density(alt) / HOME_RHO0; }
 
   /** The fade at the top of the atmosphere: 1 at the start of the taper, 0 at the top, smooth at both ends. */
   _fade(alt) {

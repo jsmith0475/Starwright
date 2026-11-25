@@ -244,7 +244,12 @@ you can see them move.
    170 m/s, sliding sideways the last few hundred metres by leaning.
 5. **The flip.** Near 3 km up all six engines light, the ship swings upright in
    about two and a half seconds, and the landing burn of the booster's guidance takes over:
-   stop just above the arms, come down between them.
+   stop just above the arms, come down between them. The ship comes in from the west, over the
+   column, and a burn that let its sideways error out only as it stopped drifted in over the
+   column top and the open arms whenever it lit a little short. So the burn leans to take out the
+   sideways offset and speed by the time it is 150 m above the arms, aiming 8 m east of the mount
+   (the clear side), and comes straight down from there; the hover slides it the last metres in.
+   The arms close only once their carriage has come down to the ship's pins.
 
 **Measured** (`node tests/tools/ship_return_dev.mjs home 0.16` repeats it):
 
@@ -257,11 +262,11 @@ you can see them move.
 | Highest g | about 2 |
 | Hottest part | 63 % of its limit |
 | Speed at the flip | about 170 m/s down, 3 km up |
-| Caught | at 1.2 m/s, 0.1 to 0.4 m from the centre line |
+| Caught | at 1.2 m/s, under 1 m from the centre line |
 | Propellant left | 4 to 8 t |
 
-It was flown from four different places round the orbit and with 11, 13, 16 and 20 % of a tank,
-and caught each time.
+It was flown from four different places round the orbit with every whole per cent of a tank
+from 10 to 20, and caught each time without touching the tower.
 
 **What it will not do.**
 

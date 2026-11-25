@@ -303,11 +303,19 @@ export function machSlope(slope, mach) {
   const cap = TUNING.SUPER_SLOPE / Math.sqrt(mach * mach - 1);
   return cap < slope ? cap : slope;
 }
-/** The induced-drag factor K at a Mach number: WING_K, or sqrt(Ma² - 1) / 4 where that is larger (drag due to lift = CL·α). */
-export function machInduced(mach) {
+/**
+ * The induced-drag factor K at a Mach number, for a surface whose lift-curve slope there is `slope` (per rad, after the
+ * supersonic cap and any choke). Above the speed of sound there is no leading-edge suction, so the drag due to lift is
+ * C_L·α = C_L² / slope: K = 1 / slope (never less than WING_K), blended in from WING_K over Mach 1 to 1.2 so nothing
+ * jumps. Until 2026-11-25 this was sqrt(Ma² - 1) / 4, one over Ackeret's slope, which is right only where the cap holds:
+ * a fin between Mach 1 and 2.7 paid a seventh to a half of its drag due to lift.
+ */
+export function machInduced(mach, slope = TUNING.SUPER_SLOPE / Math.sqrt(Math.max(mach * mach - 1, 1e-12))) {
   if (!(mach > 1)) return TUNING.WING_K;
-  const k = Math.sqrt(mach * mach - 1) / TUNING.SUPER_SLOPE;
-  return k > TUNING.WING_K ? k : TUNING.WING_K;
+  const ks = slope > 0 ? Math.max(TUNING.WING_K, 1 / slope) : TUNING.WING_K;
+  let b = (mach - 1) / 0.2; if (b > 1) b = 1;
+  b = b * b * (3 - 2 * b);
+  return TUNING.WING_K + (ks - TUNING.WING_K) * b;
 }
 /** How far a lattice vane is into its transonic choke: 0 outside Mach 0.8 to 1.3, 1 at Mach 1.0. */
 export function gridChoke(mach) {
@@ -326,8 +334,9 @@ export function wingCoefficients(a, slope = TUNING.WING_SLOPE, stall = TUNING.WI
   const cd0 = TUNING.WING_CD0 * rise;
   const plateL = TUNING.WING_PLATE * 2 * sa * ca, plateD = cd0 + TUNING.WING_PLATE_CD * sa * sa;
   let K = TUNING.WING_K;
-  if (mach > 1) { slope = machSlope(slope, mach); K = machInduced(mach); }
+  if (mach > 1) slope = machSlope(slope, mach);
   if (choke > 0) slope *= 1 - TUNING.GRID_LIFT_LOSS * choke;
+  if (mach > 1) K = machInduced(mach, slope);
   // attached flow only near α = 0 (or 180° for a wing flying backwards, at half the efficiency)
   let al = a, eff = 1;
   if (ca < 0) { al = a > 0 ? a - Math.PI : a + Math.PI; eff = 0.5; }
@@ -537,7 +546,7 @@ export class Vessel {
     this.altitude = 0; this.radarAlt = 0; this.surfaceVel = new Vector3(); this.airspeed = 0;
     this.verticalSpeed = 0; this.horizontalSpeed = 0; this.orbitalSpeed = 0;
     this.pump = null; this.lastPump = null; this.axialAccel = 0;
-    this.dynamicPressure = 0; this.mach = 0; this.gForce = 0; this.heatFlux = 0; this.maxTempRatio = 0;
+    this.dynamicPressure = 0; this.mach = 0; this.gForce = 0; this.heatFlux = 0; this.hotFlux = 0; this.maxTempRatio = 0;
     // the record of the heating in progress, or of the last: peak reference flux (W/m²), the hottest part against its
     // limit, the heat taken by the hottest part (J/m²), ablator lost (kg), and the hottest part now
     this.peakHeatFlux = 0; this.peakTempRatio = 0; this.heatLoad = 0; this.ablated = 0; this.hotPart = null;
@@ -1168,7 +1177,7 @@ export class Vessel {
       const e = tail ? p._eDown : p._eUp;
       if (e > 0.5) ablate = { k: e / Math.sqrt(tail ? p._hRd : p._hRu), area: p._hA, left: p.res.ablator };
     }
-    return { mass: this.mass, drag: this.axialDragTable(tail), dragScale: tr ? tr.kd : 1, ld: tr ? tr.ld : 0, ldMach: [0.7, 1.5], bank, ablate };
+    return { mass: this.mass, drag: this.axialDragTable(tail), dragScale: tr ? tr.kd : 1, ld: tr ? tr.ld : 0, ldMach: [0.7, 1.5], bank, ablate, heatFactor: this.axialHeatFactor(tail) };
   }
   /**
    * The air force of the last step split along and across the airflow: { drag, lift (N), ld, dir (unit lift direction in
@@ -1239,10 +1248,9 @@ export class Vessel {
     let ix = 0, iy = 0, iz = 0;
     for (const p of this._list) {
       const d = p.def, pm = p.mass;
-      // NOTE (found by tests/verify chapter 7): this takes the part's geometric centre, not its mass point (_mx, _my,
-      // _mz), so a capsule's ballast offset is missing here: up to 37 % too much pitch and yaw inertia for a capsule alone (Acorn).
-      // Left as it is in this pass because correcting it changes how every landing is flown; see docs/STRUCTURE.md.
-      const dx = (p.trim && this._trim ? p._mx : p.pos.x) - cx, dy = p.pos.y - cy, dz = p.pos.z - cz;
+      // about where the part's mass sits (_mx, _my, _mz: a capsule's ballast, a truss, the entry trim shift), the same
+      // points the centre of mass is taken from (until 2026-11-25 the geometric centre: a lone Acorn pod +37 % pitch)
+      const dx = p._mx - cx, dy = p._my - cy, dz = p._mz - cz;
       const r = p._stack ? Math.max(d.rTop, d.rBottom) : (d.rw || 0.2) / 2;
       const own = pm * (3 * r * r + d.h * d.h) / 12;
       ix += pm * (dy * dy + dz * dz) + own;
@@ -2053,6 +2061,22 @@ export class Vessel {
    * Highest skin temperature, as a fraction of the part's limit, that a steady heating flux (W/m²) would bring any
    * part to with the vessel flying along its own axis, tail first or nose first: _stepFlight's equilibrium rule.
    */
+  /**
+   * The heating flux the most exposed part takes, per unit of the reference flux (k·√ρ·v³ on a 1 m nose), flying along
+   * the vessel's own axis: game scale, shape and shadow included (the same rule as axialHeatRatio). The flight screen
+   * shows fluxes in these terms, the same ones the heat-load record adds up.
+   */
+  axialHeatFactor(tailFirst = true) {
+    let worst = 0;
+    for (const p of this._list) {
+      const ex = Math.max(TUNING.HEAT_LEE, 1 - this._shadeAt(p, 0, tailFirst ? -1 : 1, 0) / (1 - SHADOW_KEEP));
+      let q;
+      if (p._stack) q = Math.max((tailFirst ? p._eDown / Math.sqrt(p._hRd) : p._eUp / Math.sqrt(p._hRu)), TUNING.HEAT_LEE / Math.sqrt(p._hRs));
+      else q = TUNING.HEAT_RADIAL_AX / Math.sqrt(p._hRs);
+      if (q * ex > worst) worst = q * ex;
+    }
+    return TUNING.HEAT_SCALE * worst;
+  }
   axialHeatRatio(flux, tailFirst = true, tRec = Infinity) {
     const qs = flux * TUNING.HEAT_SCALE;
     if (!(qs > TUNING.HEAT_MIN_FLUX)) return 0;
@@ -2111,6 +2135,7 @@ export class Vessel {
         if (wN > 0) f += wN * cpN * Math.abs(p._nt[tailFirst ? (NEWTON_ROWS - 1) * 3 : 0]);
         a += f * keep;
       } else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf, mach, riseS, p._grid ? choke : 0)[1] * keep;
+      else if (p._flap) a += (d.aRad || 0) * riseB * keep;      // edge on, as in flight
       else {
         let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area;
         if (p._aAx >= 0) aR = p._aAx;           // a folded array meets air along the stack with its end face, as in flight
@@ -2655,13 +2680,13 @@ export class Vessel {
     // --- parachute state machine
     // (height above the ground under it, as of the last step, not above the sea: a capsule coming down on high ground
     // must still be told to open fully before it gets there)
-    if (this._chutes.length) this._updateChutes(rho, pAtm, qdyn, sx, sy, sz, speed, Number.isFinite(this.radarAlt) ? Math.min(this.radarAlt, alt - this._baseH) : alt - this._baseH, ev);
+    if (this._chutes.length) this._updateChutes(rho, body.densityRatio(alt), qdyn, sx, sy, sz, speed, Number.isFinite(this.radarAlt) ? Math.min(this.radarAlt, alt - this._baseH) : alt - this._baseH, ev);
 
     // --- aerodynamics and heating
     let Ax = 0, Ay = 0, Az = 0, ATx = 0, ATy = 0, ATz = 0;
     this.aeroLocal.set(0, 0, 0);
     const flux = rho > 0 ? body.atmo.heatK * Math.sqrt(rho) * speed2 * speed : 0;
-    this.heatFlux = flux;
+    this.heatFlux = flux;     // reference flux (1 m nose, physical); hotFlux below is what the hottest part takes
     const qs = flux * TUNING.HEAT_SCALE;
     const heating = qs > TUNING.HEAT_MIN_FLUX;
     const tEnv = rho > 0 ? body.temperature(alt) : TUNING.AMBIENT_T, tEnv4 = tEnv * tEnv * tEnv * tEnv;
@@ -2889,7 +2914,9 @@ export class Vessel {
       if (maxRatio > this.peakTempRatio) this.peakTempRatio = maxRatio;
       if (flux > this.peakHeatFlux) this.peakHeatFlux = flux;
       this.heatLoad += hotFlux * dt;
+      this.hotFlux = hotFlux;
     } else if (this._hot) {
+      this.hotFlux = 0;
       // nothing heats: every skin radiates to its surroundings and, in air, is cooled by it
       let any = false;
       maxRatio = 0;

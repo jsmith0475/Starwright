@@ -214,6 +214,10 @@ function stepArms(world) {
   let k = c ? c.k : 0;
   const h = c ? c.pinH + c.hang : ARM.park;
   if (k > 0 && c.vessel && !c.vessel.landed && armsBlocked(world, c.vessel, armPose(1, h, c.east, c.south, _poseT))) k = 0;
+  // and they close only with the carriage at the pins' level: one still riding down to it (from where it parked
+  // while a ship hovered, going up a little, off to one side) would sweep closing arms down through what hangs on
+  // the ship above its pins, the forward flaps
+  if (k > 0 && c.vessel && !c.vessel.landed && a.h - h > 1.5) k = 0;
   const f = 1 - Math.exp(-dt * 2.5), f2 = c ? 1 - Math.exp(-dt * 6) : f;
   a.k += (k - a.k) * f;
   a.h += Math.min(4 * dt, Math.max(-4 * dt, (h - a.h) * f2));
