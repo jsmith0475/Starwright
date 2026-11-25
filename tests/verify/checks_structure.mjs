@@ -299,7 +299,13 @@ function stepOnce(w, v, step = DT) {
   const pEnd = sub(post.pos, toWorld(post.q, shift));          // where the second gravity kick was evaluated
   const aWorld = sub(scale(sub(vEnd, pre.vel), 1 / dt), scale(add(grav(gm, pre.pos), grav(gm, pEnd)), 0.5));
   rec.fObs = toBody(pre.q, aWorld);
-  rec.alphaObs = scale(sub(post.w, pre.w), 1 / dt);
+  // spin: the integrator steps the world-frame angular momentum L = R I w (vessel.js _stepFlight), so the torque the
+  // vessel was given is the change of L over the step, in the body axes at the start; the angular acceleration is what
+  // Euler's equations make of that torque at the start of the step
+  const I0 = pre.I, Iw = (x) => [I0[0] * x[0], I0[1] * x[1], I0[2] * x[2]];
+  rec.tauObs = toBody(pre.q, scale(sub(toWorld(post.q, Iw(post.w)), toWorld(pre.q, Iw(pre.w))), 1 / dt));
+  const gyro = cross(pre.w, Iw(pre.w));
+  rec.alphaObs = [(rec.tauObs[0] - gyro[0]) / I0[0], (rec.tauObs[1] - gyro[1]) / I0[1], (rec.tauObs[2] - gyro[2]) / I0[2]];
   // the integrator divides by the mass with HALF of the step's propellant gone (vessel.js _stepFlight); ablator that
   // burnt off a heat shield in the step is not propellant and is not in that half
   rec.mMid = pre.m - 0.5 * ((pre.m - post.m) - (pre.abl - ablator()));
@@ -437,9 +443,9 @@ function closure(S, full) {
       pkF = Math.max(pkF, norm(F)); pkT = Math.max(pkT, norm(T));
       // forces: what the parts were given must be what moved the vessel (mass at mid-step, as the integrator has it)
       wF = Math.max(wF, (norm(sub(F, scale(r.fObs, r.mMid))) - r.fNoise) / Fs);
-      // torques: Euler's equations with the vessel's inertia, on the observed change of spin
+      // torques: the observed change of angular momentum, d(R I w)/dt, in the body axes
       const I = r.pre.I, w0 = r.pre.w;
-      const want = add([I[0] * r.alphaObs[0], I[1] * r.alphaObs[1], I[2] * r.alphaObs[2]], cross(w0, [I[0] * w0[0], I[1] * w0[1], I[2] * w0[2]]));
+      const want = r.tauObs;
       const Ts = Math.max(norm(T), norm(want), 1);
       wT = Math.max(wT, (norm(sub(T, want)) - 64 * EPS * (norm(w0) + 1e-3) / r.dt * Math.max(...I)) / Ts);
       // the motion the solve was given
@@ -458,7 +464,7 @@ function closure(S, full) {
     }
     S.info(`  ${f.name}: peak total force / torque on the vessel`, `${pkF.toFixed(0)} N / ${pkT.toFixed(0)} N m`);
     S.check(`  ${f.name}: sum of part forces = mass x (dv/dt - gravity), body axes (worst step)`, 0, Math.max(wF, 0), 1e-9, { unit: 'of the force', note: 'beyond the roundoff of the velocity difference' });
-    S.check(`  ${f.name}: sum of part torques = I dw/dt + w x (I w) with the vessel's inertia (worst step)`, 0, Math.max(wT, 0), 1e-9, { unit: 'of the torque' });
+    S.check(`  ${f.name}: sum of part torques = d(R I w)/dt with the vessel's inertia (worst step)`, 0, Math.max(wT, 0), 1e-9, { unit: 'of the torque' });
     S.check(`  ${f.name}: motion.w = the spin at the start of the step`, 0, wW, 1e-14, { unit: 'rad/s' });
     S.check(`  ${f.name}: motion.alpha = observed dw/dt`, 0, Math.max(wAl, 0), 1e-9, { unit: 'rel' });
     S.check(`  ${f.name}: motion.f x mass = sum of part forces (the contract's f)`, 0, wfStart, 1e-12, { unit: 'of the force' });

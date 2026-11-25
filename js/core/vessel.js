@@ -193,6 +193,22 @@ const _up = new Vector3(), _ul = new Vector3(), _dir = new Vector3();
 const _m4 = new Matrix4();
 const _qa = new Quaternion(), _qb = new Quaternion(), _qi = new Quaternion(), _qt = new Quaternion();
 const _tw = [0, 0, 0];
+const _Lw = new Vector3(), _wb = new Vector3(), _qr = new Quaternion(), _qs = new Quaternion();
+
+// q ← q ⊗ exp(ω·dt/2): turn by the body-frame angular velocity ω for dt.
+function turnBy(q, w, dt) {
+  const wl2 = w.lengthSq();
+  if (!(wl2 > 1e-18)) return q;
+  const wl = Math.sqrt(wl2), ha = 0.5 * wl * dt, s = Math.sin(ha) / wl;
+  _qs.set(w.x * s, w.y * s, w.z * s, Math.cos(ha));
+  return q.multiply(_qs).normalize();
+}
+// body-frame ω for world angular momentum L at attitude q (diagonal inertia I)
+function omegaFrom(L, q, I, out) {
+  _qr.copy(q).invert();
+  out.copy(L).applyQuaternion(_qr);
+  return out.set(out.x / I.x, out.y / I.y, out.z / I.z);
+}
 const Y_AXIS = new Vector3(0, 1, 0);
 
 const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
@@ -1224,7 +1240,7 @@ export class Vessel {
     for (const p of this._list) {
       const d = p.def, pm = p.mass;
       // NOTE (found by tests/verify chapter 7): this takes the part's geometric centre, not its mass point (_mx, _my,
-      // _mz), so a capsule's ballast offset is missing here: up to 9 % too much inertia for a capsule on a short stack.
+      // _mz), so a capsule's ballast offset is missing here: up to 37 % too much pitch and yaw inertia for a capsule alone (Acorn).
       // Left as it is in this pass because correcting it changes how every landing is flown; see docs/STRUCTURE.md.
       const dx = (p.trim && this._trim ? p._mx : p.pos.x) - cx, dy = p.pos.y - cy, dz = p.pos.z - cz;
       const r = p._stack ? Math.max(d.rTop, d.rBottom) : (d.rw || 0.2) / 2;
@@ -2095,7 +2111,11 @@ export class Vessel {
         if (wN > 0) f += wN * cpN * Math.abs(p._nt[tailFirst ? (NEWTON_ROWS - 1) * 3 : 0]);
         a += f * keep;
       } else if (p._wArea > 0) a += p._wArea * wingCoefficients(tailFirst ? Math.PI : 0, p._wSlope, p._wStall, _cf, mach, riseS, p._grid ? choke : 0)[1] * keep;
-      else { let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area; a += aR * riseB * keep; }
+      else {
+        let aR = p._aRad; if (d.wheel && !p.deployed) aR = 0; else if (d.airbrake && p.deployed) aR += d.airbrake.area;
+        if (p._aAx >= 0) aR = p._aAx;           // a folded array meets air along the stack with its end face, as in flight
+        a += aR * riseB * keep;
+      }
     }
     return a;
   }
@@ -2969,19 +2989,23 @@ export class Vessel {
       }
     }
 
-    // --- rotation (Euler's equations, diagonal inertia)
+    // --- rotation (Euler's equations, diagonal inertia), stepped on angular momentum
+    // With no torque the world-frame angular momentum L = R·I·ω is constant and only ω changes as the body turns.
+    // Stepping ω by explicit Euler (ω += I⁻¹(τ − ω×Iω)·dt) gained energy every step, so a rolling rocket's wobble
+    // grew without limit and a spinning stage could spin itself apart. Here L takes the torque kick, the body turns
+    // by the ω that L gives at the half step (midpoint rule), and ω is read back from L: |L| is kept exactly and the
+    // energy error is second order and bounded. Torque-free spin about the intermediate axis still flips.
     const I = this.inertia;
-    const wx0 = w.x, wy0 = w.y, wz0 = w.z;
-    w.x += (Tx - (I.z - I.y) * wy0 * wz0) / I.x * dt;
-    w.y += (Ty - (I.x - I.z) * wz0 * wx0) / I.y * dt;
-    w.z += (Tz - (I.y - I.x) * wx0 * wy0) / I.z * dt;
-    const wl2 = w.lengthSq();
-    if (wl2 > TUNING.MAX_SPIN * TUNING.MAX_SPIN) w.multiplyScalar(TUNING.MAX_SPIN / Math.sqrt(wl2));
-    if (wl2 > 1e-18) {
-      const wl = w.length(), ha = 0.5 * wl * dt, s = Math.sin(ha) / wl;
-      _qa.set(w.x * s, w.y * s, w.z * s, Math.cos(ha));
-      q.multiply(_qa).normalize();
-    }
+    _Lw.set(I.x * w.x + Tx * dt, I.y * w.y + Ty * dt, I.z * w.z + Tz * dt).applyQuaternion(q);
+    omegaFrom(_Lw, q, I, _wb);
+    turnBy(_qt.copy(q), _wb, 0.5 * dt);
+    omegaFrom(_Lw, _qt, I, _wb);
+    const wl2 = _wb.lengthSq();
+    if (wl2 > TUNING.MAX_SPIN * TUNING.MAX_SPIN) _wb.multiplyScalar(TUNING.MAX_SPIN / Math.sqrt(wl2));
+    turnBy(q, _wb, dt);
+    omegaFrom(_Lw, q, I, w);
+    const wl2b = w.lengthSq();
+    if (wl2b > TUNING.MAX_SPIN * TUNING.MAX_SPIN) w.multiplyScalar(TUNING.MAX_SPIN / Math.sqrt(wl2b));
     this._stamp++;
 
     if (!(pos.x === pos.x && vel.x === vel.x && q.w === q.w)) {   // NaN guard

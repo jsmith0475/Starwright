@@ -395,3 +395,35 @@ test('prediction is fast and never returns NaN for odd inputs', () => {
   assert.equal(predictPatches(odd[3], verda, 0)[0].endType, 'impact');
   assert.equal(predictPatches(odd[5], helion, 0)[0].endType, 'impact');
 });
+
+test('an encounter less than one sample step away is still predicted (re-planned close in, or after a late burn)', () => {
+  // Paths aimed through the SOI of a moon and of a planet; predict again from shortly before the SOI entry, down to
+  // a fiftieth of the encounter search's first sample step. Before the fix, a closest approach inside that first
+  // step was never looked at, so rails warp flew straight through Nock and Rusk.
+  let seed = 7; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  for (const m of [pell, rusk, SYSTEM.byId.nock]) {
+    const P = m.parent, mu = P.gm, step = 0.1 * Math.sqrt(m.orbit.a ** 3 / mu);
+    let n = 0;
+    for (let k = 0; k < 60 && n < 20; k++) {
+      const tc = 1e6 * rnd(), mp = m.posAt(tc), mv = m.velAt(tc);
+      const vinf = mv.length() * (0.08 + 0.1 * rnd());
+      const vr = V(rnd() - 0.5, (rnd() - 0.5) * 0.4, rnd() - 0.5).normalize().multiplyScalar(vinf);
+      const perp = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); perp.addScaledVector(vr, -perp.dot(vr) / vr.lengthSq()).normalize();
+      const o = Orbit.fromState(mp.clone().addScaledVector(perp, m.soi * 0.5 * rnd()), mv.clone().add(vr), mu, tc);
+      if (o.periapsis < P.radius * 1.05) continue;
+      const dd = t => o.posAt(t).distanceTo(m.posAt(t)) - m.soi;
+      let lo = tc, g = 0; while (dd(lo) < 0 && g++ < 10000) lo -= m.soi / vinf * 0.05;
+      if (dd(lo) < 0) continue;
+      let hi = tc; for (let i = 0; i < 80; i++) { const x = (lo + hi) / 2; if (dd(x) > 0) lo = x; else hi = x; }
+      n++;
+      for (const lead of [0.02, 0.1, 0.3, 0.7, 2]) {
+        const t0 = hi - lead * step;
+        if (dd(t0) <= 0) continue;
+        const p = predictPatches(Orbit.fromState(o.posAt(t0), o.velAt(t0), mu, t0), P, t0, 1)[0];
+        assert.ok(p.endType === 'enter' && p.nextBody === m, `${m.id}: lead ${lead} step: encounter predicted`);
+        close(p.tEnd, hi, 0, 1, `${m.id}: entry time`);
+      }
+    }
+    assert.ok(n >= 10, `${m.id}: enough aimed paths (${n})`);
+  }
+});

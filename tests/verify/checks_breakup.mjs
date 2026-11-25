@@ -212,8 +212,9 @@ function openPanel(S) {
     a.w.step(DT); b.w.step(DT);
     // observed difference of the two (gravity and everything else is the same): force in body axes, and spin change
     const dF = scale(toBody(s.q, sub(A(b.v.vel), A(a.v.vel))), s.mass / DT);
-    const I = A(b.v.inertia), dW = sub(A(b.v.w), A(a.v.w));
-    const dT = [dW[0] * I[0] / DT, dW[1] * I[1] / DT, dW[2] * I[2] / DT];
+    // moment: change of the world-frame angular momentum R I w between the two (the integrator steps L), body axes
+    const I = A(b.v.inertia), Lw = (v) => { const w = A(v.w); return A(new Vector3(w[0] * I[0], w[1] * I[1], w[2] * I[2]).applyQuaternion(v.q)); };
+    const dT = toBody(s.q, scale(sub(Lw(b.v), Lw(a.v)), 1 / DT));
     // reference plate: outward o = (cos rot, 0, -sin rot), normal across it in the plane of the hull, area span x h,
     // force at the middle of the span
     const o = [Math.cos(panel.rot), 0, -Math.sin(panel.rot)], nrm = [o[2], 0, -o[0]];
