@@ -203,7 +203,9 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 - A real transfer is planned to be driven by a pressure difference between the tanks, not a
   pump. The effect in the game is the same: a rate, and a need for settled liquid.
 - The thrusters burn monopropellant. The real ship's are fed from its main tanks.
-- The two hulls cannot hit each other. Only the ports meet.
+- While the two ports are within 3 m and closing slower than 3 m/s the hulls are left to dock.
+  Outside that, the ship and the depot are solid to each other like any two craft
+  ([SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md#craft-against-craft)).
 - Docking snaps the pair exactly parallel, as nose docking snaps two rings into line.
 - A pump that is running when the game is saved is stopped when it is loaded.
 - Ship-to-ship transfer of this kind has not yet been done in space by anyone.

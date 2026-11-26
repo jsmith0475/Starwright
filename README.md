@@ -185,6 +185,8 @@ Grok, worked on Starwright, and it is not affiliated with or endorsed by either 
 | **Come down on real lines.** A canopy at its true size, opened in stages: drogue, reefed, full. Load the lines past their strength and it tears away. | **Fall belly first.** The Shearwater comes home from orbit flat on its belly, steered by four flaps, then flips upright and is caught by the tower's arms. |
 | [![A six-wheeled rover stopped against a boulder on the grey surface of Pell](media/shot-boulder.jpg)](media/shot-boulder.jpg) | [![A rocket on the launch pad standing on its mount, with the service tower's arms reaching its hull](media/shot-pad-mount.jpg)](media/shot-pad-mount.jpg) |
 | **Mind the rocks.** Every boulder you can see is solid, and so are the buildings, the pad and other craft. | **A pad that holds the rocket.** A mount and hold-down clamps fitted to each rocket, and service arms that swing back at ignition. |
+| [![The Shearwater docked side by side with the propellant depot Deepwell in orbit over Verda](media/shot-depot.jpg)](media/shot-depot.jpg) | [![A capsule in the sea inside a ring of foam, with a crown of spray falling back around it](media/shot-splash.jpg)](media/shot-splash.jpg) |
+| **A fuel stop in orbit.** Dock side by side with the depot *Deepwell* and take on 93 t of methane and oxygen. The pump only draws while thrusters hold the liquid settled in the tanks. The depot starts full and nothing boils off. | **A splashdown that looks like one.** A crown of spray, a ring of foam running out over the water, and a capsule that rides the swell afterwards. |
 
 And around the flying:
 
@@ -424,22 +426,24 @@ Starwright does not fake its orbits, and it shows its work.
   with a 20 ms leapfrog step.
 - **Checked against independent physics.** A separate reference implementation with its own
   high-order integrator and its own Kepler solver, sharing none of the game's maths, flies the
-  same cases and compares: **861 checks, 0 failures.** Read the method, the numbers and the
-  bugs it found in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it
-  yourself with `npm run verify`.
+  same cases and compares: **2,118 checks, 0 failures** in the last full run, across orbits,
+  burns, landings, structure, breakup, boosters, the air, entry, parachutes, heating and
+  wings. Read the method, the numbers and the bugs it found in
+  [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it yourself with
+  `npm run verify`.
 - **Structures from first principles.** The vessel flies as one rigid body, and each step the
   game works out what every joint must carry for it to move that way: Newton's second law on
   the piece beyond the joint, compared with the strength of a thin bolted ring. A separately
-  written multibody reference and closed-form cases check it: **300 more checks, 0 failures**,
+  written multibody reference and closed-form cases check it: **300 of those checks**,
   agreeing to about one part in 10¹⁴. The model, its numbers, its limits and one defect the
   checks found are in [docs/STRUCTURE.md](docs/STRUCTURE.md).
 - **Breakup with its assumptions stated.** Fins and wings fail at a thin root under the lift
   they really carry. Antennas, open panels, nose cones and booster clamps carry a rated dynamic
   pressure, like a temperature limit, because flutter and buckling are not things a rigid-body
-  load can show. **113 more checks, 0 failures**, on the airflow each part sees, the step on
+  load can show. **113 of the checks**, on the airflow each part sees, the step on
   which it goes, and what a tear-off conserves: [docs/AERO_BREAKUP.md](docs/AERO_BREAKUP.md).
 - **Honest about its limits.** No n-body gravity, so no Lagrange points and no halo orbits.
-  Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
+  Atmospheres are exponential with one scale height, and there are no winds. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
   verification document lists what the model cannot do, with measurements.
 - **A science reference in the game.** Fifteen chapters and 107 equations, from the two-body
@@ -448,20 +452,26 @@ Starwright does not fake its orbits, and it shows its work.
   above the speed of sound included), structural loads and aerodynamic breakup, with worked examples computed from the game's own worlds and flight code and
   three calculators. It is on the title menu under **Science**.
 - **Two vessels flown at once.** A dropped booster and its upper stage are both integrated
-  with the same 20 ms step however far apart they get. **15 more checks, 0 failures**: mass and
+  with the same 20 ms step however far apart they get. **15 of the checks**: mass and
   momentum are shared out exactly at separation, a booster 5 km from the ship being flown
   follows the independent two-body reference to 5 micrometres over 100 seconds, and the same
   launch watched from the upper stage, from the booster, or switching every five seconds comes
   out identical to the last bit. See [docs/BOOSTERS.md](docs/BOOSTERS.md).
 - **A booster that predicts its own fall.** The return program integrates the stage's fall four
   times a second (gravity, drag in air that turns with the planet, the drag rise at Mach 1) and
-  steers the predicted impact point onto the target. **20 more checks, 0 failures**: against a
+  steers the predicted impact point onto the target. **20 of the checks**: against a
   separate integrator with its own atmosphere, over a 63 km fall, the impact point agrees within
   0.1% of the distance, the speed within 0.13%, and the predictor is 2.4 m from the reference.
   The landing burn stops within 0.03% of the rocket equation. 312 of 312 varied returns landed
   within 0.3 m at 1.75 m/s.
+- **Parachutes against a separate integration.** A point mass under a point canopy, flown with
+  Runge-Kutta at 1 ms by code that shares nothing with the game. **261 of the checks**: the
+  canopy's shape at every stage, sinking speed and line load under every parachute on every
+  world with air, and the reefed and full openings with the peak load within 0.2 %. Writing it
+  found four faults in the first version of the model, all fixed:
+  [docs/PARACHUTES.md](docs/PARACHUTES.md).
 - **A deck at sea that is solid.** The landing barge is a level rectangle the physics stands a
-  stage on, tips it off the edge of, or lets it miss. **12 more checks, 0 failures**: a stage
+  stage on, tips it off the edge of, or lets it miss. **12 of the checks**: a stage
   flown down onto the deck stands at the same height, to 0.15 mm, as the same flight ended on
   level ground, and ten of ten returns from varied separations landed within 3 cm of the middle.
 
@@ -486,7 +496,8 @@ authority, heating and breakup all fall out of the same per-part sum.
 
 ### The framework
 
-1. **The air.** Density falls exponentially with height up to a hard top, and the atmosphere
+1. **The air.** Density falls exponentially with height and fades out smoothly at the top.
+   Each world has its own gas and temperature, so its own speed of sound. The atmosphere
    turns with the planet, so airspeed is measured against moving air.
 2. **The flow at each part.** A part away from the centre of mass moves with the spin of the
    vessel, so a tumbling rocket sees different air at its nose and its tail.
@@ -605,8 +616,9 @@ atmospheres (exact), a capsule drop against an integrated reference (0.9 m after
 fall), terminal velocity, re-entry (peak heat flux 113.4 kW/m² against a reference of
 113.4, with peak heating ahead of peak deceleration as Allen and Eggers predict), skin
 temperature and ablator lost on entries against a heat balance integrated separately
-(worst difference 0.024 %), and the
-force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference. Numbers and
+(worst difference 0.024 %), the
+force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference, and the
+lift of fins and wings against $4/\sqrt{\mathrm{Ma}^2 - 1}$ at Mach 3, 4 and 5 (within 0.2 %). Numbers and
 method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
 ### What it leaves out
@@ -648,7 +660,7 @@ The unit tests need Node 20 or newer and nothing else:
 
 ```sh
 npm test            # 581 tests, including scripted flights flown by the autopilot
-npm run verify      # the independent physics verification, about 6 minutes
+npm run verify      # the independent physics verification, 2,118 checks, 10 to 15 minutes
 ```
 
 The browser suites in `tests/e2e/` drive the real game in Chromium and need
