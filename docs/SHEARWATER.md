@@ -5,11 +5,13 @@ A two-stage rocket on methane and liquid oxygen, modelled on SpaceX's Starship (
 its size to suit Starwright's small worlds. The names are our own: the ship is the
 **Shearwater**, the booster is the **Stalwart**, the engine is the **Peregrine**.
 
-It is being built in steps. **Three are in the game: the rocket, the tower that launches and
-catches it, and refuelling in orbit.** The stack stands on the tower's mount, flies to orbit on
-its own two liquids and hot-stages, and the booster flies back and is caught by its two pins. In
-orbit the ship docks side by side with a propellant depot and is filled up through a propellant
-line. The ship's belly-first return comes next (see "What is not built yet").
+It is being built in steps. **Four of five are in the game: the rocket, the tower that launches
+and catches it, refuelling in orbit, and the ship's return.** The stack stands on the tower's
+mount, flies to orbit on its own two liquids and hot-stages, and the booster flies back and is
+caught by its two pins. In orbit the ship docks side by side with a propellant depot and is
+filled up through a propellant line. The ship comes home belly first on four flaps, flips
+upright and is caught by the same arms. The whole mission as one scenario comes next (see
+"What is not built yet").
 
 ## What is new in the game because of it
 
@@ -201,7 +203,9 @@ of monopropellant between the two ships, and adds about 1 m/s to the orbit.
 - A real transfer is planned to be driven by a pressure difference between the tanks, not a
   pump. The effect in the game is the same: a rate, and a need for settled liquid.
 - The thrusters burn monopropellant. The real ship's are fed from its main tanks.
-- The two hulls cannot hit each other. Only the ports meet.
+- While the two ports are within 3 m and closing slower than 3 m/s the hulls are left to dock.
+  Outside that, the ship and the depot are solid to each other like any two craft
+  ([SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md#craft-against-craft)).
 - Docking snaps the pair exactly parallel, as nose docking snaps two rings into line.
 - A pump that is running when the game is saved is stopped when it is loaded.
 - Ship-to-ship transfer of this kind has not yet been done in space by anyone.

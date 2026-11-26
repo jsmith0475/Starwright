@@ -165,8 +165,10 @@ Run `node tests/verify/run.mjs --only 12` for the independent checks and
 
 ## What it does not do
 
-- **It does not see rocks, trees or buildings.** It reads the height field. Scatter drawn on the
-  ground is not in the physics either, so nothing it cannot see can trip a lander.
+- **It does not see trees or buildings.** It reads the height field and the boulder field: a
+  boulder under the footprint makes a site unfit ([BOULDERS.md](BOULDERS.md)). Trees, grass and
+  pebbles are not in the physics, so they cannot trip a lander. Buildings are solid but stand
+  only at the space centre on Verda, where "Land here" is not offered.
 - **It cannot fix a landing with no propellant.** With too little left it comes down where it is
   and says so.
 - **It only chooses along the orbit you are on.** It will not change the orbit's plane to reach

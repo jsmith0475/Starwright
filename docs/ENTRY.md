@@ -210,7 +210,7 @@ map, and the landing against the prediction (15 checks).
   released with no hold swings about its trim angle for a long time before it settles. Real
   capsules are only weakly damped too, and fly with their thrusters holding them.
 - **Only capsules.** Entry trim is offered on crewed capsules with a wide base. A lifting
-  body, a spaceplane belly first, or a Shearwater-class ship flying belly first are steps D
-  and beyond.
+  body or a spaceplane belly first is not covered. The Shearwater's ship does fly belly first,
+  on its own four flaps and its own guidance ([SHEARWATER.md](SHEARWATER.md#the-ships-return)).
 - **The ballast shift is free.** It takes no time, costs nothing, and can be switched at any
   moment. Mars Science Laboratory did it by throwing weights overboard.

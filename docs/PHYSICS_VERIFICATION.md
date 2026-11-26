@@ -6,12 +6,13 @@ cannot do.
 
 Run it yourself:
 
-    npm run verify                         full report, about 6 minutes (node tests/verify/run.mjs)
+    npm run verify                         full report, 10 to 15 minutes (node tests/verify/run.mjs)
     node tests/verify/run.mjs --fast       the quick subset, about 40 s
     node tests/verify/run.mjs --only 3f    one group
     npm test                               the unit suite, which includes tests/unit/physics_verify.test.js
 
-Last full run: **861 checks passed, 0 failed, 129 informational rows.** Unit suite: 305 tests, 0 failures.
+Last full run (25 November 2026, on `main` after pull request 50): **2,118 checks passed, 0 failed, 259 informational
+rows.** Unit suite: 581 tests, 0 failures.
 
 ## 1. The model the game uses
 

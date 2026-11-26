@@ -44,6 +44,10 @@ for, and a landing you walk away from feels earned.
 - Make legs unfold at the speed they are drawn unfolding when the craft is already on the ground.
 - A read-out of leg travel used on the last landing.
 
+Added since: the **Heron Folding Leg**, a long leg for a returning booster that lies flat against
+the tank for the whole flight and swings out 60 m above the ground
+([BOOSTERS.md](BOOSTERS.md#legs-that-fold)).
+
 ## 2. Structural dynamics
 
 **Status: built.** How it works, what was checked against what, and what is still open are in
@@ -119,8 +123,11 @@ ground looks to a real place, the more it feels like you went there.
 **Today.** All nineteen bodies have procedural terrain with level of detail that refines as you
 approach, generated in the browser with no image files. Worlds with air have atmospheric
 scattering, and the home world has vegetation. Since the first pass, each world also has
-surface features and rocks of its own close up. They are drawn, not built: a rover does not
-feel a drawn crater.
+surface features and rocks of its own close up. The craters, plates and ripples are drawn, not
+built: a rover does not feel a drawn crater. The boulders are solid: wheels, legs, hulls and
+Pips on foot all meet the rock that is drawn, and the landing and rover autopilots avoid them
+([BOULDERS.md](BOULDERS.md)). Buildings, the launch pad and its mount, the towers and other
+craft are solid too ([SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md)).
 
 **Still open, for anyone who wants it.** Put craters, dunes and canyons into the height
 function itself, so they can be driven over and landed in (this changes physics and needs the
@@ -131,6 +138,10 @@ is a good place for artists who can write shaders.
 
 ## 5. Reusable boosters
 
+**Status: built, with two things open** (a recovery plan chosen before launch, and pay for a
+recovered stage). What is built, what was measured and what was checked are in
+[BOOSTERS.md](BOOSTERS.md) and [SHEARWATER.md](SHEARWATER.md).
+
 **What it is.** Fly the first stage back. After separation the booster flips, makes a boostback
 burn, steers through the air on its grid fins, relights and lands on its legs, on the pad or
 downrange. You fly it yourself or hand it to a guidance program, while the upper stage carries
@@ -140,25 +151,40 @@ on to orbit.
 reason many people watch launches at all. In career mode it changes the economics: a recovered
 booster is money back.
 
-**Today.** The pieces are close. There are grid fins (the Lattice Vane), air brakes, throttle
-control, landing legs, and a guidance program that already performs a powered landing on
-airless moons. What is missing is following two vessels at once: a stage you leave behind
-in the atmosphere is removed once the ship you are flying is out of range of it.
+**How it was built.** A dropped stage stays under full physics while the other one flies, with a
+quick switch between them, and boostback, entry and landing guidance work in air. Item 1 makes
+the touchdown worth watching.
 
-**Building it.** Keep a dropped stage under full physics while the other one flies, with a quick
-switch between them. Write boostback, entry and landing guidance that works in air. Add
-recovery credit in career mode for stages landed intact. Item 1 makes the touchdown worth
-watching.
-
-**Where it stands.** Three parts are built. A dropped stage with a guidance ring keeps flying under
+**Where it stands.** A dropped stage with a guidance ring keeps flying under
 full physics at any distance and one key hops between booster and upper stage. A stage with
 grid fins and legs flies itself back: the ascent assist stages early to leave it the propellant,
 and it boosts back, makes an entry burn if it needs one, steers on its fins and lands by the pad
 while the upper stage goes to orbit. It lands on the Return Pad, a marked pad north of the launch
-site, or on the barge *Patient Tide*, a solid deck 40 km out to sea. Still to come: a stock
-reusable rocket, a recovery plan chosen before launch, and recovery pay. [What is built, what was measured and what was checked.](BOOSTERS.md)
+site, or on the barge *Patient Tide*, a solid deck 40 km out to sea. The **Heron Folding Leg**
+stays flat against the tank until the last seconds, and a stack separator now leaves three
+pieces, so the booster comes home with a clean top.
+
+The stock **Shearwater** is the reusable rocket: a 39-engine stack on methane and oxygen whose
+booster flies back to the **Catch Tower** and is caught by its arms on two pins, with no legs,
+and whose ship comes home from orbit belly first on four flaps, flips upright near 3 km and is
+caught by the same arms. The ship cannot come home with freight aboard or with more than about
+20 % of its propellant ([SHEARWATER.md](SHEARWATER.md)).
+
+**Still open, for anyone who wants it.**
+
+- A recovery plan chosen before launch. Today the ascent assist always stages for a return to
+  the Return Pad (or the tower), and the barge is picked by hand after separation.
+- Recovery pay in career mode. Landing or catching a stage pays nothing yet.
+- A stock rocket that lands on legs. The Shearwater is caught; a legged booster is one you
+  build.
+- A barge that moves, and more than one.
+
+[What is built, what was measured and what was checked.](BOOSTERS.md)
 
 ## 6. Deeper aerodynamics and re-entry
+
+**Status: five of seven steps built** (A the air, B forces on bodies, C capsule trim and bank,
+D wings and fins at speed, E heating by shape). Plasma and blackout (F) and winds (G) are open.
 
 **What it is.** Lift on capsules and bodies, so you can steer a re-entry by rolling. A speed of
 sound that changes with altitude. Winds. Heating that depends on the shape and attitude of the
@@ -180,6 +206,12 @@ shows the entry's bank, lift, heating and the peaks ahead, and the map draws the
 the air to the landing point ([ENTRY.md](ENTRY.md)). Nothing flies the bank toward a chosen
 site for you yet. Since step E each part is heated by its own size, attitude and shadow, its
 skin follows a heat balance, and heat shields ablate by area ([HEATING.md](HEATING.md)).
+Since step D a wing or fin above Mach 1 keeps at most the lift that supersonic theory allows
+and pays more drag for it, the Lattice Vane chokes near Mach 1, and the attitude hold knows
+how much authority its surfaces have at the present Mach number ([WINGS.md](WINGS.md)).
+Alongside these steps the parachutes were rebuilt: a canopy at its true size on real lines,
+flown as its own body, with a drogue in every main pack, staged opening and a line strength
+([PARACHUTES.md](PARACHUTES.md)).
 [docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
 
 **The plan.** The mathematics is written up in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md) and the
@@ -187,9 +219,11 @@ build is specified in seven steps in [REENTRY_SPEC.md](REENTRY_SPEC.md): A the a
 B forces on bodies at high Mach (built), C capsule trim and steering (built), E heating by shape and attitude (built),
 D wings and fins at speed (built, [WINGS.md](WINGS.md)), F plasma and blackout where it is real, G winds.
 
-**Building it.** Add body lift, a temperature profile per atmosphere, occlusion so shielded
-parts stay cool, and optional winds. Every change needs a matching check in the verification
-suite, so the numbers stay honest. This is the item for people who know aerodynamics.
+**Still open, for anyone who wants it.** Steps F and G: plasma and radio blackout where it is
+real, and winds. A guided entry that flies the bank toward a chosen landing site. Sweep and
+wave drag on wings. A parachute sequencer that also waits for a height. Every change needs a
+matching check in the verification suite, so the numbers stay honest. This is the item for
+people who know aerodynamics.
 
 ## 7. Optional n-body gravity
 
@@ -221,8 +255,11 @@ mission beyond it, and a base gives you a reason to return to a world you have a
 on.
 
 **Today.** Docking, undocking and fuel transfer between docked vessels work, vessels persist
-between flights, and the tracking station follows all of them. There are no resources to
-gather and no drills or refineries.
+between flights, and the tracking station follows all of them. There is one propellant depot,
+*Deepwell*, in low orbit of Verda in the scenario **Topping Up**: a ship docks side by side
+with it and is filled with methane and oxygen while thrusters hold the liquid settled
+([SHEARWATER.md](SHEARWATER.md#refuelling-in-orbit)). It is placed in orbit full and nothing
+boils off. There are no resources to gather and no drills or refineries.
 
 **Building it.** New parts (drill, refinery, storage, a surface docking connector), resource
 maps for each world, processing that keeps running while you are away, and career missions

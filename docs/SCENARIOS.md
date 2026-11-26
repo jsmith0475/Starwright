@@ -33,6 +33,7 @@ press Start, and you are there with a short brief and a list of objectives.
 | `station-run` | Station Run | Verda | Launch pad, Tern; Hollin Station is in a 150 km orbit | Hard | Launch, rendezvous, dock |
 | `morning-orbit` | Morning Orbit | Verda | 95 km orbit, Larkspur | Easy | Raise the orbit above 200 km |
 | `hollin-approach` | Hollin Approach | Verda | 120 m from Hollin Station, Tern, target set | Medium | Dock |
+| `topping-up` | Topping Up | Verda | 100 km orbit, Shearwater 150 m from the depot *Deepwell* | Medium | Dock side by side, fill the tanks, let go |
 | `pell-descent` | Above Pell | Pell | 30 km orbit, Pellfarer lander with its transfer stage | Medium | Land on Pell |
 | `pell-homecoming` | Pell Homecoming | Pell | Landed, lander three-quarters full | Medium | Lift off and return to Verda |
 | `ost-outpost` | Ost Outpost | Ost | Landed, Ostrider with Bram and Tilly | Easy | Walk, plant a flag, fly back to orbit |

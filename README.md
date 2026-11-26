@@ -170,17 +170,23 @@ Grok, worked on Starwright, and it is not affiliated with or endorsed by either 
 | | |
 |---|---|
 | [![A capsule and upper stage on the build floor of the assembly building](media/shot-assembly.jpg)](media/shot-assembly.jpg) | [![A two-stage rocket in a gravity turn over the coast](media/shot-launch.jpg)](media/shot-launch.jpg) |
-| **Build anything.** 186 parts: capsules and probe cores, liquid, solid, jet, ion and nuclear engines, wings, wheels, docking rings, science gear. Symmetry, staging and a live delta-v budget for every stage. | **Fly it yourself.** Staging, a gravity turn through real drag and heating, a navball and a flight computer that helps when you ask and stays out of the way when you do not. |
+| **Build anything.** 202 parts: capsules and probe cores, liquid, solid, jet, ion and nuclear engines, wings, wheels, docking rings, science gear. Symmetry, staging and a live delta-v budget for every stage. | **Fly it yourself.** Staging, a gravity turn through real drag and heating, a navball and a flight computer that helps when you ask and stays out of the way when you do not. |
 | [![The map view with a transfer orbit and an encounter with the moon](media/shot-map.jpg)](media/shot-map.jpg) | [![A lander descending on its engine toward the grey surface of Pell](media/shot-moon.jpg)](media/shot-moon.jpg) |
 | **Plan the burn.** Drop a maneuver node on your orbit, drag the handles, and watch the encounter appear before you spend a drop of fuel. Time warp to 100,000×. | **Land on a moon.** Then step outside, plant a flag, take a sample and get everyone home through re-entry. |
 | [![A six-wheeled rover driving across the red surface of Rusk](media/shot-rover.jpg)](media/shot-rover.jpg) | [![The tracking station showing a world and the list of bodies in the Helion system](media/shot-system.jpg)](media/shot-system.jpg) |
-| **Not only rockets.** Rovers, spaceplanes off a runway, space stations assembled by docking, fuel pumped from tanker to ship. | **A whole solar system.** A star, eight planets, nine moons and a comet, each with its own terrain, gravity and sky. |
+| **Not only rockets.** Rovers, spaceplanes off a runway, space stations assembled by docking, fuel pumped from tanker to ship, and a ship filled from a depot in orbit. | **A whole solar system.** A star, eight planets, nine moons and a comet, each with its own terrain, gravity and sky. |
 | [![A tall rocket in a hard turn with coloured stress bands at its joints and the Structure read-out at 82 percent](media/shot-structure.jpg)](media/shot-structure.jpg) | [![A heavy rocket flipped across the airflow just after both side boosters were torn off, with the game's messages naming the cause](media/shot-aero.jpg)](media/shot-aero.jpg) |
 | **Structures that carry load.** Every joint between two parts bears a computed load: thrust, weight, drag and bending. Tall thin stacks flex, and a hard turn in thick air snaps them. A stress overlay shows the load in flight, and the assembly building names the weak joint before you launch. [How it works.](docs/STRUCTURE.md) | **Air that behaves like air.** Every part meets the airflow on its own, so drag, stability and lift come from the shape you built. Fins keep a rocket pointed, wings stall, drag climbs through the speed of sound, and at max Q the air can tear parts off. [The framework and the math.](#aerodynamics) |
 | [![Standing on Rusk at sunrise: red mud cracked into plates, wind-cut stones and streaks of high dust in the sky](media/shot-terrain-rusk.jpg)](media/shot-terrain-rusk.jpg) | [![Standing on Brim: grey ice floes with dark water in the leads between them, under a black sky](media/shot-terrain-brim.jpg)](media/shot-terrain-brim.jpg) |
 | **Ground of its own on every world.** Step out on Rusk and you stand on cracked mud pans, wind ripples and wind-cut stones under a sky streaked with dust. Every landable world has its own ground at walking scale and its own kinds of rock. [What each world has.](docs/WORLDS.md) | **Ice that broke and froze again.** Brim is a sea of floes with dark water in the leads. Ost and Quell are plates of old ice with blue in the cracks. |
 | [![Standing on Ost at low sun: pale ice plates with blue cracks and blocks of ice lying on them](media/shot-terrain-ost.jpg)](media/shot-terrain-ost.jpg) | [![Sear's lava sea from five kilometres up: dark crust plates with bright glowing cracks between them](media/shot-terrain-sear.jpg)](media/shot-terrain-sear.jpg) |
 | **Craters down to a hand's width.** Pell, Nock, Nym, Dray, Cindra and Slate are pocked at every size from 150 metres to a few centimetres, with bright rims and dark floors. | **A lava sea with a crust.** Sear's molten sea carries dark plates with the glow coming up between them, and some plates are still dull red. |
+| [![The Shearwater falling belly first 9 km above the coast, its four flaps steering, in the Belly First scenario](media/shot-belly.jpg)](media/shot-belly.jpg) | [![The Shearwater docked side by side with the propellant depot Deepwell in orbit over Verda](media/shot-depot.jpg)](media/shot-depot.jpg) |
+| **A ship that comes home on its belly.** The Shearwater falls flat through the air on four flaps, flips upright near 3 km and is caught by the arms of the tower it left from. [The numbers and the limits.](docs/SHEARWATER.md#the-ships-return) | **A fuel stop in orbit.** Dock side by side with the depot *Deepwell* and take on 93 t of methane and oxygen. The pump only draws while thrusters hold the liquid settled in the tanks. [How it works.](docs/SHEARWATER.md#refuelling-in-orbit) |
+| [![A capsule hanging far below a full-size green and white parachute on long lines, 740 m above the ground](media/shot-parachute.jpg)](media/shot-parachute.jpg) | [![A capsule in the sea inside a ring of foam, with a crown of spray falling back around it](media/shot-splash.jpg)](media/shot-splash.jpg) |
+| **Parachutes at their true size.** A canopy 22 m across on 33 m lines, flown as a body of its own so the capsule swings under it. A drogue comes out first, the main opens in stages, and lines that are overloaded tear. [How it flies.](docs/PARACHUTES.md) | **A splashdown that looks like one.** A crown of spray, a ring of foam running out over the water, and a capsule that rides the swell afterwards. |
+| [![A rocket on the launch pad standing on a launch mount fitted to it, with its engine bell hanging free over the flame opening and propellant spheres behind](media/shot-mount.jpg)](media/shot-mount.jpg) | [![A six-wheeled rover on the grey surface of Pell stopped against a boulder as tall as itself](media/shot-boulder.jpg)](media/shot-boulder.jpg) |
+| **A space centre made of solid things.** A rocket stands on a launch mount fitted to it, held by clamps that let go at lift-off, with tower arms that reach the hull. The buildings, the pad and both towers are solid, and so are other craft: hit one fast and parts break off. [What is solid.](docs/SOLID_SPACE_CENTRE.md) | **Boulders you can hit.** Every rock you can see is the rock the physics meets. A wheel rolls over a low stone and is stopped by a tall one, a leg can stand on one, and the autopilots steer round them. [How it works.](docs/BOULDERS.md) |
 
 And around the flying:
 
@@ -188,8 +194,9 @@ And around the flying:
   contract board, and a crew of Pips who gain experience.
 - **A flight program of 71 missions** from a first hop to the far edge of the system, so there
   is always a next goal.
-- **16 ready-made scenarios.** Skip to the good part: already in orbit, 120 metres from a
-  station, on final descent to a moon, or falling from 120 km in a bare capsule.
+- **17 ready-made scenarios.** Skip to the good part: already in orbit, 120 metres from a
+  station, 150 metres from a propellant depot, on final descent to a moon, or falling from
+  120 km in a bare capsule. [The full list.](docs/SCENARIOS.md)
 - **Flight School.** Eight illustrated lessons from a first hop to rendezvous, most with a
   **Try it** button.
 - **Rockets that bend and break.** Every joint between two parts carries a computed load. Tall
@@ -222,6 +229,29 @@ And around the flying:
 - **Landing legs with real suspension** that compress and settle on touchdown, and long
   **folding legs** for a booster: flat against the tank all the way up and back, swung out a few
   seconds before it lands.
+- **A capsule you steer home with lift.** Switch on **Entry trim** and a capsule rests at
+  18 degrees to the air and lifts; **Bank hold** turns that lift with the roll keys, for a
+  gentler, longer entry or a shorter, harder one. An Entry box shows the peaks still ahead and
+  the map draws the path through the air to where you come down. Nothing flies the bank to a
+  chosen site for you yet. See [flying an entry](docs/ENTRY.md).
+- **Heat that knows the shape of your ship.** Each part is heated by its own size, attitude and
+  shadow. A thin antenna out in the stream runs hottest, a wide blunt shield runs cooler, and
+  anything tucked behind the shield is safe. See [heating](docs/HEATING.md).
+- **Parachutes with real limits.** Every main pack carries a drogue that can open as fast as
+  Mach 3. The main waits for Mach 0.4, comes out as a narrow sock, fills over six seconds and
+  opens fully 900 m above the ground. Each has a line strength, and a craft far too heavy for
+  its parachute tears it. After touchdown the canopy topples and lies beside the craft.
+- **A landing autopilot that looks at the ground.** On airless worlds **Land here** waits in
+  orbit for ground the lander can stand on, keeps clear of hills on the way down, flies across
+  to the nearest level spot at the hover, and avoids boulders. In 288 test landings on the
+  twelve airless worlds the old autopilot left 212 landers standing and this one left all 288.
+  See [landing sites](docs/LANDING_SITES.md).
+- **Solid ground furniture and solid craft.** Boulders, buildings, the launch mount, the
+  service tower, the Catch Tower and other craft all stop a vessel, and a fast hit breaks parts
+  off or destroys it by the same rule as hitting the ground. Trees, grass and pebbles are still
+  pictures.
+- **Parts that fit.** Brace Struts and Sip Fuel Lines are made to length to the booster they
+  face, and folding solar wings turn on their booms to face the sun.
 - **A self-running demo tour** if you just want to watch the game fly itself for six minutes:
   [start it in your browser](https://jsmith0475.github.io/Starwright/?demo=1).
 
@@ -382,44 +412,52 @@ Starwright does not fake its orbits, and it shows its work.
   with a 20 ms leapfrog step.
 - **Checked against independent physics.** A separate reference implementation with its own
   high-order integrator and its own Kepler solver, sharing none of the game's maths, flies the
-  same cases and compares: **861 checks, 0 failures.** Read the method, the numbers and the
-  bugs it found in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it
-  yourself with `npm run verify`.
+  same cases and compares: **2,118 checks, 0 failures** in the last full run, across orbits,
+  burns, landings, structure, breakup, boosters, the air, entry, parachutes, heating and
+  wings. Read the method, the numbers and the bugs it found in
+  [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md), or run it yourself with
+  `npm run verify`.
 - **Structures from first principles.** The vessel flies as one rigid body, and each step the
   game works out what every joint must carry for it to move that way: Newton's second law on
   the piece beyond the joint, compared with the strength of a thin bolted ring. A separately
-  written multibody reference and closed-form cases check it: **300 more checks, 0 failures**,
+  written multibody reference and closed-form cases check it: **300 of those checks**,
   agreeing to about one part in 10¹⁴. The model, its numbers, its limits and one defect the
   checks found are in [docs/STRUCTURE.md](docs/STRUCTURE.md).
 - **Breakup with its assumptions stated.** Fins and wings fail at a thin root under the lift
   they really carry. Antennas, open panels, nose cones and booster clamps carry a rated dynamic
   pressure, like a temperature limit, because flutter and buckling are not things a rigid-body
-  load can show. **113 more checks, 0 failures**, on the airflow each part sees, the step on
+  load can show. **113 of the checks**, on the airflow each part sees, the step on
   which it goes, and what a tear-off conserves: [docs/AERO_BREAKUP.md](docs/AERO_BREAKUP.md).
 - **Honest about its limits.** No n-body gravity, so no Lagrange points and no halo orbits.
-  Atmospheres are exponential with a hard top. The system is about a tenth of real scale: low
+  Atmospheres are exponential with one scale height, and there are no winds. The system is about a tenth of real scale: low
   orbit is about 2.2 km/s and takes 35 minutes, and the moon is nine hours away. The
   verification document lists what the model cannot do, with measurements.
-- **A science reference in the game.** Fifteen chapters and 99 equations, from the two-body
+- **A science reference in the game.** Fifteen chapters and 107 equations, from the two-body
   problem and the vis-viva equation through the rocket equation, patched conics, re-entry
   heating and rendezvous, to the game's own aerodynamics, structural loads and aerodynamic
   breakup, with worked examples computed from the game's own worlds and flight code and
   three calculators. It is on the title menu under **Science**.
 - **Two vessels flown at once.** A dropped booster and its upper stage are both integrated
-  with the same 20 ms step however far apart they get. **15 more checks, 0 failures**: mass and
+  with the same 20 ms step however far apart they get. **15 of the checks**: mass and
   momentum are shared out exactly at separation, a booster 5 km from the ship being flown
   follows the independent two-body reference to 5 micrometres over 100 seconds, and the same
   launch watched from the upper stage, from the booster, or switching every five seconds comes
   out identical to the last bit. See [docs/BOOSTERS.md](docs/BOOSTERS.md).
 - **A booster that predicts its own fall.** The return program integrates the stage's fall four
   times a second (gravity, drag in air that turns with the planet, the drag rise at Mach 1) and
-  steers the predicted impact point onto the target. **20 more checks, 0 failures**: against a
+  steers the predicted impact point onto the target. **20 of the checks**: against a
   separate integrator with its own atmosphere, over a 63 km fall, the impact point agrees within
   0.1% of the distance, the speed within 0.13%, and the predictor is 2.4 m from the reference.
   The landing burn stops within 0.03% of the rocket equation. 312 of 312 varied returns landed
   within 0.3 m at 1.75 m/s.
+- **Parachutes against a separate integration.** A point mass under a point canopy, flown with
+  Runge-Kutta at 1 ms by code that shares nothing with the game. **261 of the checks**: the
+  canopy's shape at every stage, sinking speed and line load under every parachute on every
+  world with air, and the reefed and full openings with the peak load within 0.2 %. Writing it
+  found four faults in the first version of the model, all fixed:
+  [docs/PARACHUTES.md](docs/PARACHUTES.md).
 - **A deck at sea that is solid.** The landing barge is a level rectangle the physics stands a
-  stage on, tips it off the edge of, or lets it miss. **12 more checks, 0 failures**: a stage
+  stage on, tips it off the edge of, or lets it miss. **12 of the checks**: a stage
   flown down onto the deck stands at the same height, to 0.15 mm, as the same flight ended on
   level ground, and ten of ten returns from varied separations landed within 3 cm of the middle.
 
@@ -444,7 +482,8 @@ authority, heating and breakup all fall out of the same per-part sum.
 
 ### The framework
 
-1. **The air.** Density falls exponentially with height up to a hard top, and the atmosphere
+1. **The air.** Density falls exponentially with height and fades out smoothly at the top.
+   Each world has its own gas and temperature, so its own speed of sound. The atmosphere
    turns with the planet, so airspeed is measured against moving air.
 2. **The flow at each part.** A part away from the centre of mass moves with the spin of the
    vessel, so a tumbling rocket sees different air at its nose and its tail.
@@ -508,10 +547,21 @@ draws the path through the air to the landing point: [docs/ENTRY.md](docs/ENTRY.
 A wing or fin of area $S$ at angle of attack $\alpha$, with lift-curve slope $a$ (3.6 per
 radian for a wing, 1.6 for a fin). While the flow is attached:
 
-$$C_L = a \alpha \qquad C_D = 0.012 + 0.07 C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S C_L \qquad D = \tfrac{1}{2} \rho v^2 S C_D M$$
+$$C_L = a \alpha \qquad C_D = 0.012\, M_s + K C_L^2 \qquad L = \tfrac{1}{2} \rho v^2 S C_L \qquad D = \tfrac{1}{2} \rho v^2 S C_D$$
 
-$M$ is the one drag-rise curve lifting surfaces keep for now: 1 below Mach 0.7, 2.0 at Mach 1.1,
-1.5 above Mach 2.5.
+Below Mach 0.7 nothing more is needed: $K = 0.07$ and $M_s = 1$. Faster, the profile drag rises
+on the slender curve $M_s$ of the table above, and above Mach 1 the lift a surface can make is
+capped by Ackeret's result for a thin plate in supersonic flow, while the drag that lift costs
+grows:
+
+$$a \le \frac{4}{\sqrt{\mathrm{Ma}^2 - 1}} \qquad K = \max\left(0.07,\ \frac{\sqrt{\mathrm{Ma}^2 - 1}}{4}\right)$$
+
+The cap takes hold at Mach 1.49 for a wing and Mach 2.69 for a fin. At Mach 5 both are down to
+a slope of 0.82, so a fin has half its low-speed grip. A grid fin (the Lattice Vane) also
+chokes between Mach 0.8 and 1.3, losing up to 40 % of its lift and doubling its drag; those
+two numbers are the game's own. One consequence: a rocket held steady only by small fins at
+the tail can go unstable above about Mach 4, as real sounding rockets do. The model and what
+it leaves out are in [docs/WINGS.md](docs/WINGS.md).
 
 Past the stall (16° for a wing, 26° for a fin) it blends smoothly into a flat plate, so a wing
 still makes force at any angle, including backwards:
@@ -544,6 +594,10 @@ stream is heated harder than the capsule it stands on, a part in a heat shield's
 - **Debris flies.** A torn-off booster keeps the drag of its own parts and tumbles on.
 - **Shape matters at speed.** Above Mach 2 a pointed rocket slips through on less drag, a blunt
   capsule on more, and a stage behind a wide heat shield is sheltered until the vessel turns.
+- **Fins weaken at speed.** Steering on fins fades above Mach 1, and the attitude hold knows
+  how much authority it has at the present Mach number, so it does not overcorrect.
+- **A capsule can lift.** Trimmed at 18 degrees, a heat shield lifts 0.27 times its drag, which
+  is enough to stretch or shorten an entry by rolling.
 
 ### Checked against
 
@@ -552,15 +606,18 @@ atmospheres (exact), a capsule drop against an integrated reference (0.9 m after
 fall), terminal velocity, re-entry (peak heat flux 113.4 kW/m² against a reference of
 113.4, with peak heating ahead of peak deceleration as Allen and Eggers predict), skin
 temperature and ablator lost on entries against a heat balance integrated separately
-(worst difference 0.024 %), and the
-force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference. Numbers and
+(worst difference 0.024 %), the
+force and torque on single parts from Mach 0.5 to 8 against a triangle-mesh reference, and the
+lift of fins and wings against $4/\sqrt{\mathrm{Ma}^2 - 1}$ at Mach 3, 4 and 5 (within 0.2 %). Numbers and
 method are in [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md).
 
 ### What it leaves out
 
-One scale height per atmosphere and no winds. A capsule held at an angle lifts above Mach 1.5
-but cannot yet hold that angle by itself. Shock waves from one part do not strike another.
-Each part has one temperature, there is no radiative heating from the shock layer, and no flutter or buckling: thin parts carry a stated air rating instead.
+One scale height per atmosphere and no winds. Nothing flies a capsule's bank toward a chosen
+landing site for you. Wings have no sweep effect and no wave drag from thickness. Shock waves
+from one part do not strike another. Each part has one temperature, there is no radiative
+heating from the shock layer, no plasma blackout, and no flutter or buckling: thin parts carry
+a stated air rating instead.
 Deeper aerodynamics and re-entry is [roadmap item 6](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry).
 
 ## Under the hood
@@ -593,8 +650,8 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 478 tests, including scripted flights flown by the autopilot
-npm run verify      # the independent physics verification, about 6 minutes
+npm test            # 581 tests, including scripted flights flown by the autopilot
+npm run verify      # the independent physics verification, 2,118 checks, 10 to 15 minutes
 ```
 
 The browser suites in `tests/e2e/` drive the real game in Chromium and need
@@ -636,18 +693,22 @@ what the game does today, and what building it involves.
    crust, wind ripples), rocks that belong to it, a high cloud or dust layer where there is
    air, and proper dawn and dusk light on the clouds. The ground the physics stands on did not
    move. [How it works, what was checked, and what is still open.](docs/WORLDS.md)
-5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **Three parts built.** Flip,
-   boost back, steer on the grid fins and land the first stage on its legs while the upper stage
-   flies on to orbit. Today a first stage with a guidance ring, fins and legs flies itself back
-   and lands on the Return Pad or on a barge at sea, and one key hops between it and the upper
-   stage. A stock reusable rocket, a recovery plan and recovery pay come next. [What is built and what was checked.](docs/BOOSTERS.md)
+5. **[Reusable boosters.](docs/ROADMAP.md#5-reusable-boosters)** **Built, with two things
+   open.** A first stage with a guidance ring, fins and legs flies itself back and lands on the
+   Return Pad or on a barge at sea, one key hops between it and the upper stage, and the stock
+   *Shearwater* has a booster and a ship that are both caught by a tower. A recovery plan chosen
+   before launch and pay for a recovered stage are still open.
+   [What is built and what was checked.](docs/BOOSTERS.md)
 6. **[Deeper aerodynamics and re-entry.](docs/ROADMAP.md#6-deeper-aerodynamics-and-re-entry)**
-   Lift on capsules so you can steer a re-entry, winds, and heating that depends on shape.
-   **First step built:** a true speed of sound on every world. [The science](docs/REENTRY_SCIENCE.md) and [the build specification](docs/REENTRY_SPEC.md).
+   **Five of seven steps built:** a true speed of sound on every world, forces on real shapes
+   above the speed of sound, a capsule you steer home with lift, heating by shape, and wings
+   and fins above Mach 1. Plasma blackout and winds are still to come.
+   [The science](docs/REENTRY_SCIENCE.md) and [the build specification](docs/REENTRY_SPEC.md).
 7. **[Optional n-body gravity.](docs/ROADMAP.md#7-optional-n-body-gravity)** Lagrange points,
    halo orbits and low-energy transfers, starting as an overlay in the map.
 8. **[Stations and surface bases.](docs/ROADMAP.md#8-stations-and-surface-bases)** Mine a moon,
-   refine propellant, and refuel ships far from home.
+   refine propellant, and refuel ships far from home. A depot in low orbit that fills a ship is
+   already in the game.
 9. **[A deeper career.](docs/ROADMAP.md#9-a-deeper-career)** More missions, more science at
    every world, and crew who train into specialists.
 10. **[A faster-than-light drive and a second star system.](docs/ROADMAP.md#10-a-faster-than-light-drive-and-a-second-star-system)**
@@ -675,8 +736,8 @@ You do not have to be a programmer.
 
 **If you know rockets, orbits or aerodynamics:**
 - Read [docs/PHYSICS_VERIFICATION.md](docs/PHYSICS_VERIFICATION.md) and tell us where the
-  model should be better. Lift on capsules, winds, a porkchop transfer planner and an optional
-  n-body mode are all open.
+  model should be better. Winds, a guided entry, plasma blackout, a porkchop transfer planner
+  and an optional n-body mode are all open.
 - Check the numbers on the parts. If an engine's specific impulse or a tank's mass ratio makes
   you wince, say so.
 
