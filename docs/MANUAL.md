@@ -178,6 +178,8 @@ down on its engine, and it looks at the ground before it does:
 
 - From orbit it may say "the ground ahead is too steep to stand on" and stay in orbit under time
   warp until there is better ground below. It waits one orbit at most.
+- It does not light the engine until the lander has turned to face backwards, and it plans the
+  braking burn to last 20 seconds or more where the engine allows, so there is time in hand.
 - On the way down it keeps clear of hills, and pulls up if one rises in front of it.
 - At the hover it tells you what is under you, flies across to the nearest level spot, and comes
   down there.
@@ -275,6 +277,60 @@ for.
   **Belly First** starts in orbit ready for it.
 
 [SHEARWATER.md](SHEARWATER.md) has the numbers. In career mode it needs the launch pad at its top level (772 t).
+
+## Parachutes
+
+Press Space (or stage) to **arm** a parachute. It does not open the moment you arm it: it waits
+while the air is too thin, while the craft is faster than the parachute can take, or while the
+jolt of opening would come too close to the strength of its lines, and the flight screen says
+which it is waiting for. Then it opens in stages:
+
+1. **Drogue.** Every main pack has a small drogue in it. If the craft is still fast (under
+   Mach 3, in air as thin as 49 km on Verda) the drogue goes out first and slows it down. A craft
+   that is already slow skips it.
+2. **Reefed.** Once the main's own limits are met (air of at least 0.02 atm, under Mach 0.4)
+   and the drogue has been out 2 seconds, the drogue is let go and pulls the main out with its
+   mouth held narrow by a reefing line.
+3. **Full.** Below 900 m above the ground (not above the sea) the main opens fully.
+
+The canopy is drawn at the size its drag implies: a Canopy Parachute is 22 m across on 33 m
+lines. The craft hangs under it and swings. The lines have a strength (150 kN for a Canopy
+Parachute, which holds a craft of up to about 3.7 t), and a canopy loaded past it tears away
+and is gone. After touchdown or splashdown the canopy falls over and lies beside the craft.
+
+Limits: the drogue cannot be staged or cut on its own, and the fallen canopy is only a picture.
+Details: [PARACHUTES.md](PARACHUTES.md).
+
+## Rovers and rocks
+
+Every boulder you can see is solid. A wheel rolls over a low stone and is stopped by a tall one,
+a leg can stand on a rock top, and a fast hit breaks parts as hitting the ground would. A Pip on
+foot is blocked at knee height. Pebbles, grass and trees are still only pictures.
+
+**Cruise control** (Guidance, on a rover with charge) holds a heading for 1 km. It looks ahead for
+rocks tall enough to stop a wheel, steers into the nearest open lane, slows to stop short when it
+has to, and backs off when it is boxed in. It also stops short of ground too steep to cross. The
+landing autopilot will not pick a spot with a boulder in the lander's footprint. Details:
+[BOULDERS.md](BOULDERS.md).
+
+## Buildings, the pad and other craft
+
+The space centre is solid: every building, the launch pad with its service tower, masts and
+tanks, the launch mount under your rocket, and the Catch Tower's column and arms. A slow touch
+stops the craft against the wall. A harder one breaks off whatever touched, and if the body of
+the craft hits much faster than it can take, the whole craft is lost. The flight screen says what
+happened, for example "Struck the Vehicle Assembly Building: the Tail Fin broke off". A rocket
+that falls back onto the pad meets its own mount.
+
+Craft are solid to each other too. Two that touch are pushed apart, the push shared by their
+masses, and each breaks by the same rule if they meet too fast. Docking is left alone: ports
+within 3 m that close slower than 3 m/s latch as before, and stages that have just separated do
+not count as touching until they are 1 m apart.
+
+Limits: trees, grass, vehicles, fences, walking Pips, the mount's clamps and the service tower's
+swing arms are not solid. A bump changes how fast a craft moves, not how it turns. A craft that
+comes to rest on a roof jitters slightly and cannot be recovered from there. Details:
+[SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md).
 
 ## Targeting, rendezvous and docking
 
