@@ -11,9 +11,9 @@ to orbit. It is being built in parts. **Three are in the game:**
 3. There are two places to land: the **Return Pad**, a marked concrete pad 600 m north of the launch
    pad, and the barge ***Patient Tide***, a steel deck anchored in the ocean 40 km east of it.
 
-The stock *Shearwater* has a booster that comes back to be caught by a tower instead of landing
-on legs ([Caught by the tower](#caught-by-the-tower)). A recovery plan you choose before launch
-and pay for landing a stage come next.
+The stock *Shearwater* is a reusable rocket whose booster is caught by the arms of the Catch
+Tower instead of landing on legs ([SHEARWATER.md](SHEARWATER.md)). A recovery plan you choose
+before launch, and pay for landing one, come next.
 
 ## Flying a booster back
 
@@ -264,8 +264,8 @@ What this says (it was measured before guidance was written, and guidance was bu
 
 ## Honest limits
 
-- No stock rocket is built to come back and land on legs yet. Build one as described above. The
-  stock *Shearwater* comes back to the Catch Tower.
+- No stock rocket lands on legs yet. Build one as described above. The stock *Shearwater*'s
+  booster comes back too, to be caught by the Catch Tower ([SHEARWATER.md](SHEARWATER.md)).
 - The ascent assist always stages for a return to the Return Pad. There is no recovery plan to
   choose before launch yet: the barge is picked by hand after separation, and the assist does
   not stage later to use it. A stage that separates late and fast (the last four rows of the

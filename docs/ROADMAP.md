@@ -138,10 +138,6 @@ is a good place for artists who can write shaders.
 
 ## 5. Reusable boosters
 
-**Status: built, with two things open** (a recovery plan chosen before launch, and pay for a
-recovered stage). What is built, what was measured and what was checked are in
-[BOOSTERS.md](BOOSTERS.md) and [SHEARWATER.md](SHEARWATER.md).
-
 **What it is.** Fly the first stage back. After separation the booster flips, makes a boostback
 burn, steers through the air on its grid fins, relights and lands on its legs, on the pad or
 downrange. You fly it yourself or hand it to a guidance program, while the upper stage carries
@@ -151,40 +147,27 @@ on to orbit.
 reason many people watch launches at all. In career mode it changes the economics: a recovered
 booster is money back.
 
-**How it was built.** A dropped stage stays under full physics while the other one flies, with a
-quick switch between them, and boostback, entry and landing guidance work in air. Item 1 makes
-the touchdown worth watching.
+**Today.** The pieces are close. There are grid fins (the Lattice Vane), air brakes, throttle
+control, landing legs, and a guidance program that already performs a powered landing on
+airless moons. What is missing is following two vessels at once: a stage you leave behind
+in the atmosphere is removed once the ship you are flying is out of range of it.
 
-**Where it stands.** A dropped stage with a guidance ring keeps flying under
+**Building it.** Keep a dropped stage under full physics while the other one flies, with a quick
+switch between them. Write boostback, entry and landing guidance that works in air. Add
+recovery credit in career mode for stages landed intact. Item 1 makes the touchdown worth
+watching.
+
+**Where it stands.** Built. A dropped stage with a guidance ring keeps flying under
 full physics at any distance and one key hops between booster and upper stage. A stage with
 grid fins and legs flies itself back: the ascent assist stages early to leave it the propellant,
 and it boosts back, makes an entry burn if it needs one, steers on its fins and lands by the pad
 while the upper stage goes to orbit. It lands on the Return Pad, a marked pad north of the launch
-site, or on the barge *Patient Tide*, a solid deck 40 km out to sea. The **Heron Folding Leg**
-stays flat against the tank until the last seconds, and a stack separator now leaves three
-pieces, so the booster comes home with a clean top.
-
-The stock **Shearwater** is the reusable rocket: a 39-engine stack on methane and oxygen whose
-booster flies back to the **Catch Tower** and is caught by its arms on two pins, with no legs,
-and whose ship comes home from orbit belly first on four flaps, flips upright near 3 km and is
-caught by the same arms. The ship cannot come home with freight aboard or with more than about
-20 % of its propellant ([SHEARWATER.md](SHEARWATER.md)).
-
-**Still open, for anyone who wants it.**
-
-- A recovery plan chosen before launch. Today the ascent assist always stages for a return to
-  the Return Pad (or the tower), and the barge is picked by hand after separation.
-- Recovery pay in career mode. Landing or catching a stage pays nothing yet.
-- A stock rocket that lands on legs. The Shearwater is caught; a legged booster is one you
-  build.
-- A barge that moves, and more than one.
-
-[What is built, what was measured and what was checked.](BOOSTERS.md)
+site, or on the barge *Patient Tide*, a solid deck 40 km out to sea. The stock *Shearwater*
+is a reusable rocket: its booster flies back and is caught by the arms of the Catch Tower, and
+its ship comes home from orbit belly first to the same arms ([SHEARWATER.md](SHEARWATER.md)).
+Still open: a recovery plan chosen before launch, and recovery pay in career mode. [What is built, what was measured and what was checked.](BOOSTERS.md)
 
 ## 6. Deeper aerodynamics and re-entry
-
-**Status: five of seven steps built** (A the air, B forces on bodies, C capsule trim and bank,
-D wings and fins at speed, E heating by shape). Plasma and blackout (F) and winds (G) are open.
 
 **What it is.** Lift on capsules and bodies, so you can steer a re-entry by rolling. A speed of
 sound that changes with altitude. Winds. Heating that depends on the shape and attitude of the
@@ -206,12 +189,9 @@ shows the entry's bank, lift, heating and the peaks ahead, and the map draws the
 the air to the landing point ([ENTRY.md](ENTRY.md)). Nothing flies the bank toward a chosen
 site for you yet. Since step E each part is heated by its own size, attitude and shadow, its
 skin follows a heat balance, and heat shields ablate by area ([HEATING.md](HEATING.md)).
-Since step D a wing or fin above Mach 1 keeps at most the lift that supersonic theory allows
-and pays more drag for it, the Lattice Vane chokes near Mach 1, and the attitude hold knows
-how much authority its surfaces have at the present Mach number ([WINGS.md](WINGS.md)).
-Alongside these steps the parachutes were rebuilt: a canopy at its true size on real lines,
-flown as its own body, with a drogue in every main pack, staged opening and a line strength
-([PARACHUTES.md](PARACHUTES.md)).
+Since step D wings and fins lose lift above Mach 1 as linear supersonic theory says, pay drag
+due to lift, and grid fins choke near Mach 1 ([WINGS.md](WINGS.md)). Steps A to E are built;
+F (plasma and radio blackout) and G (winds) are still to come.
 [docs/PHYSICS_VERIFICATION.md](PHYSICS_VERIFICATION.md) lists these limits with measurements.
 
 **The plan.** The mathematics is written up in [REENTRY_SCIENCE.md](REENTRY_SCIENCE.md) and the

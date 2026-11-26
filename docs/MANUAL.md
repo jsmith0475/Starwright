@@ -10,13 +10,6 @@ in a copy on your own machine, which is served at <http://localhost:8642/>.
 Contents: [The front menu](#the-front-menu) ·
 [Controls](#controls-mac-keyboard--logitech-mx-mouse) ·
 [A first flight](#a-first-flight) ·
-[Structure](#structure-what-holds-a-rocket-together) ·
-[Landing on legs](#landing-on-legs) ·
-[The landing autopilot](#the-landing-autopilot) ·
-[Parachutes](#parachutes) ·
-[Things you can hit](#things-you-can-hit) ·
-[Boosters](#boosters-that-fly-on) ·
-[Shearwater](#shearwater-methane-oxygen-and-39-engines) ·
 [Targeting, rendezvous and docking](#targeting-rendezvous-and-docking) ·
 [Career, contracts and Flight School](#career-contracts-and-flight-school) ·
 [Demo tour](#demo-tour)
@@ -56,7 +49,7 @@ The key names are for a Mac keyboard. On Windows and Linux, `Cmd` is `Ctrl`.
 | H / N, I / K, J / L | RCS translate forward/back, up/down, left/right |
 | = | Cluster engines: burn the next set of engines (see *Shearwater* below) |
 | G | Landing legs |
-| U | Solar panels (folding wings and fans then turn on their booms to face the sun) |
+| U | Solar panels |
 | M | Map view (click your orbit to plan a maneuver) |
 | O | Missions: the next flight-program mission and your active contracts, with live progress |
 | . / , | Time warp faster / slower |
@@ -91,11 +84,6 @@ Click a part in the catalogue, then click on the rocket to attach it. `X` cycles
 (Shift+X backwards), `Delete` removes the part under the mouse, `Esc` drops the held part,
 `Cmd+Z` / `Shift+Cmd+Z` undo and redo. `L` shows the load on every joint; the Structure line at
 the bottom names the joint that works hardest, and a click on it lists the five most loaded.
-A **Brace Strut** or a **Sip Fuel Line** is made to length to the booster it faces, up to 4 m
-away, and a strut braces exactly what it is drawn touching.
-
-On the pad a rocket stands on a launch mount fitted to it, held by clamps on the rim above the
-engine. The tower's arms swing clear when the engines light and the clamps let go at lift-off.
 
 ## A first flight
 
@@ -190,6 +178,8 @@ down on its engine, and it looks at the ground before it does:
 
 - From orbit it may say "the ground ahead is too steep to stand on" and stay in orbit under time
   warp until there is better ground below. It waits one orbit at most.
+- It does not light the engine until the lander has turned to face backwards, and it plans the
+  braking burn to last 20 seconds or more where the engine allows, so there is time in hand.
 - On the way down it keeps clear of hills, and pulls up if one rises in front of it.
 - At the hover it tells you what is under you, flies across to the nearest level spot, and comes
   down there.
@@ -197,65 +187,8 @@ down on its engine, and it looks at the ground before it does:
   Take that warning seriously: take over, or expect to end up on your side.
 
 How steep is too steep depends on the lander. A tall lander on narrow legs is held to about
-5 degrees, a squat one to 6. Ground with a boulder under the footprint counts as unfit. Any
-steering key gives you back control.
-
-The braking burn gives itself time: it lasts 20 seconds where the engine allows, with more than
-half the thrust in hand. Every guidance burn waits until the ship has turned to face the right
-way before the engine lights. The whole story, with what was checked, is in
-[LANDING_SITES.md](LANDING_SITES.md).
-
-## Parachutes
-
-Stage a parachute to arm it. It opens by itself when it can, in this order:
-
-1. **Armed.** It stays packed until the air is thick enough, the craft is slow enough, and
-   opening would not break its lines. The flight screen says which of the three it is waiting
-   for.
-2. **Drogue.** Every main pack carries a small drogue. It can come out as fast as Mach 3 in
-   very thin air, and it steadies the craft and slows it.
-3. **Reefed.** Below Mach 0.4 the drogue pulls the main out as a narrow sock, which fills over
-   six seconds.
-4. **Fully open** 900 m above the ground under the craft.
-
-A parachute is as big as its drag says: the Canopy Parachute is 22 m across on 33 m lines. The
-canopy flies as a body of its own, so a capsule that opens it while moving sideways swings in
-under it.
-
-| | Opens under | Lines hold |
-|---|---|---|
-| Canopy Parachute | Mach 0.4 | 150 kN |
-| Radial Parachute | Mach 0.4 | 135 kN |
-| Grand Canopy M (three canopies) | Mach 0.4 | 450 kN |
-| Streamer Drogue | Mach 3 | 400 kN |
-| The drogue inside each main pack | Mach 3 | as its main |
-
-A load over the line strength tears the canopy away. The sequencer holds an armed parachute
-shut while opening would do that, but opening fully at 900 m is not held back: a Canopy
-Parachute carries up to about 3.7 t, and a craft far heavier tears it there. Use more
-parachutes or a Grand Canopy.
-
-After touchdown or splashdown the canopy topples over and lies beside the craft. A capsule in
-the sea throws up spray and a ring of foam, then floats and rides the swell.
-
-What it leaves out: the drogue cannot be staged or cut by itself, and the main waits for a
-speed and not a height, so a capsule can spend minutes under its reefed main from 12 km. The
-full description is in [PARACHUTES.md](PARACHUTES.md).
-
-## Things you can hit
-
-- **Boulders.** Every boulder you can see is solid. A wheel rolls over a low stone and is
-  stopped by a tall one, a leg that comes down on a rock stands on it, a Pip on foot is stopped
-  at knee height, and hitting one fast breaks parts. The rover's cruise control steers round
-  them. Pebbles, grass and trees are pictures. [BOULDERS.md](BOULDERS.md)
-- **The space centre.** Buildings, lightning masts, the service tower, the propellant tanks and
-  the launch mount are solid, and so are the Catch Tower's column and arms. A rocket that falls
-  back onto the pad lands on its mount. A craft that flies into a wall slowly is stopped; a fast
-  hit breaks parts off or destroys it, by the same rule as hitting the ground, and the game says
-  what was struck. [SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md)
-- **Other craft.** Two craft cannot pass through each other. A gentle touch pushes them apart,
-  the push shared by their masses, and a fast one breaks parts off or destroys them. Docking
-  ports still latch as before, and stages that have just separated are left to drift apart.
+5 degrees, a squat one to 6. Any steering key gives you back control. The whole story, with what was
+checked, is in [LANDING_SITES.md](LANDING_SITES.md).
 
 ## Boosters that fly on
 
@@ -345,6 +278,60 @@ for.
 
 [SHEARWATER.md](SHEARWATER.md) has the numbers. In career mode it needs the launch pad at its top level (772 t).
 
+## Parachutes
+
+Press Space (or stage) to **arm** a parachute. It does not open the moment you arm it: it waits
+while the air is too thin, while the craft is faster than the parachute can take, or while the
+jolt of opening would come too close to the strength of its lines, and the flight screen says
+which it is waiting for. Then it opens in stages:
+
+1. **Drogue.** Every main pack has a small drogue in it. If the craft is still fast (under
+   Mach 3, in air as thin as 49 km on Verda) the drogue goes out first and slows it down. A craft
+   that is already slow skips it.
+2. **Reefed.** Once the main's own limits are met (air of at least 0.02 atm, under Mach 0.4)
+   and the drogue has been out 2 seconds, the drogue is let go and pulls the main out with its
+   mouth held narrow by a reefing line.
+3. **Full.** Below 900 m above the ground (not above the sea) the main opens fully.
+
+The canopy is drawn at the size its drag implies: a Canopy Parachute is 22 m across on 33 m
+lines. The craft hangs under it and swings. The lines have a strength (150 kN for a Canopy
+Parachute, which holds a craft of up to about 3.7 t), and a canopy loaded past it tears away
+and is gone. After touchdown or splashdown the canopy falls over and lies beside the craft.
+
+Limits: the drogue cannot be staged or cut on its own, and the fallen canopy is only a picture.
+Details: [PARACHUTES.md](PARACHUTES.md).
+
+## Rovers and rocks
+
+Every boulder you can see is solid. A wheel rolls over a low stone and is stopped by a tall one,
+a leg can stand on a rock top, and a fast hit breaks parts as hitting the ground would. A Pip on
+foot is blocked at knee height. Pebbles, grass and trees are still only pictures.
+
+**Cruise control** (Guidance, on a rover with charge) holds a heading for 1 km. It looks ahead for
+rocks tall enough to stop a wheel, steers into the nearest open lane, slows to stop short when it
+has to, and backs off when it is boxed in. It also stops short of ground too steep to cross. The
+landing autopilot will not pick a spot with a boulder in the lander's footprint. Details:
+[BOULDERS.md](BOULDERS.md).
+
+## Buildings, the pad and other craft
+
+The space centre is solid: every building, the launch pad with its service tower, masts and
+tanks, the launch mount under your rocket, and the Catch Tower's column and arms. A slow touch
+stops the craft against the wall. A harder one breaks off whatever touched, and if the body of
+the craft hits much faster than it can take, the whole craft is lost. The flight screen says what
+happened, for example "Struck the Vehicle Assembly Building: the Tail Fin broke off". A rocket
+that falls back onto the pad meets its own mount.
+
+Craft are solid to each other too. Two that touch are pushed apart, the push shared by their
+masses, and each breaks by the same rule if they meet too fast. Docking is left alone: ports
+within 3 m that close slower than 3 m/s latch as before, and stages that have just separated do
+not count as touching until they are 1 m apart.
+
+Limits: trees, grass, vehicles, fences, walking Pips, the mount's clamps and the service tower's
+swing arms are not solid. A bump changes how fast a craft moves, not how it turns. A craft that
+comes to rest on a roof jitters slightly and cannot be recovered from there. Details:
+[SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md).
+
 ## Targeting, rendezvous and docking
 
 Two stock craft are made for this: **Latch Target** (an uncrewed station core) and **Latch
@@ -389,8 +376,7 @@ off. Details: [HEATING.md](HEATING.md).
 **Getting close.** In the map, plan a burn that brings the *closest approach* marker down to a
 few hundred metres (lower orbits go round faster, so a lower orbit catches up and a higher one
 falls back). At the closest approach, point against the drift and burn to stop. Flight School has
-a lesson on it: *Rendezvous basics*. Come in slowly: craft are solid to each other, and a fast
-touch away from the docking ports breaks parts.
+a lesson on it: *Rendezvous basics*.
 
 **Docking.** Rings of the same size (S with S, M with M) latch by themselves when they touch nose
 to nose, roughly aligned, slower than 1.5 m/s. By hand: turn on RCS (`R`), point at the target,
