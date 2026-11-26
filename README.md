@@ -181,6 +181,10 @@ Grok, worked on Starwright, and it is not affiliated with or endorsed by either 
 | **Ground of its own on every world.** Step out on Rusk and you stand on cracked mud pans, wind ripples and wind-cut stones under a sky streaked with dust. Every landable world has its own ground at walking scale and its own kinds of rock. [What each world has.](docs/WORLDS.md) | **Ice that broke and froze again.** Brim is a sea of floes with dark water in the leads. Ost and Quell are plates of old ice with blue in the cracks. |
 | [![Standing on Ost at low sun: pale ice plates with blue cracks and blocks of ice lying on them](media/shot-terrain-ost.jpg)](media/shot-terrain-ost.jpg) | [![Sear's lava sea from five kilometres up: dark crust plates with bright glowing cracks between them](media/shot-terrain-sear.jpg)](media/shot-terrain-sear.jpg) |
 | **Craters down to a hand's width.** Pell, Nock, Nym, Dray, Cindra and Slate are pocked at every size from 150 metres to a few centimetres, with bright rims and dark floors. | **A lava sea with a crust.** Sear's molten sea carries dark plates with the glow coming up between them, and some plates are still dull red. |
+| [![A capsule hanging under a green and white canopy on long lines above the coast](media/shot-parachute.jpg)](media/shot-parachute.jpg) | [![The Shearwater ship falling flat on its belly through 9 km above the sea](media/shot-belly-first.jpg)](media/shot-belly-first.jpg) |
+| **Come down on real lines.** A canopy at its true size, opened in stages: drogue, reefed, full. Load the lines past their strength and it tears away. | **Fall belly first.** The Shearwater comes home from orbit flat on its belly, steered by four flaps, then flips upright and is caught by the tower's arms. |
+| [![A six-wheeled rover stopped against a boulder on the grey surface of Pell](media/shot-boulder.jpg)](media/shot-boulder.jpg) | [![A rocket on the launch pad standing on its mount, with the service tower's arms reaching its hull](media/shot-pad-mount.jpg)](media/shot-pad-mount.jpg) |
+| **Mind the rocks.** Every boulder you can see is solid, and so are the buildings, the pad and other craft. | **A pad that holds the rocket.** A mount and hold-down clamps fitted to each rocket, and service arms that swing back at ignition. |
 
 And around the flying:
 
@@ -248,6 +252,13 @@ And around the flying:
 - **Rocks you can hit.** Every boulder you can see is solid: wheels roll over low stones and are
   stopped by tall ones, legs stand on rock tops, and rover cruise control steers round them.
   Pebbles, grass and trees are still only pictures. [Details.](docs/BOULDERS.md)
+- **A space centre you can hit, and craft that bump.** Every building, the launch pad, its
+  service tower and masts, the launch mount and the Catch Tower are solid. A rocket that falls
+  back onto its mount loses fins and engines or is lost, and the game says what it struck. Two
+  craft that touch are pushed apart with momentum kept, and break if they meet too fast. The
+  limits are stated: trees, vehicles and the tower's swing arms are not solid, and a bump
+  changes how fast a craft moves but not how it turns.
+  [Details.](docs/SOLID_SPACE_CENTRE.md)
 - **Things that look joined.** A rocket on the pad stands on a mount and hold-down clamps
   fitted to it, the service arms reach its hull and swing back at ignition, struts and fuel
   lines are made to the length of the gap they cross, and folding solar wings turn to face the
@@ -636,7 +647,7 @@ media/               trailer, clips and screenshots for this page
 The unit tests need Node 20 or newer and nothing else:
 
 ```sh
-npm test            # 570 tests, including scripted flights flown by the autopilot
+npm test            # 581 tests, including scripted flights flown by the autopilot
 npm run verify      # the independent physics verification, about 6 minutes
 ```
 

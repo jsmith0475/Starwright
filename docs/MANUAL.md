@@ -313,6 +313,25 @@ has to, and backs off when it is boxed in. It also stops short of ground too ste
 landing autopilot will not pick a spot with a boulder in the lander's footprint. Details:
 [BOULDERS.md](BOULDERS.md).
 
+## Buildings, the pad and other craft
+
+The space centre is solid: every building, the launch pad with its service tower, masts and
+tanks, the launch mount under your rocket, and the Catch Tower's column and arms. A slow touch
+stops the craft against the wall. A harder one breaks off whatever touched, and if the body of
+the craft hits much faster than it can take, the whole craft is lost. The flight screen says what
+happened, for example "Struck the Vehicle Assembly Building: the Tail Fin broke off". A rocket
+that falls back onto the pad meets its own mount.
+
+Craft are solid to each other too. Two that touch are pushed apart, the push shared by their
+masses, and each breaks by the same rule if they meet too fast. Docking is left alone: ports
+within 3 m that close slower than 3 m/s latch as before, and stages that have just separated do
+not count as touching until they are 1 m apart.
+
+Limits: trees, grass, vehicles, fences, walking Pips, the mount's clamps and the service tower's
+swing arms are not solid. A bump changes how fast a craft moves, not how it turns. A craft that
+comes to rest on a roof jitters slightly and cannot be recovered from there. Details:
+[SOLID_SPACE_CENTRE.md](SOLID_SPACE_CENTRE.md).
+
 ## Targeting, rendezvous and docking
 
 Two stock craft are made for this: **Latch Target** (an uncrewed station core) and **Latch
