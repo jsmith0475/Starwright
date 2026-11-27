@@ -183,7 +183,14 @@ export class Orbit {
     o.Q.crossVectors(o.H, o.P);
     o._finish(alpha);
     if (!o.hyper) {
-      const E = Math.atan2(rv * Math.sqrt(alpha / gm), 1 - r0 * alpha);
+      let E;
+      if (e < 0.01) {
+        // nearly circular: P comes from the eccentricity vector, so take the anomaly from where R sits against that
+        // same P. Taken apart (below), each carries ~1e-16/e of its own error: a jump of metres to kilometres at the
+        // epoch for orbits circular to 1e-8.
+        const f = Math.atan2(R.dot(o.Q), R.dot(o.P));
+        E = 2 * Math.atan2(Math.sqrt(o.ome) * Math.sin(f / 2), Math.sqrt(1 + e) * Math.cos(f / 2));
+      } else E = Math.atan2(rv * Math.sqrt(alpha / gm), 1 - r0 * alpha);
       o.M0 = o.ome * Math.sin(E) + xMinusSin(E);
     } else {
       const F = Math.asinh(rv * Math.sqrt(-alpha / gm) / e);

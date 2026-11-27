@@ -379,7 +379,10 @@ test('atmosphere model', () => {
   assert.equal(v.density(72000), 0); assert.equal(v.density(1e6), 0); assert.equal(v.pressureAtm(72000), 0);
   close(v.density(-50), 1.22);
   assert.equal(byId.pell.density(0), 0); assert.equal(byId.pell.pressureAtm(10), 0);
-  close(byId.rusk.pressureAtm(0), 0.25 / 1.22); close(byId.thal.pressureAtm(0), 3 / 1.22);
+  // hydrostatic: p = rho g H, in Verda sea-level atmospheres (until 2026-11-25 it was rho / 1.22 everywhere)
+  const p0 = 1.22 * 9.6 * 5800, hyd = b => b.atmo.rho0 * b.surfaceG * b.atmo.scale / p0;
+  close(byId.rusk.pressureAtm(0), hyd(byId.rusk)); close(byId.thal.pressureAtm(0), hyd(byId.thal));
+  close(byId.rusk.pressureAtm(0) / (0.25 / 1.22), 1 / 2.68, 0.01);   // Rusk's air: under half the old figure
   let prev = Infinity;
   for (let a = 0; a < 72000; a += 3000) { const d = v.density(a); assert.ok(d < prev); prev = d; }
 });

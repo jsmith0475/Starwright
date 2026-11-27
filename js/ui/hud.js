@@ -1123,7 +1123,8 @@ export function createHud(app, act) {
         const ld = inAir ? v.liftDrag() : null, bn = inAir && ld && ld.ld > 0.03 ? v.bankNow() : null;
         setText(nBank, (bn === null ? '--' : sgn(deg(bn))) + (bankOn ? ' · set ' + sgn(deg(v.bank)) : ''));
         setText(nLd, ld ? ld.ld.toFixed(2) : '--');
-        const flux = inAir ? v.heatFlux || 0 : 0;
+        // what the hottest part takes now: the same flux the heat-load record (So far) adds up
+        const flux = inAir ? v.hotFlux || 0 : 0;
         setText(nFlux, flux >= 500 ? fmt.num(flux / 1000, flux < 99500 ? 1 : 0) + ' kW/m²' : '--');
         // the hottest part now, and the record of this heating: peak against the limit, heat taken, ablator lost
         const hp = v.isHot ? v.hotPart : null;
@@ -1132,7 +1133,7 @@ export function createHud(app, act) {
         setText(nSoFar, v.peakTempRatio > 0.05 ? Math.round(v.peakTempRatio * 100) + ' % · ' + fmt.num(v.heatLoad / 1e6, 1) + ' MJ/m²' : '--');
         setText(nAbl, v.ablated >= 0.5 ? Math.round(v.ablated) + ' kg' : '--');
         if (pred) {
-          setText(nPeak, (pred.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num(pred.maxFlux / 1000, 0) + ' kW/m²');
+          setText(nPeak, (pred.maxG / 9.80665).toFixed(1) + ' g · ' + fmt.num((pred.maxHotFlux || pred.maxFlux) / 1000, 0) + ' kW/m²');
           const left = Math.max(0, pred.t - (world.ut - pred.ut));
           setText(nEnd, pred.end === 'skip' ? 'skips back out to space' : 'down in ' + fmt.time(left));
           setCls(nEnd, 'warn', pred.end === 'skip'); setCls(nPeak, 'warn', pred.maxG > 6 * 9.80665);

@@ -93,6 +93,9 @@ test('the guidance refuses a ship it cannot set down: freight aboard, or too muc
 });
 
 test('home from orbit: a braking burn, the fall on the flaps, the flip, and the arms close on the ship', { timeout: 600000 }, () => {
+  // A sixth of a tank. The landing burn flies the sideways move high (shipReturn's clearAlt), so a ship that comes
+  // home short of the tower is over its aim point, east of the column, before it is down among the steel: every
+  // fraction from 0.10 to 0.20 is caught without touching it (tests/tools/ship_return_dev.mjs, at several phases).
   const r = flyHome({ frac: 0.16 });
   const caught = r.events.find(e => e.type === 'caught');
   assert.ok(caught, 'caught: ' + JSON.stringify(r.events));

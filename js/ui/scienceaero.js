@@ -208,18 +208,18 @@ A wing lifts at low speed because the air ahead of it feels it coming and bends 
 
 $$ C_L = \frac{4\,\alpha}{\sqrt{\mathrm{Ma}^2 - 1}}, \qquad C_{D,lift} = C_L\,\alpha = \frac{4\,\alpha^2}{\sqrt{\mathrm{Ma}^2 - 1}} $$
 
-So the lift-curve slope falls as the Mach number rises, and the lift no longer comes cheap: the force on a flat plate stands square to the plate, and its backward share is the lift times the angle. The game takes the smaller of the low-speed slope and Ackeret's, and the larger of the two drags due to lift:
+So the lift-curve slope falls as the Mach number rises, and the lift no longer comes cheap: the force on a flat plate stands square to the plate, and its backward share is the lift times the angle. The game takes the smaller of the low-speed slope and Ackeret's. With no suction at the leading edge, the drag due to lift is the lift times the angle whatever the slope, so $K$ is one over the slope the surface has there (never less than ${T.WING_K}, and faded in between Mach 1 and 1.2 so nothing jumps):
 
-$$ a(\mathrm{Ma}) = \min\left(a,\ \frac{4}{\sqrt{\mathrm{Ma}^2 - 1}}\right), \qquad K(\mathrm{Ma}) = \max\left(${T.WING_K},\ \frac{\sqrt{\mathrm{Ma}^2 - 1}}{4}\right) $$
+$$ a(\mathrm{Ma}) = \min\left(a,\ \frac{4}{\sqrt{\mathrm{Ma}^2 - 1}}\right), \qquad K(\mathrm{Ma}) = \max\left(${T.WING_K},\ \frac{1}{a(\mathrm{Ma})}\right) $$
 
 A wing ($a = ${T.WING_SLOPE}$) meets the cap at Mach ${sig(Math.sqrt(1 + 16 / (T.WING_SLOPE * T.WING_SLOPE)), 3)} and a fin ($a = ${T.FIN_LIFT}$) at Mach ${sig(Math.sqrt(1 + 16 / (T.FIN_LIFT * T.FIN_LIFT)), 3)}. The two curves meet there, so nothing jumps.
 
-| Mach number | Wing slope | Fin slope | $K$ |
-| --- | --- | --- | --- |
-| below 1 | ${T.WING_SLOPE} | ${T.FIN_LIFT} | ${T.WING_K} |
-| 2 | ${sig(A.machSlope(T.WING_SLOPE, 2), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 2), 3)} | ${sig(A.machInduced(2), 3)} |
-| 3 | ${sig(A.machSlope(T.WING_SLOPE, 3), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 3), 3)} | ${sig(A.machInduced(3), 3)} |
-| 5 | ${sig(A.machSlope(T.WING_SLOPE, 5), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 5), 3)} | ${sig(A.machInduced(5), 3)} |
+| Mach number | Wing slope | Fin slope | Wing $K$ | Fin $K$ |
+| --- | --- | --- | --- | --- |
+| below 1 | ${T.WING_SLOPE} | ${T.FIN_LIFT} | ${T.WING_K} | ${T.WING_K} |
+| 2 | ${sig(A.machSlope(T.WING_SLOPE, 2), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 2), 3)} | ${sig(A.machInduced(2, A.machSlope(T.WING_SLOPE, 2)), 3)} | ${sig(A.machInduced(2, A.machSlope(T.FIN_LIFT, 2)), 3)} |
+| 3 | ${sig(A.machSlope(T.WING_SLOPE, 3), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 3), 3)} | ${sig(A.machInduced(3, A.machSlope(T.WING_SLOPE, 3)), 3)} | ${sig(A.machInduced(3, A.machSlope(T.FIN_LIFT, 3)), 3)} |
+| 5 | ${sig(A.machSlope(T.WING_SLOPE, 5), 3)} | ${sig(A.machSlope(T.FIN_LIFT, 5), 3)} | ${sig(A.machInduced(5, A.machSlope(T.WING_SLOPE, 5)), 3)} | ${sig(A.machInduced(5, A.machSlope(T.FIN_LIFT, 5)), 3)} |
 
 > example: The ${fin.name} of the last example, again at 5°, now at Mach 5. Its slope is $4 / \sqrt{24} = ${sig(A.machSlope(T.FIN_LIFT, 5), 3)}$ per radian, so $C_L = ${sig(A.machSlope(T.FIN_LIFT, 5) * a5, 3)}$: about half of what it gave at low speed. A booster coming down through Mach 5 steers with half a hand.
 

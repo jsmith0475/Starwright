@@ -101,7 +101,10 @@ export function transferWindow(origin, target, ut, parking = null) {
   const r1 = p1.length(), r2 = p2.length();
   const at = 0.5 * (r1 + r2);
   const transferTime = Math.PI * Math.sqrt(at * at * at / gm);
-  const n1 = origin.n, n2 = target.n;
+  // phases are measured round the origin's orbit normal: a target going round the other way (a retrograde parking
+  // orbit, say) moves backwards in that measure
+  const sgn = origin.H.dot(target.H) < 0 ? -1 : 1;
+  const n1 = origin.n, n2 = sgn * target.n;
   const phaseNeeded = wrapPi(Math.PI - n2 * transferTime);
   const phaseNow = phaseAngle(p1, p2, origin.H);
   const rate = n2 - n1;                              // how fast the phase angle changes
@@ -113,7 +116,7 @@ export function transferWindow(origin, target, ut, parking = null) {
   }
   const v1 = Math.sqrt(gm / r1), v2 = Math.sqrt(gm / r2);
   const vInf = Math.abs(Math.sqrt(gm * (2 / r1 - 1 / at)) - v1);
-  const vArr = Math.abs(v2 - Math.sqrt(gm * (2 / r2 - 1 / at)));
+  const vArr = Math.abs(sgn * v2 - Math.sqrt(gm * (2 / r2 - 1 / at)));
   let ejectDv = vInf;
   if (parking && parking.gm > 0 && parking.radius > 0) {
     const vc = Math.sqrt(parking.gm / parking.radius);

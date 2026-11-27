@@ -35,6 +35,8 @@ const REPO_URL = 'https://github.com/jsmith0475/Starwright';
 export const RECENT_DAYS = 6;
 
 export const RELEASES = [
+  { id: 'physics-audit-fixes', date: '2026-11-25', title: 'Spins that hold, and the right air on every world',
+    text: 'Free spins now hold steady instead of growing until a craft breaks apart, small capsules turn as their real weight allows, and engines feel each world\'s true air pressure. Time warp no longer flies through a moon it was about to meet, the heat readout shows the hottest part, wings drag more past the speed of sound, and the landing predictor counts folded wings and flaps.' },
   { id: 'craft-collide', date: '2026-11-24', title: 'Craft bump into each other',
     text: 'Two craft can no longer pass through each other. A gentle touch pushes them apart, sharing the push by their masses, and a fast one breaks parts off or destroys them. Docking ports still latch as before, and stages that have just separated are left to drift apart.' },
   { id: 'solid-space-centre', date: '2026-11-24', title: 'The space centre is solid',

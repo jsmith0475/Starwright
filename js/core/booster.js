@@ -405,7 +405,24 @@ export function boosterRecovery(world, vessel, opts = {}) {
         dir.copy(srf).negate();
         if (speed < 80) dir.addScaledVector(up, 15).addScaledVector(_t.copy(srf).addScaledVector(up, -vs), -1.5);   // and kill the drift
         dir.normalize();
-        if (o.steerBurn > 0 && speed > 12 && e.lengthSq() > 1) {
+        if (o.clearAlt > 0 && o.steerBurn > 0) {
+          // opts.clearAlt (m, off by default): the burn is to be over its aim point, and still over the ground there,
+          // by the time it is this high. A ship that comes home short of the catch tower has the tower's column
+          // between it and the mount: a burn steered to reach the mount only as it stops drifts in over the column
+          // top and the open arms (it did, tens of metres short, at 100 m up). So the sideways move is flown high,
+          // where it has the time, and the last part of the burn is straight down over the aim point.
+          // The lean is the push that takes the level offset and the level speed both to nothing in the time left
+          // to that height (the time to stop from the burn's own prediction, drag and all, shortened to the time to
+          // come down to clearAlt), held with the same push below it. The air takes back some of what a lean gives
+          // at speed; flown again every step, that is made up as it goes.
+          const g = body.gm / (R * R), aT = Math.max(need, 0.3) * acc;
+          const T = st.stop && st.stop.stopped ? st.stop.t : speed / Math.max(aT - g, 2);
+          const tl = Math.max(3, T * (1 - Math.sqrt(clamp(o.clearAlt / Math.max(ralt(), 1), 0, 1))));
+          drift.copy(srf).addScaledVector(up, -vs);
+          _t.copy(e).multiplyScalar(6 / (tl * tl)).addScaledVector(drift, -4 / tl).multiplyScalar(1 / Math.max(aT, 1));
+          const m = _t.length(); if (m > Math.tan(o.steerBurn)) _t.multiplyScalar(Math.tan(o.steerBurn) / m);
+          dir.copy(up).add(_t).normalize();
+        } else if (o.steerBurn > 0 && speed > 12 && e.lengthSq() > 1) {
           // opts.steerBurn (rad, off by default): lean the burn to stop over the target. Left alone the level speed
           // dies away with the rest and carries the stage half of (level speed x time to stop) farther; the push that
           // makes up the difference in the time left, as a share of the thrust, is the lean.

@@ -352,7 +352,7 @@ export function shipReturn(world, vessel, opts = {}) {
         engineSet(o.sets && o.sets.burn);
         v.bellyLift = null; v.bellyNose = null;
         for (const en of v.engines) if (!en.part.ignited && !en.part.flameout) en.part.ignited = true;
-        c.landing = boosterRecovery(world, v, { target: o.target, floor: o.floor, sets: o.sets ? { burn: o.sets.burn, final: o.sets.final } : null, aimBurn: true, terrain: false, heatLimit: Infinity, maxLean: 0.05, steerBurn: 0.25, reach: 120, thrustScale: (() => { const pw = v.enginePower(); return pw.thrust > 0 ? clamp(seaThrust(o.sets && o.sets.burn) / pw.thrust, 0.3, 1) : 1; })(), ...o.landing });
+        c.landing = boosterRecovery(world, v, { target: o.target, floor: o.floor, sets: o.sets ? { burn: o.sets.burn, final: o.sets.final } : null, aimBurn: true, terrain: false, heatLimit: Infinity, maxLean: 0.05, steerBurn: 0.25, clearAlt: 150, reach: 120, thrustScale: (() => { const pw = v.enginePower(); return pw.thrust > 0 ? clamp(seaThrust(o.sets && o.sets.burn) / pw.thrust, 0.3, 1) : 1; })(), ...o.landing });
         c.phase = 'landing';
         break;
       }

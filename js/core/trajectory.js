@@ -97,9 +97,14 @@ function findEncounter(orbit, child, ts, d, N) {
     }
     if (d[i] <= 0) return bisectEntry(orbit, child, ts[i - 1], ts[i]);
     const j = i - 1;
-    if (j - 1 >= armIdx && d[j] < d[j - 1] && d[j] <= d[i]) {
-      // sampled local minimum of the distance: look for a dip below zero between the samples
-      let a = ts[j - 1], b = ts[i];
+    // A sampled local minimum of the distance: look for a dip below zero between the samples. The first armed sample
+    // can be that minimum too (closest approach less than one step away: a pass after a late correction burn, or
+    // when time warp re-predicts close in), and so can the last one (still closing at the end of the search).
+    const prev = j - 1 >= armIdx ? d[j - 1] : Infinity;
+    const last = i === N - 1 && d[i] < d[j];
+    if ((d[j] < prev && d[j] <= d[i]) || last) {
+      let a = last ? ts[j] : ts[Math.max(j - 1, armIdx)], b = ts[i];
+      const a0 = a;
       const g = 0.6180339887498949;
       let c1 = b - g * (b - a), c2 = a + g * (b - a);
       let f1 = soiDistance(orbit, child, c1), f2 = soiDistance(orbit, child, c2);
@@ -107,8 +112,8 @@ function findEncounter(orbit, child, ts, d, N) {
         if (f1 < f2) { b = c2; c2 = c1; f2 = f1; c1 = b - g * (b - a); f1 = soiDistance(orbit, child, c1); }
         else { a = c1; c1 = c2; f1 = f2; c2 = a + g * (b - a); f2 = soiDistance(orbit, child, c2); }
       }
-      if (f1 <= 0) return bisectEntry(orbit, child, ts[j - 1], c1);
-      if (f2 <= 0) return bisectEntry(orbit, child, ts[j - 1], c2);
+      if (f1 <= 0) return bisectEntry(orbit, child, a0, c1);
+      if (f2 <= 0) return bisectEntry(orbit, child, a0, c2);
     }
   }
   return Infinity;

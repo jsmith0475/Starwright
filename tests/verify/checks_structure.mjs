@@ -299,7 +299,13 @@ function stepOnce(w, v, step = DT) {
   const pEnd = sub(post.pos, toWorld(post.q, shift));          // where the second gravity kick was evaluated
   const aWorld = sub(scale(sub(vEnd, pre.vel), 1 / dt), scale(add(grav(gm, pre.pos), grav(gm, pEnd)), 0.5));
   rec.fObs = toBody(pre.q, aWorld);
-  rec.alphaObs = scale(sub(post.w, pre.w), 1 / dt);
+  // spin: the integrator steps the world-frame angular momentum L = R I w (vessel.js _stepFlight), so the torque the
+  // vessel was given is the change of L over the step, in the body axes at the start; the angular acceleration is what
+  // Euler's equations make of that torque at the start of the step
+  const I0 = pre.I, Iw = (x) => [I0[0] * x[0], I0[1] * x[1], I0[2] * x[2]];
+  rec.tauObs = toBody(pre.q, scale(sub(toWorld(post.q, Iw(post.w)), toWorld(pre.q, Iw(pre.w))), 1 / dt));
+  const gyro = cross(pre.w, Iw(pre.w));
+  rec.alphaObs = [(rec.tauObs[0] - gyro[0]) / I0[0], (rec.tauObs[1] - gyro[1]) / I0[1], (rec.tauObs[2] - gyro[2]) / I0[2]];
   // the integrator divides by the mass with HALF of the step's propellant gone (vessel.js _stepFlight); ablator that
   // burnt off a heat shield in the step is not propellant and is not in that half
   rec.mMid = pre.m - 0.5 * ((pre.m - post.m) - (pre.abl - ablator()));
@@ -437,9 +443,9 @@ function closure(S, full) {
       pkF = Math.max(pkF, norm(F)); pkT = Math.max(pkT, norm(T));
       // forces: what the parts were given must be what moved the vessel (mass at mid-step, as the integrator has it)
       wF = Math.max(wF, (norm(sub(F, scale(r.fObs, r.mMid))) - r.fNoise) / Fs);
-      // torques: Euler's equations with the vessel's inertia, on the observed change of spin
+      // torques: the observed change of angular momentum, d(R I w)/dt, in the body axes
       const I = r.pre.I, w0 = r.pre.w;
-      const want = add([I[0] * r.alphaObs[0], I[1] * r.alphaObs[1], I[2] * r.alphaObs[2]], cross(w0, [I[0] * w0[0], I[1] * w0[1], I[2] * w0[2]]));
+      const want = r.tauObs;
       const Ts = Math.max(norm(T), norm(want), 1);
       wT = Math.max(wT, (norm(sub(T, want)) - 64 * EPS * (norm(w0) + 1e-3) / r.dt * Math.max(...I)) / Ts);
       // the motion the solve was given
@@ -458,7 +464,7 @@ function closure(S, full) {
     }
     S.info(`  ${f.name}: peak total force / torque on the vessel`, `${pkF.toFixed(0)} N / ${pkT.toFixed(0)} N m`);
     S.check(`  ${f.name}: sum of part forces = mass x (dv/dt - gravity), body axes (worst step)`, 0, Math.max(wF, 0), 1e-9, { unit: 'of the force', note: 'beyond the roundoff of the velocity difference' });
-    S.check(`  ${f.name}: sum of part torques = I dw/dt + w x (I w) with the vessel's inertia (worst step)`, 0, Math.max(wT, 0), 1e-9, { unit: 'of the torque' });
+    S.check(`  ${f.name}: sum of part torques = d(R I w)/dt with the vessel's inertia (worst step)`, 0, Math.max(wT, 0), 1e-9, { unit: 'of the torque' });
     S.check(`  ${f.name}: motion.w = the spin at the start of the step`, 0, wW, 1e-14, { unit: 'rad/s' });
     S.check(`  ${f.name}: motion.alpha = observed dw/dt`, 0, Math.max(wAl, 0), 1e-9, { unit: 'rel' });
     S.check(`  ${f.name}: motion.f x mass = sum of part forces (the contract's f)`, 0, wfStart, 1e-12, { unit: 'of the force' });
@@ -466,8 +472,7 @@ function closure(S, full) {
     S.check(`  ${f.name}: snapshot().bodies masses add up to the vessel's mass before the step`, 0, wM, 1e-13, { unit: 'rel' });
     S.check(`  ${f.name}: every snapshot body mass = that part's mass before the step (public field)`, 0, wSnapM, 1e-13, { unit: 'rel' });
     S.check(`  ${f.name}: snapshot mass points have their centre at the origin`, 0, wC, 1e-9, { unit: 'm' });
-    if (!f.offset) S.check(`  ${f.name}: vessel.inertia = diagonal of the inertia of the snapshot's bodies (mass points + own inertia)`, 0, wI, 1e-9, { unit: 'rel', note: 'no part with an offset mass centre on this craft' });
-    else S.info(`  ${f.name}: vessel.inertia vs the inertia of its mass points`, 'see 7k', '', `known defect: ${f.offsetParts.join(', ')} carry their mass off-centre`);
+    S.check(`  ${f.name}: vessel.inertia = diagonal of the inertia of the snapshot's bodies (mass points + own inertia)`, 0, wI, 1e-9, { unit: 'rel', note: f.offset ? `${[...new Set(f.offsetParts)].join(', ')} carry their mass off-centre` : '' });
   }
 }
 
@@ -522,11 +527,8 @@ function liveLoadsOf(S, f) {
     S.check(`  ${f.name}: the residual the game reports = the reference's residual wrench on the root`, 0, wResGame, 1e-9, { unit: 'of the largest load' });
     S.check(`  ${f.name}: specific force derived by the reference vs motion.f`, 0, wf, 1e-10, { unit: 'rel' });
     f.stats = { wAlpha, wRes, pkRes, pk, wResGame };
-    if (f.symmetric && f.offset) {
-      // Known defect (7k): vessel.inertia is taken about the parts' geometric centres. Sized and pinned there.
-      S.info(`  ${f.name}: derived angular acceleration and root residual`, 'see 7k', '', 'known defect: vessel.inertia is not the inertia of the mass points on this craft');
-    } else if (f.symmetric) {
-      // Symmetric craft, every mass at its part's centre: the diagonal inertia is the whole inertia, so the motion the
+    if (f.symmetric) {
+      // Symmetric craft: the diagonal inertia (about the mass points, ballast included) is the whole inertia, so the motion the
       // game flies must be the motion Newton-Euler gives for these bodies, and the root needs no residual.
       S.check(`  ${f.name}: angular acceleration derived by the reference (full tensor) vs the game's`, 0, wAlpha, 1e-9, { unit: 'rel', note: f.comOffset ? 'craft with an offset mass centre in its capsule' : '' });
       S.check(`  ${f.name}: residual wrench on the root (Newton closes)`, 0, wRes, 1e-9, { unit: 'of the largest load', note: `peak residual moment ${pkRes.toFixed(1)} N m` });
@@ -983,46 +985,27 @@ function extras(S) {
   }
 }
 
-// ------------------------------------------------------------------------------------------ 7k known defect
+// ------------------------------------------------------------------------------------------ 7k inertia about the mass points
 /**
- * KNOWN DEFECT, left in the game on purpose for now (its fix changes how landers settle and needs the landing suites):
- * Vessel._updateMass takes the vessel's inertia about the parts' GEOMETRIC centres, while the centre of mass - and
- * the structure - use the true mass points (a capsule's ballast, `comY`; the interstage truss a part carries).
- * So on such craft the angular acceleration the game flies is not the one Newton-Euler gives for its own masses, and
- * the joint loads leave a residual moment at the root. This group sizes it and pins what must hold regardless.
+ * Until 2026-11-25 Vessel._updateMass took the inertia about the parts' GEOMETRIC centres while the centre of mass used
+ * the true mass points (a capsule's ballast, `comY`; the interstage truss a part carries): up to 37 % too much pitch
+ * inertia on a lone capsule. It now uses the mass points. This group checks it on the craft that carry mass off-centre.
  */
 function knownInertia(S, full) {
   const fs = flights(full);
   for (const f of fs) if (!f.stats) liveLoadsQuiet(f);
   for (const f of fs) {
     if (!f.offset) continue;
-    // closed form: the parallel-axis terms with the geometric offsets d_i instead of the mass points r_i
-    let wCF = 0, errPct = 0, zero = true;
+    let err = 0;
     for (const r of f.recs) {
       const asm = RS.assembly(r.snap.bodies);
-      const diff = [0, 0, 0];
-      for (const b of r.snap.bodies) {
-        const d = r.pre.geo.get(b.id), rr = b.r;
-        const dd = dot(d, d), r2 = dot(rr, rr);
-        for (let k = 0; k < 3; k++) diff[k] += b.m * ((dd - d[k] * d[k]) - (r2 - rr[k] * rr[k]));
-      }
-      for (let k = 0; k < 3; k++) {
-        const got = r.pre.I[k] - asm.I[k][k];
-        wCF = Math.max(wCF, Math.abs(got - diff[k]) / r.pre.I[k]);
-        errPct = Math.max(errPct, 100 * Math.abs(got) / asm.I[k][k]);
-        if (Math.abs(got) > 1e-9 * r.pre.I[k]) zero = false;
-      }
+      for (let k = 0; k < 3; k++) err = Math.max(err, Math.abs(r.pre.I[k] - asm.I[k][k]) / asm.I[k][k]);
     }
-    S.info(`${f.name}: vessel.inertia is off from the inertia of its mass points by up to`, errPct, '%', `parts with off-centre mass: ${[...new Set(f.offsetParts)].join(', ')}`);
-    S.info(`${f.name}: residual at the root, as a share of the largest joint load`, f.stats.wRes, '', `peak residual moment ${f.stats.pkRes.toFixed(1)} N m; largest joint load ${f.stats.pk.toFixed(0)} N or N m`);
-    if (f.symmetric) S.info(`${f.name}: angular acceleration, game vs Newton-Euler on the mass points`, f.stats.wAlpha, 'rel');
-    S.check(`${f.name}: that inertia error = sum of m (|d|^2 - |r|^2) terms, d geometric centre, r mass point (parallel axis, by hand)`, 0, wCF, 1e-10, { unit: 'of the inertia', note: 'PINS THE KNOWN DEFECT: when _updateMass is fixed this row fails; then delete it and judge these craft like the others (alpha and residual at 1e-9)' });
-    S.ok(`${f.name}: the defect is still there (remove this group when this turns false)`, !zero);
+    S.check(`${f.name}: vessel.inertia = inertia of its mass points (off-centre: ${[...new Set(f.offsetParts)].join(', ')})`, 0, err, 1e-9, { unit: 'rel' });
   }
-  // what must hold regardless
   for (const f of fs) {
-    if (f.offset || !f.symmetric) continue;
-    S.check(`${f.name} (every mass at its part's centre): residual at the root`, 0, f.stats.wRes, 1e-9, { unit: 'of the largest load', note: 'Newton closes where the defect cannot act' });
+    if (!f.symmetric) continue;
+    S.check(`${f.name}: residual at the root`, 0, f.stats.wRes, 1e-9, { unit: 'of the largest load', note: 'Newton closes' });
     S.check(`${f.name}: angular acceleration, game vs Newton-Euler`, 0, f.stats.wAlpha, 1e-9, { unit: 'rel' });
   }
   for (const f of fs) S.check(`${f.name}: the residual the game reports = the reference's residual (the game does not hide it)`, 0, f.stats.wResGame, 1e-9, { unit: 'of the largest load' });
@@ -1042,5 +1025,5 @@ export const groups = [
   { name: '7h. Failure: a weak joint breaks where and when the reference says', fast: true, run: S => failure(S) },
   { name: '7i. Stock craft fly to space with every joint whole', fast: true, run: (S, full) => stock(S, full) },
   { name: '7j. Brace struts, no loads while pinned or on rails, the assembly building\'s ignition case', fast: true, run: S => extras(S) },
-  { name: '7k. KNOWN DEFECT (not fixed yet): vessel.inertia about geometric centres, not mass points; its size, and what holds regardless', fast: true, run: (S, full) => knownInertia(S, full) },
+  { name: '7k. Inertia about the mass points (ballast, trusses): the craft that carry mass off-centre', fast: true, run: (S, full) => knownInertia(S, full) },
 ];

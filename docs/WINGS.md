@@ -9,7 +9,7 @@ can be hidden from the flow by the body it is mounted on.
 | | Below Mach 1 | Above Mach 1 |
 | --- | --- | --- |
 | Lift-curve slope | 3.6 per radian for a wing, 1.6 for a fin | the smaller of that and 4 / sqrt(Ma^2 - 1) |
-| Drag due to lift, C_D = C_D0 + K C_L^2 | K = 0.07 | the larger of 0.07 and sqrt(Ma^2 - 1) / 4 |
+| Drag due to lift, C_D = C_D0 + K C_L^2 | K = 0.07 | the larger of 0.07 and 1 / slope (the capped slope): C_L times the angle, faded in over Mach 1 to 1.2 |
 | Profile drag C_D0 = 0.012 | times the slender drag curve of step B (1 below Mach 0.7) | the same curve |
 | Stall and the flat plate past it | as before | as before |
 | Shadow | none | the rule of step B: a tenth of the force when wholly in the lee of a wider part, from Mach 1.5 |
